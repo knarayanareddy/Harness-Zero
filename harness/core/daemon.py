@@ -70,6 +70,10 @@ class HarnessDaemon:
         self.app.router.add_post("/search/code", self._handle_search_code)
         self.app.router.add_get("/settings", self._handle_settings_get)
         self.app.router.add_post("/settings", self._handle_settings_post)
+        self.app.router.add_get("/file/content", self._handle_file_content)
+        self.app.router.add_post("/file/save", self._handle_file_save)
+        self.app.router.add_get("/diffs", self._handle_diffs)
+        self.app.router.add_post("/turn/stream", self._handle_turn_stream)
         self.app.router.add_get("/events", self._handle_events)
         self.app.router.add_get("/login", self._handle_login)
 
@@ -77,6 +81,12 @@ class HarnessDaemon:
         assets_dir = Path(__file__).resolve().parent.parent / "web" / "assets"
         if assets_dir.exists():
             self.app.router.add_static("/assets", str(assets_dir))
+
+    def _setup_sandbox_routes(self) -> None:
+        """Port 8001: Untrusted sandbox serving generated artifacts & Generative UI."""
+        self.sandbox_app.router.add_get("/", self._handle_sandbox_index)
+        self.sandbox_app.router.add_get("/artifacts/{filename}", self._handle_sandbox_artifact)
+        self.sandbox_app.router.add_get("/health", self._handle_sandbox_health)
 
     async def _handle_files(self, request: web.Request) -> web.Response:
         """Returns workspace files tree for the Explorer view."""
@@ -203,10 +213,210 @@ class HarnessDaemon:
         await response.write(f"data: {initial_event}\n\n".encode("utf-8"))
         return response
 
-    def _setup_sandbox_routes(self) -> None:
-        """Port 8001: Untrusted sandbox serving generated artifacts & Generative UI."""
-        self.sandbox_app.router.add_get("/artifacts/{filename}", self._handle_sandbox_artifact)
-        self.sandbox_app.router.add_get("/health", self._handle_sandbox_health)
+    async def _handle_file_content(self, request: web.Request) -> web.Response:
+        """Reads file content safely from workspace."""
+        rel_path = request.query.get("path", "").strip()
+        if not rel_path:
+            return web.json_response({"error": "Missing path parameter"}, status=400)
+
+        target = (self.coordinator.workspace / rel_path).resolve()
+        try:
+            if not str(target).startswith(str(self.coordinator.workspace.resolve())):
+                return web.json_response({"error": "Access denied: Path outside workspace"}, status=403)
+        except Exception:
+            return web.json_response({"error": "Invalid workspace path"}, status=403)
+
+        if not target.exists() or not target.is_file():
+            return web.json_response({"error": f"File '{rel_path}' not found"}, status=404)
+
+        try:
+            content = target.read_text(encoding="utf-8", errors="replace")
+            lines = content.splitlines()
+            return web.json_response({
+                "path": rel_path,
+                "name": target.name,
+                "ext": target.suffix,
+                "lines_count": len(lines),
+                "size": target.stat().st_size,
+                "content": content,
+            })
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
+    async def _handle_file_save(self, request: web.Request) -> web.Response:
+        """Saves file content to workspace atomically."""
+        try:
+            body = await request.json()
+            rel_path = body.get("path", "").strip()
+            content = body.get("content", "")
+            if not rel_path:
+                return web.json_response({"error": "Missing path parameter"}, status=400)
+
+            target = (self.coordinator.workspace / rel_path).resolve()
+            if not str(target).startswith(str(self.coordinator.workspace.resolve())):
+                return web.json_response({"error": "Access denied: Path outside workspace"}, status=403)
+
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+            return web.json_response({
+                "status": "saved",
+                "path": rel_path,
+                "size": target.stat().st_size,
+            })
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
+    async def _handle_diffs(self, request: web.Request) -> web.Response:
+        """Returns workspace git diff for the Diff Studio view."""
+        import subprocess
+        try:
+            res = subprocess.run(
+                ["git", "diff", "HEAD"],
+                cwd=str(self.coordinator.workspace),
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            raw_diff = res.stdout
+            if not raw_diff:
+                res_unstaged = subprocess.run(
+                    ["git", "diff"],
+                    cwd=str(self.coordinator.workspace),
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                raw_diff = res_unstaged.stdout
+
+            lines = raw_diff.splitlines()
+            files_changed = []
+            for line in lines:
+                if line.startswith("diff --git a/"):
+                    parts = line.split()
+                    if len(parts) >= 4:
+                        files_changed.append(parts[2][2:])
+            return web.json_response({
+                "diff": raw_diff,
+                "modified_files": list(dict.fromkeys(files_changed)),
+                "has_diff": bool(raw_diff.strip()),
+            })
+        except Exception as e:
+            return web.json_response({"diff": "", "modified_files": [], "has_diff": False, "error": str(e)})
+
+    async def _handle_turn_stream(self, request: web.Request) -> web.StreamResponse:
+        """SSE streaming endpoint for live agent character output and thinking."""
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        prompt = body.get("prompt", "")
+        model = body.get("model")
+        mode = body.get("mode", "autonomous")
+
+        response = web.StreamResponse(
+            status=200,
+            headers={
+                "Content-Type": "text/event-stream",
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            },
+        )
+        await response.prepare(request)
+
+        async def send_sse(event_type: str, data: dict):
+            payload = json.dumps({"type": event_type, **data})
+            await response.write(f"data: {payload}\n\n".encode("utf-8"))
+
+        try:
+            await send_sse("turn_start", {"prompt": prompt, "mode": mode, "model": model})
+
+            if mode == "architect":
+                from harness.orchestration.architect_editor import ArchitectEditorLoop
+                loop = ArchitectEditorLoop(
+                    workspace_root=self.coordinator.workspace,
+                    router=self.coordinator.router,
+                )
+                await send_sse("thinking_delta", {"delta": "🧠 Formulating architectural plan across codebase...\n"})
+                arch_res = await loop.execute(
+                    task_prompt=prompt,
+                    target_files=list(self.coordinator.workspace.glob("*.py"))[:10],
+                )
+                await send_sse("turn_complete", {
+                    "result": {
+                        "output": arch_res.final_message or arch_res.plan,
+                        "thinking": f"Architect Plan:\n{arch_res.plan}",
+                        "tool_calls": [
+                            {"name": "architect_editor", "arguments": {"iterations": len(arch_res.iterations)}, "output": f"Commit: {arch_res.commit_sha or 'complete'}", "is_error": not arch_res.success}
+                        ],
+                    }
+                })
+            else:
+                res = await self.coordinator.execute_turn(prompt, model=model)
+                data = res.to_dict() if hasattr(res, "to_dict") else (res if isinstance(res, dict) else {"output": str(res)})
+
+                # Stream thinking if present
+                thinking = data.get("thinking", "")
+                if thinking:
+                    for line in thinking.splitlines(keepends=True):
+                        await send_sse("thinking_delta", {"delta": line})
+                        await asyncio.sleep(0.005)
+
+                # Stream tool calls
+                for tc in data.get("tool_calls", []):
+                    await send_sse("tool_call", tc)
+
+                # Stream output text in small chunks for smooth UI animation
+                text = data.get("output", "")
+                chunk_size = 28
+                for i in range(0, len(text), chunk_size):
+                    await send_sse("text_delta", {"delta": text[i:i+chunk_size]})
+                    await asyncio.sleep(0.01)
+
+                await send_sse("turn_complete", {"result": data})
+        except Exception as e:
+            await send_sse("error", {"message": str(e)})
+
+        return response
+
+    async def _handle_sandbox_index(self, request: web.Request) -> web.Response:
+        """Port 8001 index: Lists sandboxed preview artifacts."""
+        manifest = self.coordinator.artifacts.load_manifest()
+        items_html = ""
+        for name, meta in manifest.items():
+            link = f"/artifacts/{name}"
+            items_html += f"""
+            <div style="background:#1e1e24; border:1px solid #2e2e38; border-radius:8px; padding:16px; margin-bottom:12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <strong style="color:#38bdf8; font-size:14px;">{name}</strong>
+                    <a href="{link}" target="_blank" style="color:#22c55e; text-decoration:none; font-weight:600; font-size:12px;">Open Preview ↗</a>
+                </div>
+                <div style="color:#94a3b8; font-size:12px; margin-top:6px;">{meta.get('summary', 'Generated artifact')}</div>
+            </div>
+            """
+        if not items_html:
+            items_html = "<p style='color:#64748b; font-style:italic;'>No artifacts generated in this session yet.</p>"
+
+        page_html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Harness-Zero SOP Sandbox | Port 8001</title>
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0e0e11; color: #f1f5f9; padding: 32px; max-width: 800px; margin: 0 auto; }}
+        h1 {{ font-size: 20px; color: #f8fafc; display: flex; align-items: center; gap: 10px; }}
+        .badge {{ background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); padding: 3px 8px; border-radius: 9999px; font-size: 11px; }}
+        .notice {{ background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); padding: 12px 16px; border-radius: 8px; font-size: 13px; color: #cbd5e1; margin-bottom: 24px; }}
+    </style>
+</head>
+<body>
+    <h1><span>🛡️ SOP Untrusted Sandbox</span> <span class="badge">Isolated Port 8001</span></h1>
+    <div class="notice">
+        <strong>Browser Same-Origin Policy (SOP) Active:</strong> Scripts running in this origin cannot access Port 8000 credentials, API keys, or localStorage.
+    </div>
+    <div id="artifacts-list">{items_html}</div>
+</body>
+</html>"""
+        return web.Response(text=page_html, content_type="text/html")
 
     async def _handle_health(self, request: web.Request) -> web.Response:
         return web.json_response({

@@ -57,5 +57,30 @@ async def test_ui_and_studio_endpoints(tmp_path: Path):
             res_search = await client.post("http://127.0.0.1:8990/search/code", json={"pattern": "class"})
             assert res_search.status_code == 200
             assert "matches" in res_search.json()
+
+            # 7. Test file content read & save
+            test_file = tmp_path / "hello.py"
+            test_file.write_text("print('hello world')", encoding="utf-8")
+
+            res_file = await client.get("http://127.0.0.1:8990/file/content?path=hello.py")
+            assert res_file.status_code == 200
+            file_data = res_file.json()
+            assert file_data["path"] == "hello.py"
+            assert file_data["content"] == "print('hello world')"
+            assert file_data["lines_count"] == 1
+
+            # Test file save
+            res_save = await client.post("http://127.0.0.1:8990/file/save", json={
+                "path": "hello.py",
+                "content": "print('hello sovereign universe')"
+            })
+            assert res_save.status_code == 200
+            assert test_file.read_text(encoding="utf-8") == "print('hello sovereign universe')"
+
+            # 8. Test diffs endpoint
+            res_diffs = await client.get("http://127.0.0.1:8990/diffs")
+            assert res_diffs.status_code == 200
+            assert "diff" in res_diffs.json()
+            assert "modified_files" in res_diffs.json()
     finally:
         await app_runner.cleanup()

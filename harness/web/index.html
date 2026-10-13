@@ -705,6 +705,137 @@
     }
     .status-pill-link:hover { color: #ffffff; }
 
+    /* Slash Commands Menu */
+    .slash-menu {
+      position: absolute;
+      bottom: calc(100% + 10px);
+      left: 12px;
+      right: 12px;
+      background: #18181b;
+      border: 1px solid #2e2e38;
+      border-radius: 10px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+      max-height: 280px;
+      overflow-y: auto;
+      z-index: 100;
+      padding: 6px;
+    }
+    .slash-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      color: #e4e4e7;
+      font-size: 13px;
+      transition: all 0.15s ease;
+    }
+    .slash-item:hover, .slash-item.selected {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+    }
+    .slash-name {
+      font-weight: 600;
+      font-family: var(--font-mono);
+      color: #38bdf8;
+    }
+    .slash-desc {
+      font-size: 12px;
+      color: #a1a1aa;
+    }
+
+    /* Diff Studio View */
+    .diff-container {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.5;
+      background: #141416;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin-top: 12px;
+    }
+    .diff-line {
+      display: flex;
+      padding: 1px 8px;
+      white-space: pre-wrap;
+    }
+    .diff-add {
+      background: rgba(34, 197, 94, 0.15);
+      color: #4ade80;
+    }
+    .diff-del {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+    }
+    .diff-hunk {
+      background: rgba(56, 189, 248, 0.1);
+      color: #38bdf8;
+      font-weight: 600;
+    }
+    .diff-gutter {
+      width: 48px;
+      color: #52525b;
+      user-select: none;
+      text-align: right;
+      padding-right: 12px;
+      flex-shrink: 0;
+    }
+
+    /* In-Studio Code Editor */
+    .editor-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .editor-header {
+      height: 38px;
+      background: #141416;
+      border-bottom: 1px solid #27272a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    .editor-body {
+      display: flex;
+      flex: 1;
+      overflow: auto;
+      background: #1e1e1e;
+    }
+    .editor-gutters {
+      width: 46px;
+      background: #181818;
+      border-right: 1px solid #2d2d2d;
+      color: #64748b;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 20px;
+      padding: 12px 6px 12px 0;
+      text-align: right;
+      user-select: none;
+      flex-shrink: 0;
+    }
+    .editor-code-view {
+      flex: 1;
+      padding: 12px 16px;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      line-height: 20px;
+      color: #e2e8f0;
+      white-space: pre;
+      overflow: auto;
+      outline: none;
+      tab-size: 4;
+    }
+
     /* Settings Modal */
     .modal-backdrop {
       position: fixed;
@@ -849,12 +980,56 @@
           </div>
 
           <!-- Input Card -->
-          <div class="composer-card">
+          <div class="composer-card" style="position:relative;">
+            <!-- Slash Commands Menu Popover -->
+            <div id="slash-menu" class="slash-menu" style="display:none;">
+              <div class="slash-item" onclick="selectSlashCommand('/plan')">
+                <span class="slash-name">/plan</span>
+                <span class="slash-desc">Formulate architectural design spec & SOP</span>
+              </div>
+              <div class="slash-item" onclick="selectSlashCommand('/architect')">
+                <span class="slash-name">/architect</span>
+                <span class="slash-desc">Aider 2-stage Architect/Editor self-healing loop</span>
+              </div>
+              <div class="slash-item" onclick="selectSlashCommand('/diff')">
+                <span class="slash-name">/diff</span>
+                <span class="slash-desc">Inspect workspace git diffs & changed files</span>
+              </div>
+              <div class="slash-item" onclick="selectSlashCommand('/browser')">
+                <span class="slash-name">/browser</span>
+                <span class="slash-desc">Launch CDP Stagehand browser sandbox on :8001</span>
+              </div>
+              <div class="slash-item" onclick="selectSlashCommand('/tree')">
+                <span class="slash-name">/tree</span>
+                <span class="slash-desc">Inspect Hermes multi-agent spawn hierarchy</span>
+              </div>
+              <div class="slash-item" onclick="selectSlashCommand('/arena')">
+                <span class="slash-name">/arena</span>
+                <span class="slash-desc">Run Multi-Agent Battle Arena evaluation</span>
+              </div>
+              <div class="slash-item" onclick="selectSlashCommand('/skills')">
+                <span class="slash-name">/skills</span>
+                <span class="slash-desc">Explore & toggle progressive skills catalog</span>
+              </div>
+              <div class="slash-item" onclick="selectSlashCommand('/compact')">
+                <span class="slash-name">/compact</span>
+                <span class="slash-desc">Compress conversation context & prune trajectory</span>
+              </div>
+              <div class="slash-item" onclick="selectSlashCommand('/pytest')">
+                <span class="slash-name">/pytest</span>
+                <span class="slash-desc">Execute full test suite</span>
+              </div>
+              <div class="slash-item" onclick="selectSlashCommand('/git')">
+                <span class="slash-name">/git</span>
+                <span class="slash-desc">Check git status and unstaged changes</span>
+              </div>
+            </div>
+
             <textarea
               class="composer-input"
               id="prompt-input"
               rows="1"
-              placeholder="Ask Antigravity anything... (/ for skills, @ for files)"
+              placeholder="Ask Antigravity anything... (/ for commands, @ for files)"
             ></textarea>
 
             <div class="composer-controls">
@@ -893,6 +1068,16 @@
           <div class="studio-tab active" id="tab-artifact" onclick="selectStudioTab('artifact')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
             <span id="tab-artifact-label">Artifact Studio</span>
+          </div>
+
+          <div class="studio-tab" id="tab-editor" onclick="selectStudioTab('editor')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+            <span id="tab-editor-label">Code Editor</span>
+          </div>
+
+          <div class="studio-tab" id="tab-diffs" onclick="selectStudioTab('diffs')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+            <span>Git Diffs</span>
           </div>
 
           <div class="studio-tab" id="tab-sandbox" onclick="selectStudioTab('sandbox')">
@@ -1006,20 +1191,89 @@
   <script>
     let currentStudioTab = 'artifact';
     let latestArtifactName = '';
+    let currentOpenFilePath = '';
 
-    // Auto-resizing textarea
+    // Auto-resizing textarea & Slash Commands Handler
     const textarea = document.getElementById('prompt-input');
+    const slashMenu = document.getElementById('slash-menu');
+
     textarea.addEventListener('input', () => {
       textarea.style.height = 'auto';
       textarea.style.height = Math.min(textarea.scrollHeight, 160) + 'px';
+
+      const val = textarea.value;
+      if (val.startsWith('/')) {
+        const query = val.slice(1).toLowerCase().trim();
+        slashMenu.style.display = 'block';
+        document.querySelectorAll('.slash-item').forEach(item => {
+          const name = item.querySelector('.slash-name').textContent.toLowerCase();
+          const desc = item.querySelector('.slash-desc').textContent.toLowerCase();
+          if (name.includes(query) || desc.includes(query)) {
+            item.style.display = 'flex';
+          } else {
+            item.style.display = 'none';
+          }
+        });
+      } else {
+        slashMenu.style.display = 'none';
+      }
     });
 
     textarea.addEventListener('keydown', (e) => {
+      if (slashMenu.style.display === 'block') {
+        if (e.key === 'Escape') {
+          slashMenu.style.display = 'none';
+          return;
+        }
+      }
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
+        slashMenu.style.display = 'none';
         submitPrompt();
       }
     });
+
+    document.addEventListener('click', (e) => {
+      if (!textarea.contains(e.target) && !slashMenu.contains(e.target)) {
+        slashMenu.style.display = 'none';
+      }
+    });
+
+    function selectSlashCommand(cmd) {
+      slashMenu.style.display = 'none';
+      if (cmd === '/diff') {
+        selectStudioTab('diffs');
+        return;
+      } else if (cmd === '/tree') {
+        selectStudioTab('tree');
+        return;
+      } else if (cmd === '/browser') {
+        selectStudioTab('sandbox');
+        return;
+      } else if (cmd === '/skills') {
+        quickPrompt('list skills');
+        return;
+      } else if (cmd === '/architect') {
+        document.getElementById('mode-selector').value = 'architect';
+        textarea.value = '/architect ';
+        textarea.focus();
+        return;
+      } else if (cmd === '/pytest') {
+        quickPrompt('run pytest');
+        return;
+      } else if (cmd === '/git') {
+        quickPrompt('check git status');
+        return;
+      } else if (cmd === '/compact') {
+        quickPrompt('compact conversation context');
+        return;
+      } else if (cmd === '/arena') {
+        quickPrompt('run battle arena evaluation');
+        return;
+      }
+      textarea.value = cmd + ' ';
+      textarea.focus();
+    }
 
     function selectActivity(type) {
       document.querySelectorAll('.activity-item').forEach(el => el.classList.remove('active'));
@@ -1027,7 +1281,7 @@
       if (act) act.classList.add('active');
 
       if (type === 'chat') {
-        // focus
+        textarea.focus();
       } else if (type === 'files') {
         selectStudioTab('files');
       } else if (type === 'search') {
@@ -1046,6 +1300,8 @@
       if (activeTab) activeTab.classList.add('active');
 
       if (tab === 'artifact') renderArtifactView();
+      else if (tab === 'editor') renderEditorView();
+      else if (tab === 'diffs') renderDiffsView();
       else if (tab === 'sandbox') renderSandboxView();
       else if (tab === 'tree') renderTreeView();
       else if (tab === 'files') renderFilesView();
@@ -1062,6 +1318,11 @@
       const text = textarea.value.trim();
       if (!text) return;
 
+      // Handle slash commands directly
+      if (text === '/diff') { textarea.value = ''; return selectStudioTab('diffs'); }
+      if (text === '/tree') { textarea.value = ''; return selectStudioTab('tree'); }
+      if (text === '/browser') { textarea.value = ''; return selectStudioTab('sandbox'); }
+
       const mode = document.getElementById('mode-selector').value;
       const model = document.getElementById('model-selector').value;
 
@@ -1071,6 +1332,67 @@
 
       const assistantCard = appendAssistantPlaceholder();
 
+      // Try SSE streaming first for live character animation
+      try {
+        const streamRes = await fetch('/turn/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: text, model: model, mode: mode })
+        });
+
+        if (streamRes.ok && streamRes.body) {
+          const reader = streamRes.body.getReader();
+          const decoder = new TextDecoder('utf-8');
+          let buffer = '';
+          let thinkingText = '';
+          let proseText = '';
+          let toolCalls = [];
+
+          let thinkingDrawer = assistantCard.querySelector('.thinking-box');
+          let proseArea = assistantCard.querySelector('.markdown-body');
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop();
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const evt = JSON.parse(line.slice(6));
+                  if (evt.type === 'thinking_delta') {
+                    thinkingText += evt.delta;
+                    const stepCount = thinkingText.split('\n').filter(Boolean).length || 1;
+                    thinkingDrawer.innerHTML = `
+                      <div class="thinking-summary" onclick="toggleAccordion(this)">
+                        <span>🧠 Thinking (${stepCount} steps)</span>
+                        <span>▼</span>
+                      </div>
+                      <div class="thinking-content" style="display:block;">${escapeHtml(thinkingText)}</div>
+                    `;
+                  } else if (evt.type === 'text_delta') {
+                    proseText += evt.delta;
+                    proseArea.innerHTML = marked.parse(proseText);
+                    document.getElementById('timeline').scrollTop = document.getElementById('timeline').scrollHeight;
+                  } else if (evt.type === 'tool_call') {
+                    toolCalls.push(evt);
+                  } else if (evt.type === 'turn_complete') {
+                    renderAssistantResponse(assistantCard, evt.result);
+                  }
+                } catch (pe) {}
+              }
+            }
+          }
+          fetchLatestArtifacts();
+          return;
+        }
+      } catch (streamErr) {
+        console.warn('Streaming fallback to standard RPC:', streamErr);
+      }
+
+      // Standard RPC Fallback
       try {
         const res = await fetch('/rpc', {
           method: 'POST',
@@ -1115,6 +1437,7 @@
             <span>🧠 Thinking...</span>
             <div class="status-dot-pulse"></div>
           </div>
+          <div class="thinking-content" style="display:none;"></div>
         </div>
         <div class="markdown-body"><span style="color:#71717a;">Formulating response...</span></div>
       `;
@@ -1175,7 +1498,6 @@
       row.innerHTML = html;
       document.getElementById('timeline').scrollTop = document.getElementById('timeline').scrollHeight;
 
-      // Apply Prism syntax highlighting if available
       if (window.Prism) {
         window.Prism.highlightAllUnder(row);
       }
@@ -1231,15 +1553,165 @@
       fetchLatestArtifacts();
     }
 
+    // In-Studio Code Editor View (from Cline & VSCode)
+    async function openFileInEditor(filePath, targetLine = null) {
+      currentOpenFilePath = filePath;
+      selectStudioTab('editor');
+      const label = document.getElementById('tab-editor-label');
+      if (label) label.textContent = filePath.split('/').pop() || 'Code Editor';
+
+      const vp = document.getElementById('studio-content-area');
+      document.getElementById('proceed-banner').style.display = 'none';
+      vp.innerHTML = `<div style="color:#71717a;">Opening ${escapeHtml(filePath)}...</div>`;
+
+      try {
+        const res = await fetch(`/file/content?path=${encodeURIComponent(filePath)}`);
+        const fileData = await res.json();
+        if (fileData.error) {
+          vp.innerHTML = `<div style="color:var(--accent-red)">Error: ${escapeHtml(fileData.error)}</div>`;
+          return;
+        }
+
+        const lines = fileData.content.split('\n');
+        const gutters = lines.map((_, i) => i + 1).join('\n');
+
+        vp.innerHTML = `
+          <div class="editor-container">
+            <div class="editor-header">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <strong style="color:#38bdf8; font-family:var(--font-mono);">📄 ${escapeHtml(filePath)}</strong>
+                <span style="color:#71717a;">${fileData.lines_count} lines • ${(fileData.size / 1024).toFixed(1)} KB</span>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <button class="btn-proceed" onclick="saveActiveFile()">Save (Cmd+S)</button>
+              </div>
+            </div>
+            <div class="editor-body">
+              <div class="editor-gutters">${gutters}</div>
+              <pre class="editor-code-view" id="active-file-editor" contenteditable="true" spellcheck="false">${escapeHtml(fileData.content)}</pre>
+            </div>
+          </div>
+        `;
+
+        if (targetLine && targetLine > 0) {
+          setTimeout(() => {
+            const editorEl = document.getElementById('active-file-editor');
+            if (editorEl) {
+              const lineHeight = 20;
+              editorEl.scrollTop = (targetLine - 1) * lineHeight;
+            }
+          }, 50);
+        }
+      } catch (err) {
+        vp.innerHTML = `<div style="color:var(--accent-red)">Error loading file: ${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    async function saveActiveFile() {
+      if (!currentOpenFilePath) return;
+      const editorEl = document.getElementById('active-file-editor');
+      if (!editorEl) return;
+      const content = editorEl.innerText;
+
+      try {
+        const res = await fetch('/file/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: currentOpenFilePath, content: content })
+        });
+        const data = await res.json();
+        if (data.status === 'saved') {
+          alert(`Saved ${currentOpenFilePath} successfully.`);
+        } else {
+          alert(`Error saving file: ${data.error}`);
+        }
+      } catch (err) {
+        alert(`Save failed: ${err.message}`);
+      }
+    }
+
+    function renderEditorView() {
+      if (currentOpenFilePath) {
+        openFileInEditor(currentOpenFilePath);
+      } else {
+        const vp = document.getElementById('studio-content-area');
+        document.getElementById('proceed-banner').style.display = 'none';
+        vp.innerHTML = `
+          <div style="color:#71717a; padding:24px; text-align:center;">
+            <p style="font-size:14px; margin-bottom:8px;">No file open in the Code Editor.</p>
+            <p style="font-size:12px;">Click any file in the <strong>Explorer</strong> tab or a search result to inspect and edit code.</p>
+          </div>
+        `;
+      }
+    }
+
+    // Side-by-Side & Unified Git Diffs View (from Aider & Antigravity)
+    async function renderDiffsView() {
+      const vp = document.getElementById('studio-content-area');
+      document.getElementById('proceed-banner').style.display = 'none';
+      vp.innerHTML = '<div style="color:#71717a;">Inspecting git diffs across workspace...</div>';
+
+      try {
+        const res = await fetch('/diffs');
+        const data = await res.json();
+
+        if (!data.has_diff || !data.diff) {
+          vp.innerHTML = `
+            <div style="padding:24px; text-align:center; color:#71717a;">
+              <p style="font-size:14px; color:#4ade80; font-weight:600; margin-bottom:6px;">✓ Clean Workspace</p>
+              <p style="font-size:12px;">No uncommitted changes or unstaged diffs detected against HEAD.</p>
+            </div>
+          `;
+          return;
+        }
+
+        const lines = data.diff.split('\n');
+        let diffHtml = '';
+        let lineNo = 1;
+
+        lines.forEach(l => {
+          let cls = '';
+          if (l.startsWith('+') && !l.startsWith('+++')) cls = 'diff-add';
+          else if (l.startsWith('-') && !l.startsWith('---')) cls = 'diff-del';
+          else if (l.startsWith('@@')) cls = 'diff-hunk';
+
+          diffHtml += `
+            <div class="diff-line ${cls}">
+              <span class="diff-gutter">${lineNo++}</span>
+              <span>${escapeHtml(l)}</span>
+            </div>
+          `;
+        });
+
+        const modFiles = (data.modified_files || []).map(f => `<span class="titlebar-pill" style="cursor:pointer;" onclick="openFileInEditor('${escapeHtml(f)}')">📄 ${escapeHtml(f)}</span>`).join(' ');
+
+        vp.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div>
+              <strong style="color:#f4f4f5; font-size:13.5px;">Workspace Diffs (Aider Surgical Inspector)</strong>
+              <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">${modFiles}</div>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn-proceed" onclick="quickPrompt('commit current diff changes with a conventional commit message')">Accept Diffs (Commit)</button>
+              <button class="btn-changes" onclick="quickPrompt('revert unstaged changes')">Discard Diffs</button>
+            </div>
+          </div>
+          <div class="diff-container">${diffHtml}</div>
+        `;
+      } catch (err) {
+        vp.innerHTML = `<div style="color:var(--accent-red)">Error loading diffs: ${escapeHtml(err.message)}</div>`;
+      }
+    }
+
     function renderSandboxView() {
       const vp = document.getElementById('studio-content-area');
       document.getElementById('proceed-banner').style.display = 'none';
       vp.innerHTML = `
         <div style="margin-bottom:12px; font-size:12px; color:#a1a1aa; display:flex; justify-content:space-between; align-items:center;">
           <span>Origin Isolation: Untrusted Sandbox on <strong>Port 8001</strong></span>
-          <button class="btn-changes" onclick="window.open('http://127.0.0.1:8001/health', '_blank')">Open in Browser ↗</button>
+          <button class="btn-changes" onclick="window.open('http://127.0.0.1:8001/', '_blank')">Open in Browser ↗</button>
         </div>
-        <iframe style="width:100%; height:540px; border:1px solid #27272a; border-radius:8px; background:#fff;" src="http://127.0.0.1:8001/health"></iframe>
+        <iframe style="width:100%; height:540px; border:1px solid #27272a; border-radius:8px; background:#fff;" src="http://127.0.0.1:8001/"></iframe>
       `;
     }
 
@@ -1251,12 +1723,15 @@
         const res = await fetch('/files');
         const data = await res.json();
         const files = data.files || [];
-        let html = '<div style="font-weight:600; font-size:13px; margin-bottom:12px; color:#38bdf8;">Workspace Files:</div>';
+        let html = '<div style="font-weight:600; font-size:13px; margin-bottom:12px; color:#38bdf8;">Workspace Files (Click to open in Code Editor):</div>';
         files.forEach(f => {
           html += `
-            <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #1f1f23; font-family:var(--font-mono); font-size:12px; cursor:pointer;" onclick="quickPrompt('view file ${f.path}')">
+            <div style="display:flex; justify-content:space-between; padding:7px 10px; border-radius:6px; margin-bottom:2px; font-family:var(--font-mono); font-size:12px; cursor:pointer; transition:background 0.15s ease;"
+                 onmouseover="this.style.background='rgba(56,189,248,0.1)'"
+                 onmouseout="this.style.background='transparent'"
+                 onclick="openFileInEditor('${escapeHtml(f.path)}')">
               <span style="color:#e4e4e7;">📄 ${escapeHtml(f.path)}</span>
-              <span style="color:#71717a;">${f.size} B</span>
+              <span style="color:#71717a;">${(f.size / 1024).toFixed(1)} KB</span>
             </div>
           `;
         });
@@ -1275,18 +1750,24 @@
         const data = await res.json();
         const tree = data.tree || [];
         if (tree.length === 0) {
-          vp.innerHTML = '<div style="color:#71717a; padding:16px;">No subagent hierarchies active in spawn-ledger.json.</div>';
+          vp.innerHTML = `
+            <div style="padding:24px; text-align:center; color:#71717a;">
+              <p style="font-size:13.5px; margin-bottom:8px;">No subagent hierarchies active in spawn-ledger.json.</p>
+              <button class="btn-proceed" onclick="quickPrompt('spawn subagent to analyze test suite performance')">⚡ Spawn Subagent</button>
+            </div>
+          `;
           return;
         }
-        let html = '<div style="font-weight:600; font-size:13px; margin-bottom:12px; color:#38bdf8;">Hermes Subagent Hierarchy:</div>';
+        let html = '<div style="font-weight:600; font-size:13px; margin-bottom:12px; color:#38bdf8;">Hermes Subagent Hierarchy (spawn-ledger.json):</div>';
         tree.forEach(t => {
           html += `
             <div style="background:#161619; border:1px solid #27272a; border-radius:8px; padding:12px; margin-bottom:8px;">
-              <div style="display:flex; justify-content:space-between;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
                 <strong>${escapeHtml(t.agent_name || t.task_id)}</strong>
                 <span class="tool-badge badge-success">${t.status}</span>
               </div>
-              <div style="font-size:12px; color:#a1a1aa; margin-top:4px;">Goal: ${escapeHtml(t.goal || '')}</div>
+              <div style="font-size:12px; color:#a1a1aa; margin-top:6px;">Goal: ${escapeHtml(t.goal || '')}</div>
+              <div style="font-size:11px; color:#64748b; margin-top:4px; font-family:var(--font-mono);">PID: ${t.pid || 'local'} • Parent: ${t.parent_id || 'root'}</div>
             </div>
           `;
         });
@@ -1312,7 +1793,7 @@
       const q = document.getElementById('rg-input').value.trim();
       if (!q) return;
       const list = document.getElementById('rg-results');
-      list.innerHTML = 'Searching codebase...';
+      list.innerHTML = 'Searching codebase with Ripgrep...';
       try {
         const res = await fetch('/search/code', {
           method: 'POST',
@@ -1322,13 +1803,16 @@
         const data = await res.json();
         if (data.matches && data.matches.length > 0) {
           list.innerHTML = data.matches.map(m => `
-            <div style="padding:6px 0; border-bottom:1px solid #1f1f23; cursor:pointer;" onclick="quickPrompt('view file ${m.path}')">
-              <span style="color:#38bdf8;">${escapeHtml(m.path)}:${m.line}</span>
-              <div style="color:#cbd5e1; margin-top:2px;">${escapeHtml(m.text)}</div>
+            <div style="padding:8px; border-bottom:1px solid #1f1f23; border-radius:6px; cursor:pointer; margin-bottom:4px;"
+                 onmouseover="this.style.background='rgba(56,189,248,0.08)'"
+                 onmouseout="this.style.background='transparent'"
+                 onclick="openFileInEditor('${escapeHtml(m.path)}', ${m.line})">
+              <span style="color:#38bdf8; font-weight:600;">${escapeHtml(m.path)}:${m.line}</span>
+              <div style="color:#cbd5e1; margin-top:3px; font-size:11.5px;">${escapeHtml(m.text)}</div>
             </div>
           `).join('');
         } else {
-          list.innerHTML = 'No matches found.';
+          list.innerHTML = '<div style="color:#71717a; padding:12px;">No matches found.</div>';
         }
       } catch (e) {
         list.innerHTML = 'Search error: ' + e.message;
@@ -1377,6 +1861,7 @@
       const openai = document.getElementById('key-openai').value.trim();
       const gemini = document.getElementById('key-gemini').value.trim();
       const deepseek = document.getElementById('key-deepseek').value.trim();
+      const ollama = document.getElementById('key-ollama').value.trim();
 
       const keys = {};
       if (anthropic) keys.anthropic = anthropic;
@@ -1389,7 +1874,8 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           api_keys: keys,
-          default_model: document.getElementById('model-selector').value
+          default_model: document.getElementById('model-selector').value,
+          local_base_url: ollama || undefined
         })
       });
 
@@ -1403,6 +1889,16 @@
         tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
       );
     }
+
+    // Keyboard shortcut for Cmd+S to save in Code Editor
+    window.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        if (currentStudioTab === 'editor') {
+          e.preventDefault();
+          saveActiveFile();
+        }
+      }
+    });
 
     // Initialize on page load
     loadSettings();
