@@ -142,12 +142,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         if let execPath = engineExecutable {
+            let home = FileManager.default.homeDirectoryForCurrentUser
+            let defaultWorkspace = home.appendingPathComponent(".gemini/antigravity/scratch/Harness-Zero")
+            let workspaceURL = FileManager.default.fileExists(atPath: defaultWorkspace.path) ? defaultWorkspace : home
+
             let proc = Process()
             proc.executableURL = URL(fileURLWithPath: execPath)
-            proc.arguments = ["daemon", "--port", "\(targetPort)", "--sandbox-port", "\(sandboxPort)"]
+            proc.arguments = ["daemon", "--workspace", workspaceURL.path, "--port", "\(targetPort)", "--sandbox-port", "\(sandboxPort)"]
             
-            // Set working directory to user home
-            proc.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
+            // Set working directory to project workspace
+            proc.currentDirectoryURL = workspaceURL
             
             do {
                 try proc.run()

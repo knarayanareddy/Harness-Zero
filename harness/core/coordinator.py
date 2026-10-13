@@ -36,7 +36,29 @@ from harness.sandboxing.ripgrep import RipgrepSearcher
 from harness.sandboxing.worktree import WorktreeManager
 from harness.skills.registry import SkillRegistry
 
-logger = logging.getLogger("harness.coordinator")
+class TurnResult(str):
+    """String subclass that preserves structured turn metadata for IDE frontends."""
+    def __new__(
+        cls,
+        output: str,
+        thinking: str = "",
+        tool_calls: Optional[List[Dict[str, Any]]] = None,
+        session_id: str = "",
+    ):
+        obj = str.__new__(cls, output)
+        obj.output = output
+        obj.thinking = thinking
+        obj.tool_calls = tool_calls or []
+        obj.session_id = session_id
+        return obj
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "output": self.output,
+            "thinking": self.thinking,
+            "tool_calls": self.tool_calls,
+            "session_id": self.session_id,
+        }
 
 
 class AgentCoordinator:
@@ -220,7 +242,7 @@ and verify your work with test runs.
         max_tool_iterations: int = 10,
         provider: Optional[str] = None,
         model: Optional[str] = None,
-    ) -> str:
+    ) -> TurnResult:
         """Executes a reactive agent turn with multi-step tool calls."""
         # 1. Log and index user input
         step_idx, byte_off = self.transcripts.append_step(
@@ -240,6 +262,8 @@ and verify your work with test runs.
 
         iteration = 0
         final_text = ""
+        accumulated_thinking: List[str] = []
+        executed_tool_calls: List[Dict[str, Any]] = []
 
         while iteration < max_tool_iterations:
             iteration += 1
@@ -266,17 +290,18 @@ and verify your work with test runs.
 
             # Determine target provider & model
             endpoint = None
-            if self.router.default_provider == "mock" or self.router._mock_responses:
+            if self.router._mock_responses:
                 target_provider = "mock"
                 target_model = "mock-model"
-            elif provider:
+            elif provider and provider != "mock":
                 target_provider = provider
                 target_model = model or "default"
+            elif self.router.default_provider != "mock":
+                target_provider = self.router.default_provider
+                target_model = self.router.default_model
             else:
-                tier = self.circuit_router.classify_intent(user_prompt)
-                endpoint = self.circuit_router.select_active_endpoint(tier, preferred_provider=provider)
-                target_provider = endpoint.provider
-                target_model = model or endpoint.model
+                target_provider = "mock"
+                target_model = "mock-model"
 
             # Model Call
             try:
@@ -312,6 +337,9 @@ and verify your work with test runs.
                 content=response.content,
             )
 
+            if response.thinking:
+                accumulated_thinking.append(response.thinking)
+
             final_text = response.content
 
             # If no tools requested, turn is complete
@@ -321,6 +349,13 @@ and verify your work with test runs.
             # Execute tool calls
             for tool_call in response.tool_calls:
                 tool_result = await self._dispatch_tool(tool_call)
+                executed_tool_calls.append({
+                    "id": tool_call.id,
+                    "name": tool_call.name,
+                    "arguments": tool_call.arguments,
+                    "output": tool_result.output,
+                    "is_error": tool_result.is_error,
+                })
 
                 # Log Tool Result
                 t_step, t_off = self.transcripts.append_step(
@@ -338,7 +373,12 @@ and verify your work with test runs.
                     content=tool_result.output,
                 )
 
-        return final_text
+        return TurnResult(
+            output=final_text,
+            thinking="\n\n".join(accumulated_thinking),
+            tool_calls=executed_tool_calls,
+            session_id=self.session_id,
+        )
 
     async def _dispatch_tool(self, tool_call: ToolCall) -> ToolResult:
         name = tool_call.name

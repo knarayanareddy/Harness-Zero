@@ -1,588 +1,1017 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="theme-dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>Harness-Zero | Sovereign Agent Studio</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/jetbox.css">
+  <link rel="stylesheet" href="/assets/compiled_tailwind.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
     :root {
-      --bg-primary: #090d16;
-      --bg-secondary: #0f172a;
-      --bg-tertiary: #1e293b;
-      --bg-card: #141e33;
-      --border-color: #24344d;
-      --border-focus: #3b82f6;
-      --text-main: #f8fafc;
-      --text-muted: #94a3b8;
-      --accent-blue: #38bdf8;
-      --accent-purple: #a855f7;
+      --vscode-editor-background: #1e1e1e;
+      --vscode-sideBar-background: #181818;
+      --vscode-activityBar-background: #141416;
+      --vscode-tab-activeBackground: #1e1e1e;
+      --vscode-tab-inactiveBackground: #141416;
+      --vscode-foreground: #cccccc;
+      --vscode-descriptionForeground: #858585;
+      --vscode-widget-border: #2d2d2d;
+      --vscode-focusBorder: #007acc;
+      --vscode-button-background: #0e639c;
+      --vscode-button-foreground: #ffffff;
+      --vscode-button-hoverBackground: #1177bb;
       --accent-green: #22c55e;
-      --accent-yellow: #eab308;
+      --accent-blue: #38bdf8;
+      --accent-purple: #c084fc;
+      --accent-amber: #f59e0b;
       --accent-red: #ef4444;
-      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      --font-mono: 'Fira Code', monospace;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'Fira Code', Menlo, Monaco, Consolas, monospace;
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    body {
-      background-color: var(--bg-primary);
-      color: var(--text-main);
+    html, body {
+      height: 100%;
+      width: 100%;
+      background-color: var(--vscode-editor-background);
+      color: var(--vscode-foreground);
       font-family: var(--font-sans);
-      height: 100vh;
       overflow: hidden;
-      display: flex;
-      flex-direction: column;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
     }
 
-    /* Top Navigation Bar */
-    header {
-      background-color: var(--bg-secondary);
-      border-bottom: 1px solid var(--border-color);
-      height: 54px;
+    /* Top Window Bar (Native macOS Title Bar Support) */
+    .window-titlebar {
+      height: 38px;
+      background-color: var(--vscode-activityBar-background);
+      border-bottom: 1px solid var(--vscode-widget-border);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 1.25rem;
-      flex-shrink: 0;
+      padding: 0 16px 0 78px; /* 78px leaves perfect clearance for native macOS traffic lights */
+      -webkit-app-region: drag;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--vscode-descriptionForeground);
+      z-index: 50;
     }
 
-    .brand {
+    .titlebar-center {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
-      font-weight: 700;
-      font-size: 1.05rem;
-      letter-spacing: -0.02em;
+      gap: 8px;
+      -webkit-app-region: no-drag;
     }
 
-    .brand-badge {
-      background: linear-gradient(135deg, #38bdf8, #818cf8);
-      color: #040814;
-      font-size: 0.7rem;
-      font-weight: 800;
-      padding: 2px 8px;
-      border-radius: 9999px;
-      text-transform: uppercase;
-    }
-
-    .header-center {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      font-size: 0.85rem;
-      color: var(--text-muted);
-    }
-
-    .status-pill {
-      display: flex;
+    .titlebar-pill {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 3px 10px;
+      border-radius: 6px;
+      color: #e2e8f0;
+      font-size: 11px;
+      display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 4px 10px;
-      border-radius: 9999px;
-      background-color: rgba(34, 197, 94, 0.1);
-      color: var(--accent-green);
-      font-weight: 500;
-      border: 1px solid rgba(34, 197, 94, 0.2);
     }
 
-    .status-dot {
+    .titlebar-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--accent-green);
+    }
+
+    .status-dot-pulse {
       width: 7px;
       height: 7px;
       border-radius: 50%;
       background-color: var(--accent-green);
       box-shadow: 0 0 8px var(--accent-green);
+      animation: pulse 2s infinite ease-in-out;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    /* Main Container */
+    .app-viewport {
+      display: flex;
+      height: calc(100vh - 38px);
+      width: 100vw;
+      overflow: hidden;
+    }
+
+    /* 1. Activity Bar (Far Left 50px rail) */
+    .activity-bar {
+      width: 50px;
+      background-color: var(--vscode-activityBar-background);
+      border-right: 1px solid var(--vscode-widget-border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 10px 0;
+      flex-shrink: 0;
+      z-index: 20;
+    }
+
+    .antigravity-logo {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      cursor: pointer;
+      color: #38bdf8;
+      transition: transform 0.2s ease;
+    }
+
+    .antigravity-logo:hover {
+      transform: rotate(180deg);
+    }
+
+    .antigravity-logo svg {
+      width: 24px;
+      height: 24px;
+      filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.5));
+    }
+
+    .activity-item {
+      width: 42px;
+      height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #71717a;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-bottom: 6px;
+      position: relative;
+      transition: all 0.15s ease;
+    }
+
+    .activity-item:hover {
+      color: #f4f4f5;
+      background-color: rgba(255, 255, 255, 0.06);
+    }
+
+    .activity-item.active {
+      color: #38bdf8;
+      background-color: rgba(56, 189, 248, 0.1);
+    }
+
+    .activity-item.active::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 10px;
+      bottom: 10px;
+      width: 3px;
+      background-color: #38bdf8;
+      border-radius: 0 2px 2px 0;
+    }
+
+    .activity-bottom {
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* 2. Main Dual-Pane Studio */
+    .main-workspace {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* Left: Agent Conversation Pane */
+    .agent-pane {
+      width: 52%;
+      min-width: 480px;
+      background-color: var(--vscode-sideBar-background);
+      border-right: 1px solid var(--vscode-widget-border);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      position: relative;
+    }
+
+    .agent-header {
+      height: 44px;
+      border-bottom: 1px solid var(--vscode-widget-border);
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(24, 24, 24, 0.85);
+      backdrop-filter: blur(8px);
+      flex-shrink: 0;
+    }
+
+    .agent-title-cluster {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #e4e4e7;
     }
 
     .header-actions {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
+      gap: 8px;
     }
 
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 0.82rem;
-      font-weight: 500;
+    .btn-icon {
+      background: transparent;
+      border: none;
+      color: #a1a1aa;
       cursor: pointer;
-      border: 1px solid var(--border-color);
-      background-color: var(--bg-tertiary);
-      color: var(--text-main);
+      padding: 6px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       transition: all 0.15s ease;
     }
 
-    .btn:hover {
-      background-color: #2d3e58;
-      border-color: #3e567d;
+    .btn-icon:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #ffffff;
     }
 
-    .btn-primary {
-      background: linear-gradient(135deg, #2563eb, #3b82f6);
-      border-color: #3b82f6;
-      color: #fff;
-    }
-
-    .btn-primary:hover {
-      background: linear-gradient(135deg, #1d4ed8, #2563eb);
-    }
-
-    /* Main Workspace Layout (Dual Pane) */
-    .app-workspace {
-      display: flex;
-      flex: 1;
-      height: calc(100vh - 54px);
-      overflow: hidden;
-    }
-
-    /* Left Pane: Conversation & Turns */
-    .chat-panel {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      border-right: 1px solid var(--border-color);
-      min-width: 480px;
-      height: 100%;
-      background-color: var(--bg-primary);
-    }
-
-    .chat-timeline {
+    /* Conversation Timeline */
+    .timeline-stream {
       flex: 1;
       overflow-y: auto;
-      padding: 1.5rem;
+      padding: 20px 24px 140px 24px;
       display: flex;
       flex-direction: column;
-      gap: 1.25rem;
+      gap: 20px;
+      user-select: text;
     }
 
-    .message-card {
+    .timeline-stream::-webkit-scrollbar {
+      width: 6px;
+    }
+    .timeline-stream::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 3px;
+    }
+
+    .turn-card {
       display: flex;
       flex-direction: column;
-      background-color: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 10px;
-      padding: 1rem 1.25rem;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      width: 100%;
+      animation: fadeIn 0.2s ease-in-out;
     }
 
-    .message-card.user {
-      background-color: #172338;
-      border-color: #25406b;
-      align-self: flex-end;
-      max-width: 85%;
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
-    .message-card.assistant {
-      align-self: flex-start;
+    /* User Row */
+    .user-turn {
+      display: flex;
+      justify-content: flex-end;
       width: 100%;
     }
 
-    .message-header {
+    .user-bubble {
+      background: #27272a;
+      border: 1px solid #3f3f46;
+      color: #f4f4f5;
+      padding: 10px 16px;
+      border-radius: 14px;
+      max-width: 85%;
+      font-size: 13.5px;
+      line-height: 1.5;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    }
+
+    /* Assistant Row */
+    .assistant-turn {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 0.6rem;
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      font-weight: 600;
+      flex-direction: column;
+      width: 100%;
+      gap: 10px;
     }
 
-    .message-body {
-      font-size: 0.92rem;
-      line-height: 1.6;
-      color: #e2e8f0;
-      word-break: break-word;
-    }
-
-    .message-body pre {
-      background-color: #0a0f1d;
-      border: 1px solid var(--border-color);
-      padding: 0.75rem 1rem;
-      border-radius: 6px;
-      margin: 0.6rem 0;
-      overflow-x: auto;
-      font-family: var(--font-mono);
-      font-size: 0.85rem;
-    }
-
-    .message-body code {
-      font-family: var(--font-mono);
-      background-color: rgba(255, 255, 255, 0.08);
-      padding: 2px 5px;
-      border-radius: 4px;
-      font-size: 0.85em;
-    }
-
-    /* Reasoning Stream Accordion (DeepSeek-R1 Pattern) */
-    .thought-container {
-      background-color: rgba(168, 85, 247, 0.08);
-      border: 1px solid rgba(168, 85, 247, 0.25);
-      border-radius: 6px;
-      margin-bottom: 0.75rem;
+    /* Antigravity Collapsible Thinking Accordion */
+    .thinking-box {
+      background: rgba(192, 132, 252, 0.05);
+      border: 1px solid rgba(192, 132, 252, 0.2);
+      border-radius: 8px;
       overflow: hidden;
     }
 
-    .thought-toggle {
+    .thinking-summary {
+      padding: 8px 12px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 6px 12px;
-      font-size: 0.78rem;
-      font-weight: 600;
-      color: var(--accent-purple);
       cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      color: #c084fc;
       user-select: none;
-      background-color: rgba(168, 85, 247, 0.05);
+      background: rgba(192, 132, 252, 0.03);
     }
 
-    .thought-content {
-      padding: 8px 12px;
-      font-size: 0.82rem;
-      color: #cbd5e1;
-      font-style: italic;
-      line-height: 1.5;
-      border-top: 1px solid rgba(168, 85, 247, 0.15);
-      white-space: pre-wrap;
+    .thinking-summary:hover {
+      background: rgba(192, 132, 252, 0.08);
+    }
+
+    .thinking-content {
+      padding: 10px 14px;
+      font-size: 11.5px;
+      color: #d1d5db;
       font-family: var(--font-mono);
+      line-height: 1.55;
+      background: #111113;
+      border-top: 1px solid rgba(192, 132, 252, 0.12);
+      max-height: 260px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    /* Antigravity Tool Invocation Card */
+    .tool-card {
+      background: #161618;
+      border: 1px solid #2e2e33;
+      border-radius: 8px;
+      overflow: hidden;
+      margin: 4px 0;
+      font-family: var(--font-mono);
+    }
+
+    .tool-card-header {
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #1e1e22;
+      border-bottom: 1px solid #2e2e33;
+      font-size: 12px;
+      color: #38bdf8;
+      cursor: pointer;
+    }
+
+    .tool-badge {
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .badge-success { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .badge-error { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    .tool-card-body {
+      padding: 10px 14px;
+      background: #0d0d10;
+      color: #e2e8f0;
+      font-size: 11.5px;
+      line-height: 1.5;
       max-height: 240px;
       overflow-y: auto;
+      white-space: pre-wrap;
     }
 
-    /* Tool Call Badges */
-    .tool-call-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background-color: #1a273f;
-      border: 1px solid #2d436b;
-      padding: 4px 10px;
-      border-radius: 6px;
-      font-size: 0.78rem;
+    /* Prose Markdown Output */
+    .markdown-body {
+      font-size: 13.5px;
+      line-height: 1.6;
+      color: #e4e4e7;
+    }
+
+    .markdown-body p { margin-bottom: 10px; }
+    .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+      color: #f4f4f5;
+      margin: 14px 0 8px 0;
+      font-weight: 600;
+    }
+    .markdown-body ul, .markdown-body ol { margin-left: 20px; margin-bottom: 10px; }
+    .markdown-body li { margin-bottom: 4px; }
+    .markdown-body blockquote {
+      border-left: 3px solid #38bdf8;
+      padding-left: 12px;
+      margin: 10px 0;
+      color: #94a3b8;
+      background: rgba(56, 189, 248, 0.05);
+      border-radius: 0 4px 4px 0;
+      padding-top: 4px;
+      padding-bottom: 4px;
+    }
+    .markdown-body code {
       font-family: var(--font-mono);
-      color: var(--accent-blue);
-      margin: 4px 0;
+      font-size: 12px;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 2px 5px;
+      border-radius: 4px;
+      color: #f472b6;
+    }
+    .markdown-body pre {
+      background: #111114;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      padding: 12px;
+      margin: 10px 0;
+      overflow-x: auto;
+    }
+    .markdown-body pre code {
+      background: transparent;
+      padding: 0;
+      color: #e2e8f0;
     }
 
-    /* Input Dock */
-    .chat-input-dock {
-      background-color: var(--bg-secondary);
-      border-top: 1px solid var(--border-color);
-      padding: 1rem 1.25rem;
+    /* Floating Composer / Input Dock */
+    .composer-dock {
+      position: absolute;
+      bottom: 16px;
+      left: 20px;
+      right: 20px;
       display: flex;
       flex-direction: column;
-      gap: 0.6rem;
+      gap: 8px;
+      z-index: 30;
     }
 
-    .input-controls {
+    .chips-carousel {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      scrollbar-width: none;
+    }
+    .chips-carousel::-webkit-scrollbar { display: none; }
+
+    .suggestion-chip {
+      background: rgba(30, 30, 36, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 5px 12px;
+      border-radius: 9999px;
+      font-size: 11.5px;
+      color: #d4d4d8;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s ease;
+      backdrop-filter: blur(8px);
     }
 
-    .mode-select, .model-select {
-      background-color: var(--bg-card);
-      border: 1px solid var(--border-color);
-      color: var(--text-main);
-      padding: 4px 8px;
-      border-radius: 6px;
-      font-size: 0.8rem;
-      outline: none;
+    .suggestion-chip:hover {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: rgba(56, 189, 248, 0.4);
+      color: #38bdf8;
+      transform: translateY(-1px);
     }
 
-    .input-box-wrapper {
-      position: relative;
+    .composer-card {
+      background: #18181b;
+      border: 1px solid #2e2e34;
+      border-radius: 12px;
+      padding: 10px 14px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
       display: flex;
-      align-items: flex-end;
-      gap: 0.5rem;
-    }
-
-    .chat-textarea {
-      flex: 1;
-      background-color: var(--bg-card);
-      border: 1px solid var(--border-color);
-      color: var(--text-main);
-      border-radius: 8px;
-      padding: 0.75rem 1rem;
-      font-family: var(--font-sans);
-      font-size: 0.92rem;
-      resize: none;
-      min-height: 52px;
-      max-height: 180px;
-      outline: none;
-      line-height: 1.4;
+      flex-direction: column;
+      gap: 8px;
       transition: border-color 0.15s ease;
     }
 
-    .chat-textarea:focus {
-      border-color: var(--border-focus);
+    .composer-card:focus-within {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 1px #38bdf8, 0 12px 32px rgba(0, 0, 0, 0.5);
     }
 
-    /* Right Pane: Artifact Studio & Inspect Panels */
-    .studio-panel {
-      width: 48%;
-      min-width: 450px;
-      display: flex;
-      flex-direction: column;
-      background-color: var(--bg-secondary);
-      height: 100%;
+    .composer-input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #f4f4f5;
+      font-family: var(--font-sans);
+      font-size: 13.5px;
+      resize: none;
+      min-height: 44px;
+      max-height: 160px;
+      line-height: 1.5;
+      user-select: text;
     }
 
-    .studio-tabs {
+    .composer-controls {
       display: flex;
       align-items: center;
-      background-color: #0b1120;
-      border-bottom: 1px solid var(--border-color);
-      padding: 0 0.5rem;
-      overflow-x: auto;
+      justify-content: space-between;
+      border-top: 1px solid #27272a;
+      padding-top: 8px;
     }
 
-    .tab-btn {
-      padding: 10px 14px;
-      font-size: 0.82rem;
-      font-weight: 500;
-      color: var(--text-muted);
-      border-bottom: 2px solid transparent;
+    .controls-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .select-pill {
+      background: #27272a;
+      border: 1px solid #3f3f46;
+      color: #e4e4e7;
+      font-size: 11.5px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      outline: none;
       cursor: pointer;
+    }
+
+    .btn-send {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: #38bdf8;
+      color: #09090b;
+      border: none;
       display: flex;
       align-items: center;
-      gap: 6px;
-      white-space: nowrap;
+      justify-content: center;
+      cursor: pointer;
+      font-weight: 700;
       transition: all 0.15s ease;
     }
 
-    .tab-btn.active {
-      color: var(--accent-blue);
-      border-bottom-color: var(--accent-blue);
-      background-color: rgba(56, 189, 248, 0.05);
+    .btn-send:hover {
+      background: #7dd3fc;
+      transform: scale(1.05);
     }
 
-    .tab-btn:hover:not(.active) {
-      color: #cbd5e1;
+    /* Right: Antigravity Studio Pane */
+    .studio-pane {
+      flex: 1;
+      background-color: var(--vscode-editor-background);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .studio-tabs {
+      height: 38px;
+      background-color: var(--vscode-activityBar-background);
+      border-bottom: 1px solid var(--vscode-widget-border);
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+
+    .studio-tab {
+      padding: 7px 14px;
+      font-size: 12px;
+      color: #71717a;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 2px solid transparent;
+      user-select: none;
+      transition: all 0.15s ease;
+    }
+
+    .studio-tab:hover {
+      color: #e4e4e7;
+    }
+
+    .studio-tab.active {
+      color: #f4f4f5;
+      border-bottom-color: #38bdf8;
+      background: var(--vscode-editor-background);
+      border-radius: 4px 4px 0 0;
     }
 
     .studio-viewport {
       flex: 1;
       overflow-y: auto;
-      padding: 1.25rem;
+      padding: 18px 24px;
       display: flex;
       flex-direction: column;
+      user-select: text;
     }
 
-    /* Artifact Feedback Header */
-    .artifact-action-bar {
-      background: linear-gradient(135deg, rgba(37, 99, 235, 0.15), rgba(56, 189, 248, 0.15));
-      border: 1px solid rgba(56, 189, 248, 0.3);
-      border-radius: 8px;
-      padding: 0.75rem 1rem;
-      margin-bottom: 1rem;
+    /* Signature Antigravity Proceed Banner */
+    .proceed-banner {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.05));
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      border-radius: 10px;
+      padding: 14px 18px;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      margin-bottom: 18px;
+      box-shadow: 0 4px 20px rgba(34, 197, 94, 0.08);
+      flex-shrink: 0;
     }
 
-    .artifact-title {
+    .banner-title {
+      font-size: 13.5px;
       font-weight: 600;
-      font-size: 0.9rem;
-      color: var(--accent-blue);
+      color: #4ade80;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
 
-    .artifact-summary {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
-
-    /* Sandboxed iframe Preview */
-    .sandbox-frame {
-      width: 100%;
-      height: 550px;
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      background-color: #fff;
-    }
-
-    /* Spawn Tree Visualization */
-    .tree-node {
-      background-color: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      padding: 0.75rem;
-      margin-bottom: 0.75rem;
-    }
-
-    .tree-node.depth-1 { margin-left: 1.5rem; border-left: 3px solid var(--accent-blue); }
-    .tree-node.depth-2 { margin-left: 3rem; border-left: 3px solid var(--accent-purple); }
-
-    /* Token Economics Card */
-    .stat-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 1rem;
-      margin-bottom: 1.25rem;
-    }
-
-    .stat-card {
-      background-color: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 1rem;
-    }
-
-    .stat-val {
-      font-size: 1.35rem;
-      font-weight: 700;
-      color: var(--accent-green);
+    .banner-desc {
+      font-size: 12px;
+      color: #cbd5e1;
       margin-top: 4px;
     }
 
-    .stat-label {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+    .banner-actions {
+      display: flex;
+      gap: 10px;
     }
+
+    .btn-proceed {
+      background: #22c55e;
+      color: #09090b;
+      font-weight: 600;
+      font-size: 12.5px;
+      padding: 7px 16px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
+      transition: all 0.15s ease;
+    }
+
+    .btn-proceed:hover {
+      background: #4ade80;
+      transform: translateY(-1px);
+    }
+
+    .btn-changes {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #f4f4f5;
+      font-size: 12.5px;
+      padding: 7px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-changes:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    /* Bottom IDE Status Bar */
+    .status-bar {
+      height: 24px;
+      background-color: #141416;
+      border-top: 1px solid var(--vscode-widget-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      font-size: 11px;
+      color: #858585;
+      z-index: 40;
+    }
+
+    .status-bar-left, .status-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .status-pill-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: inherit;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .status-pill-link:hover { color: #ffffff; }
+
+    /* Settings Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal-backdrop.open { display: flex; }
+
+    .modal-dialog {
+      background: #18181b;
+      border: 1px solid #323238;
+      border-radius: 12px;
+      width: 500px;
+      padding: 24px;
+      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .input-field {
+      background: #121214;
+      border: 1px solid #27272a;
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: #ffffff;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      outline: none;
+    }
+    .input-field:focus { border-color: #38bdf8; }
   </style>
 </head>
 <body>
 
-  <!-- Top App Header -->
-  <header>
-    <div class="brand">
-      <span>HARNESS-ZERO</span>
-      <span class="brand-badge">Sovereign Studio</span>
-    </div>
-
-    <div class="header-center">
-      <span id="session-info">Session: active</span>
-      <span class="status-pill">
-        <span class="status-dot"></span>
-        <span id="engine-status">Daemon Online</span>
+  <!-- Top Draggable macOS Window Header -->
+  <div class="window-titlebar">
+    <div class="titlebar-center">
+      <span class="titlebar-pill">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+        <span>Harness-Zero</span>
       </span>
-      <span id="cost-badge" style="font-family: var(--font-mono); font-size: 0.8rem; color: #a3e635;">$0.0000 (Saved $0.00)</span>
+      <span class="titlebar-pill">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>
+        <span>main</span>
+      </span>
     </div>
 
-    <div class="header-actions">
-      <button class="btn" onclick="fetchSkills()">Skills</button>
-      <button class="btn" onclick="fetchTasks()">Tasks</button>
-      <button class="btn btn-primary" onclick="openSandbox()">SOP Sandbox :8001</button>
+    <div class="titlebar-status">
+      <div class="status-dot-pulse"></div>
+      <span>Sovereign Daemon Online</span>
     </div>
-  </header>
+  </div>
 
-  <!-- Dual-Pane App Layout -->
-  <div class="app-workspace">
+  <div class="app-viewport">
 
-    <!-- Left Pane: Agent Chat Timeline -->
-    <div class="chat-panel">
-      <div class="chat-timeline" id="chat-timeline">
-        <div class="message-card assistant">
-          <div class="message-header">Harness-Zero Orchestrator</div>
-          <div class="message-body">
-            Welcome to <strong>Harness-Zero</strong>. The autonomous execution engine is initialized with:
-            <ul>
-              <li>Dual-port Origin Defense (Port 8000 API vs Port 8001 SOP Sandbox)</li>
-              <li>Aider Architect / Editor Self-Healing Closed Loop</li>
-              <li>Hermes Subagent Spawn Ledger & Tirith Security Capsule</li>
-              <li>Cline Micro-Token Economics & Prompt Cache Dollar Tracker</li>
-              <li>DeepSeek-R1 Streaming Reasoning De-multiplexer</li>
-            </ul>
-            Type a prompt below or choose an orchestration workflow.
+    <!-- 1. Left Antigravity Activity Bar -->
+    <div class="activity-bar">
+      <!-- Authentic Google Antigravity Infinity Logo -->
+      <div class="antigravity-logo" onclick="selectActivity('chat')" title="Google Antigravity Harness">
+        <svg viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M144.248 149.062C151.748 154.688 162.998 150.938 152.685 140.625C121.748 110.625 128.31 28.125 89.8727 28.125C51.4352 28.125 57.9977 110.625 27.0602 140.625C15.8102 151.875 27.9977 154.688 35.4977 149.062C64.5602 129.375 62.6852 94.6875 89.8727 94.6875C117.06 94.6875 115.185 129.375 144.248 149.062Z" fill="currentColor"/>
+        </svg>
+      </div>
+
+      <div class="activity-item active" id="act-chat" onclick="selectActivity('chat')" title="Antigravity Agent Chat">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+      </div>
+
+      <div class="activity-item" id="act-files" onclick="selectActivity('files')" title="Workspace Explorer">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+      </div>
+
+      <div class="activity-item" id="act-search" onclick="selectActivity('search')" title="Ripgrep Code Search">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      </div>
+
+      <div class="activity-item" id="act-skills" onclick="selectActivity('skills')" title="Skills Catalog">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+      </div>
+
+      <div class="activity-item" id="act-tree" onclick="selectActivity('tree')" title="Hermes Spawn Tree">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="3"></circle><line x1="12" y1="8" x2="12" y2="12"></line><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="18" r="3"></circle><path d="M6 15v-1a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"></path></svg>
+      </div>
+
+      <div class="activity-bottom">
+        <div class="activity-item" onclick="openSettingsModal()" title="Settings & API Keys">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Dual-Pane Main Interface -->
+    <div class="main-workspace">
+
+      <!-- Left: Antigravity Conversation Pane -->
+      <div class="agent-pane">
+        <div class="agent-header">
+          <div class="agent-title-cluster">
+            <span>Antigravity Agent</span>
+            <span class="titlebar-pill" id="agent-mode-badge">Autonomous</span>
+          </div>
+
+          <div class="header-actions">
+            <button class="btn-icon" onclick="resetConversation()" title="New Session">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
+            <button class="btn-icon" onclick="openSettingsModal()" title="Settings">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Chat Stream -->
+        <div class="timeline-stream" id="timeline">
+          <div class="turn-card assistant-turn">
+            <div class="markdown-body">
+              <p>Welcome to <strong>Harness-Zero</strong>. I am your sovereign autonomous agent assistant.</p>
+              <blockquote>
+                <strong>[!NOTE]</strong> Replicated directly from Google Antigravity, Claude Cowork, and Hermes with native execution, surgical search/replace edits, and zero-polling reactive wakeups.
+              </blockquote>
+              <p>Choose an action below or enter an instruction to begin:</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Floating Antigravity Composer Dock -->
+        <div class="composer-dock">
+          <!-- Suggestion Chips -->
+          <div class="chips-carousel">
+            <div class="suggestion-chip" onclick="quickPrompt('what can you do?')">✨ What can you do?</div>
+            <div class="suggestion-chip" onclick="quickPrompt('run pytest')">🧪 Run pytest</div>
+            <div class="suggestion-chip" onclick="quickPrompt('search codebase for Coordinator')">🔍 Search codebase</div>
+            <div class="suggestion-chip" onclick="quickPrompt('check git status')">🌿 Git status</div>
+            <div class="suggestion-chip" onclick="quickPrompt('list skills')">🧩 Skills catalog</div>
+            <div class="suggestion-chip" onclick="quickPrompt('plan architecture for SOP pipeline')">⚡ Architecture plan</div>
+          </div>
+
+          <!-- Input Card -->
+          <div class="composer-card">
+            <textarea
+              class="composer-input"
+              id="prompt-input"
+              rows="1"
+              placeholder="Ask Antigravity anything... (/ for skills, @ for files)"
+            ></textarea>
+
+            <div class="composer-controls">
+              <div class="controls-left">
+                <select class="select-pill" id="mode-selector">
+                  <option value="autonomous">Autonomous Agent</option>
+                  <option value="architect">Architect/Editor Loop</option>
+                  <option value="battle">Battle Arena Fork</option>
+                </select>
+
+                <select class="select-pill" id="model-selector">
+                  <option value="claude-3-7-sonnet">Claude 3.7 Sonnet</option>
+                  <option value="gpt-4o">GPT-4o</option>
+                  <option value="deepseek-reasoner">DeepSeek-R1</option>
+                  <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                  <option value="local">Local Ollama</option>
+                  <option value="mock-model">Autonomous (Offline)</option>
+                </select>
+
+                <button class="select-pill" id="api-status-pill" onclick="openSettingsModal()">
+                  🔑 API Keys
+                </button>
+              </div>
+
+              <button class="btn-send" id="send-btn" onclick="submitPrompt()" title="Send instruction (Enter)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Bottom Input Dock -->
-      <div class="chat-input-dock">
-        <div class="input-controls">
-          <div style="display:flex; gap:0.5rem; align-items:center;">
-            <select class="mode-select" id="mode-selector">
-              <option value="autonomous">Autonomous Turn (Coordinator)</option>
-              <option value="architect">Architect / Editor Self-Healing Loop</option>
-              <option value="battle">Battle Arena (Worktree Fork)</option>
-            </select>
-
-            <select class="model-select" id="model-selector">
-              <option value="claude-3-7-sonnet">Claude 3.7 Sonnet (Anthropic)</option>
-              <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku (Fast)</option>
-              <option value="gpt-4o">GPT-4o (OpenAI)</option>
-              <option value="o3-mini">o3-mini (Reasoning)</option>
-              <option value="deepseek-reasoner">DeepSeek-R1 (Reasoner)</option>
-              <option value="gemini-2.0-flash">Gemini 2.0 Flash (Google)</option>
-              <option value="local">Local Ollama / vLLM (Free)</option>
-              <option value="mock-model">Mock Gateway (Test)</option>
-            </select>
+      <!-- Right: Antigravity Studio Pane -->
+      <div class="studio-pane">
+        <div class="studio-tabs">
+          <div class="studio-tab active" id="tab-artifact" onclick="selectStudioTab('artifact')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+            <span id="tab-artifact-label">Artifact Studio</span>
           </div>
 
-          <div style="font-size:0.75rem; color:var(--text-muted);">Press Enter to send (Shift+Enter for newline)</div>
+          <div class="studio-tab" id="tab-sandbox" onclick="selectStudioTab('sandbox')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+            <span>SOP Sandbox :8001</span>
+          </div>
+
+          <div class="studio-tab" id="tab-tree" onclick="selectStudioTab('tree')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="3"></circle><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="18" r="3"></circle></svg>
+            <span>Spawn Tree</span>
+          </div>
+
+          <div class="studio-tab" id="tab-files" onclick="selectStudioTab('files')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            <span>Explorer</span>
+          </div>
+
+          <div class="studio-tab" id="tab-search" onclick="selectStudioTab('search')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <span>Code Search</span>
+          </div>
         </div>
 
-        <div class="input-box-wrapper">
-          <textarea
-            class="chat-textarea"
-            id="prompt-input"
-            placeholder="Instruct Harness-Zero (e.g., 'Refactor memory search and run pytest')..."
-            rows="1"
-          ></textarea>
-          <button class="btn btn-primary" id="send-btn" style="height:44px; padding:0 1.25rem;" onclick="submitPrompt()">
-            Execute
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Right Pane: Artifact & Generative UI Studio -->
-    <div class="studio-panel">
-      <div class="studio-tabs">
-        <div class="tab-btn active" id="tab-artifact" onclick="switchTab('artifact')">Artifact Studio</div>
-        <div class="tab-btn" id="tab-sandbox" onclick="switchTab('sandbox')">Generative UI Sandbox</div>
-        <div class="tab-btn" id="tab-tree" onclick="switchTab('tree')">Spawn Tree</div>
-        <div class="tab-btn" id="tab-economics" onclick="switchTab('economics')">Token Economics</div>
-        <div class="tab-btn" id="tab-search" onclick="switchTab('search')">Ripgrep Codebase</div>
-      </div>
-
-      <div class="studio-viewport" id="studio-viewport">
-        <!-- Viewport rendered dynamically by app.js -->
-        <div id="artifact-view">
-          <div class="artifact-action-bar">
+        <div class="studio-viewport" id="studio-viewport">
+          <!-- Antigravity Signature Proceed Banner -->
+          <div class="proceed-banner" id="proceed-banner" style="display:none;">
             <div>
-              <div class="artifact-title" id="artifact-title">Active Artifact: None</div>
-              <div class="artifact-summary" id="artifact-summary">Artifacts generated by the agent appear here live.</div>
+              <div class="banner-title">
+                <span class="tool-badge badge-success">AWAITING APPROVAL</span>
+                <span id="banner-artifact-title">Architecture Plan</span>
+              </div>
+              <div class="banner-desc" id="banner-artifact-desc">Review the proposed implementation plan below.</div>
             </div>
-            <div style="display:flex; gap:0.5rem;">
-              <button class="btn" style="background-color:rgba(34,197,94,0.15); border-color:#22c55e; color:#4ade80;" onclick="sendArtifactAction('proceed')">Proceed (Accept)</button>
-              <button class="btn" onclick="sendArtifactAction('feedback')">Request Changes</button>
+
+            <div class="banner-actions">
+              <button class="btn-proceed" onclick="acceptArtifact()">Proceed (Apply)</button>
+              <button class="btn-changes" onclick="requestArtifactChanges()">Request Changes</button>
             </div>
           </div>
-          <div id="artifact-content" style="font-size:0.9rem; line-height:1.6; color:#cbd5e1;">
-            <em>No active artifact loaded. Write a file or invoke a tool to generate artifacts.</em>
+
+          <div id="studio-content-area" class="markdown-body">
+            <p style="color:#71717a; font-style:italic;">No active artifact generated yet. Instruct the agent to build, refactor, or plan an architecture.</p>
           </div>
         </div>
       </div>
+
     </div>
 
   </div>
 
-  <script>
-    let activeTab = 'artifact';
-    let currentArtifactFilename = '';
+  <!-- Bottom IDE Status Bar -->
+  <div class="status-bar">
+    <div class="status-bar-left">
+      <span class="status-pill-link">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>
+        <span>main</span>
+      </span>
+      <span>● Ready</span>
+      <span>API :8000</span>
+      <span>Sandbox :8001</span>
+    </div>
 
-    // Auto-resize textarea
+    <div class="status-bar-right">
+      <span>SQLite Memory FTS5</span>
+      <span id="active-model-display">Autonomous Heuristic</span>
+      <span>UTF-8</span>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-backdrop" id="settings-modal">
+    <div class="modal-dialog">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #27272a; padding-bottom:12px;">
+        <span style="font-weight:600; font-size:15px; color:#f4f4f5;">Agent Settings & API Keys</span>
+        <button class="btn-icon" onclick="closeSettingsModal()">✕</button>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <label style="font-size:12px; color:#a1a1aa;">Anthropic API Key (Claude 3.7 / 3.5 Sonnet)</label>
+        <input type="password" class="input-field" id="key-anthropic" placeholder="sk-ant-api03-..."/>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <label style="font-size:12px; color:#a1a1aa;">OpenAI API Key (GPT-4o / o3-mini)</label>
+        <input type="password" class="input-field" id="key-openai" placeholder="sk-proj-..."/>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <label style="font-size:12px; color:#a1a1aa;">Google Gemini API Key (Gemini 2.0 Flash / Pro)</label>
+        <input type="password" class="input-field" id="key-gemini" placeholder="AIzaSy..."/>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <label style="font-size:12px; color:#a1a1aa;">DeepSeek API Key (DeepSeek-R1 / V3)</label>
+        <input type="password" class="input-field" id="key-deepseek" placeholder="sk-..."/>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <label style="font-size:12px; color:#a1a1aa;">Local Ollama Base URL</label>
+        <input type="text" class="input-field" id="key-ollama" placeholder="http://localhost:11434/v1"/>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+        <button class="btn-changes" onclick="closeSettingsModal()">Cancel</button>
+        <button class="btn-proceed" onclick="saveSettings()">Save & Activate</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/assets/prism_bundle.js"></script>
+  <script>
+    let currentStudioTab = 'artifact';
+    let latestArtifactName = '';
+
+    // Auto-resizing textarea
     const textarea = document.getElementById('prompt-input');
     textarea.addEventListener('input', () => {
       textarea.style.height = 'auto';
-      textarea.style.height = Math.min(textarea.scrollHeight, 180) + 'px';
+      textarea.style.height = Math.min(textarea.scrollHeight, 160) + 'px';
     });
 
     textarea.addEventListener('keydown', (e) => {
@@ -592,24 +1021,41 @@
       }
     });
 
-    function switchTab(tab) {
-      activeTab = tab;
-      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-      const activeBtn = document.getElementById(`tab-${tab}`);
-      if (activeBtn) activeBtn.classList.add('active');
+    function selectActivity(type) {
+      document.querySelectorAll('.activity-item').forEach(el => el.classList.remove('active'));
+      const act = document.getElementById(`act-${type}`);
+      if (act) act.classList.add('active');
 
-      const vp = document.getElementById('studio-viewport');
-      if (tab === 'artifact') {
-        renderArtifactTab();
-      } else if (tab === 'sandbox') {
-        renderSandboxTab();
-      } else if (tab === 'tree') {
-        fetchSpawnTree();
-      } else if (tab === 'economics') {
-        fetchEconomics();
-      } else if (tab === 'search') {
-        renderSearchTab();
+      if (type === 'chat') {
+        // focus
+      } else if (type === 'files') {
+        selectStudioTab('files');
+      } else if (type === 'search') {
+        selectStudioTab('search');
+      } else if (type === 'skills') {
+        quickPrompt('list skills');
+      } else if (type === 'tree') {
+        selectStudioTab('tree');
       }
+    }
+
+    function selectStudioTab(tab) {
+      currentStudioTab = tab;
+      document.querySelectorAll('.studio-tab').forEach(el => el.classList.remove('active'));
+      const activeTab = document.getElementById(`tab-${tab}`);
+      if (activeTab) activeTab.classList.add('active');
+
+      if (tab === 'artifact') renderArtifactView();
+      else if (tab === 'sandbox') renderSandboxView();
+      else if (tab === 'tree') renderTreeView();
+      else if (tab === 'files') renderFilesView();
+      else if (tab === 'search') renderSearchView();
+    }
+
+    function quickPrompt(text) {
+      textarea.value = text;
+      textarea.style.height = '44px';
+      submitPrompt();
     }
 
     async function submitPrompt() {
@@ -619,230 +1065,254 @@
       const mode = document.getElementById('mode-selector').value;
       const model = document.getElementById('model-selector').value;
 
-      appendUserMessage(text);
+      appendUserBubble(text);
       textarea.value = '';
-      textarea.style.height = '52px';
+      textarea.style.height = '44px';
 
-      const assistantMsg = appendAssistantSkeleton();
+      const assistantCard = appendAssistantPlaceholder();
 
       try {
-        let res;
-        if (mode === 'architect') {
-          res = await fetch('/rpc', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              id: Date.now(),
-              method: 'architect.submit',
-              params: { prompt: text, model: model }
-            })
-          });
-        } else {
-          res = await fetch('/rpc', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              id: Date.now(),
-              method: 'turn.submit',
-              params: { prompt: text, model: model }
-            })
-          });
-        }
+        const res = await fetch('/rpc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: Date.now(),
+            method: mode === 'architect' ? 'architect.submit' : 'turn.submit',
+            params: { prompt: text, model: model }
+          })
+        });
 
         const data = await res.json();
         if (data.error) {
-          assistantMsg.innerHTML = `<span style="color:#ef4444;">Error: ${data.error.message}</span>`;
+          assistantCard.innerHTML = `<span style="color:var(--accent-red)">Error: ${escapeHtml(data.error.message)}</span>`;
         } else {
-          const rawOutput = data.result?.output || data.result?.final_message || JSON.stringify(data.result);
-          renderResponseWithThoughts(assistantMsg, rawOutput);
+          renderAssistantResponse(assistantCard, data.result);
         }
       } catch (err) {
-        assistantMsg.innerHTML = `<span style="color:#ef4444;">Network Error: ${err.message}</span>`;
+        assistantCard.innerHTML = `<span style="color:var(--accent-red)">Connection Error: ${escapeHtml(err.message)}</span>`;
       }
 
-      // Refresh artifacts and economics
-      fetchArtifacts();
-      fetchEconomics();
+      fetchLatestArtifacts();
     }
 
-    function appendUserMessage(text) {
-      const timeline = document.getElementById('chat-timeline');
-      const card = document.createElement('div');
-      card.className = 'message-card user';
-      card.innerHTML = `
-        <div class="message-header">You</div>
-        <div class="message-body">${escapeHtml(text)}</div>
+    function appendUserBubble(text) {
+      const tl = document.getElementById('timeline');
+      const row = document.createElement('div');
+      row.className = 'turn-card user-turn';
+      row.innerHTML = `<div class="user-bubble">${escapeHtml(text)}</div>`;
+      tl.appendChild(row);
+      tl.scrollTop = tl.scrollHeight;
+    }
+
+    function appendAssistantPlaceholder() {
+      const tl = document.getElementById('timeline');
+      const row = document.createElement('div');
+      row.className = 'turn-card assistant-turn';
+      row.innerHTML = `
+        <div class="thinking-box">
+          <div class="thinking-summary">
+            <span>🧠 Thinking...</span>
+            <div class="status-dot-pulse"></div>
+          </div>
+        </div>
+        <div class="markdown-body"><span style="color:#71717a;">Formulating response...</span></div>
       `;
-      timeline.appendChild(card);
-      timeline.scrollTop = timeline.scrollHeight;
+      tl.appendChild(row);
+      tl.scrollTop = tl.scrollHeight;
+      return row;
     }
 
-    function appendAssistantSkeleton() {
-      const timeline = document.getElementById('chat-timeline');
-      const card = document.createElement('div');
-      card.className = 'message-card assistant';
-      card.innerHTML = `
-        <div class="message-header">Harness-Zero</div>
-        <div class="message-body" id="loading-msg"><span style="color:var(--accent-blue);">Thinking and executing tools...</span></div>
-      `;
-      timeline.appendChild(card);
-      timeline.scrollTop = timeline.scrollHeight;
-      return card.querySelector('.message-body');
-    }
+    function renderAssistantResponse(row, result) {
+      let outputText = typeof result === 'string' ? result : (result.output || result.final_message || JSON.stringify(result));
+      let thinkingText = (result && result.thinking) || '';
+      let toolCalls = (result && result.tool_calls) || [];
 
-    function renderResponseWithThoughts(container, rawText) {
-      let output = rawText;
-      let thoughtHtml = '';
+      let html = '';
 
-      // Parse DeepSeek-R1 <think> tags
-      const thinkMatch = rawText.match(/<think>([\s\S]*?)<\/think>/);
-      if (thinkMatch) {
-        const thought = thinkMatch[1].trim();
-        output = rawText.replace(/<think>[\s\S]*?<\/think>/, '').trim();
-        thoughtHtml = `
-          <div class="thought-container">
-            <div class="thought-toggle" onclick="toggleThought(this)">
-              <span>🧠 Internal Reasoning Trace (${thought.length} chars)</span>
+      // 1. Thinking Accordion
+      if (thinkingText) {
+        const stepCount = thinkingText.split('\n').filter(Boolean).length || 1;
+        html += `
+          <div class="thinking-box">
+            <div class="thinking-summary" onclick="toggleAccordion(this)">
+              <span>🧠 Thinking (${stepCount} steps)</span>
               <span>▼</span>
             </div>
-            <div class="thought-content">${escapeHtml(thought)}</div>
+            <div class="thinking-content">${escapeHtml(thinkingText)}</div>
           </div>
         `;
       }
 
-      const parsedMarkdown = marked.parse(output);
-      container.innerHTML = thoughtHtml + parsedMarkdown;
-    }
+      // 2. Tool Execution Cards
+      if (toolCalls && toolCalls.length > 0) {
+        toolCalls.forEach(tc => {
+          const badgeClass = tc.is_error ? 'badge-error' : 'badge-success';
+          const badgeText = tc.is_error ? 'Error' : 'Exit 0';
+          const argSummary = tc.arguments ? Object.entries(tc.arguments).map(([k, v]) => `${k}="${v}"`).join(' ') : '';
 
-    function toggleThought(elem) {
-      const content = elem.nextElementSibling;
-      const isVisible = content.style.display !== 'none';
-      content.style.display = isVisible ? 'none' : 'block';
-      elem.querySelector('span:last-child').textContent = isVisible ? '▶' : '▼';
-    }
+          html += `
+            <div class="tool-card">
+              <div class="tool-card-header" onclick="toggleAccordion(this)">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span>⚙️ ${escapeHtml(tc.name)}</span>
+                  <span style="color:#71717a; font-size:11px;">${escapeHtml(argSummary)}</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="tool-badge ${badgeClass}">${badgeText}</span>
+                  <span>▼</span>
+                </div>
+              </div>
+              <div class="tool-card-body">${escapeHtml(tc.output || 'No output')}</div>
+            </div>
+          `;
+        });
+      }
 
-    async function fetchArtifacts() {
-      try {
-        const res = await fetch('/artifacts');
-        const data = await res.json();
-        const keys = Object.keys(data.manifest || {});
-        if (keys.length > 0) {
-          const latest = data.manifest[keys[keys.length - 1]];
-          currentArtifactFilename = latest.filename;
-          document.getElementById('artifact-title').textContent = latest.filename;
-          document.getElementById('artifact-summary').textContent = latest.summary || '';
-          
-          const contentRes = await fetch(`/artifacts/${latest.filename}`);
-          const content = await contentRes.text();
-          document.getElementById('artifact-content').innerHTML = `<pre><code>${escapeHtml(content)}</code></pre>`;
-        }
-      } catch (e) {
-        console.error(e);
+      // 3. Formatted Markdown Prose
+      html += `<div class="markdown-body">${marked.parse(outputText)}</div>`;
+
+      row.innerHTML = html;
+      document.getElementById('timeline').scrollTop = document.getElementById('timeline').scrollHeight;
+
+      // Apply Prism syntax highlighting if available
+      if (window.Prism) {
+        window.Prism.highlightAllUnder(row);
       }
     }
 
-    async function fetchEconomics() {
-      try {
-        const res = await fetch('/economics');
-        const data = await res.json();
-        document.getElementById('cost-badge').textContent = `$${(data.total_cost_usd || 0).toFixed(4)} (Saved $${(data.total_saved_usd || 0).toFixed(4)})`;
+    function toggleAccordion(header) {
+      const body = header.nextElementSibling;
+      if (body.style.display === 'none') {
+        body.style.display = 'block';
+        header.querySelector('span:last-child').textContent = '▼';
+      } else {
+        body.style.display = 'none';
+        header.querySelector('span:last-child').textContent = '▶';
+      }
+    }
 
-        if (activeTab === 'economics') {
-          const vp = document.getElementById('studio-viewport');
-          vp.innerHTML = `
-            <div class="stat-grid">
-              <div class="stat-card">
-                <div class="stat-label">Cumulative Cost</div>
-                <div class="stat-val">$${(data.total_cost_usd || 0).toFixed(4)}</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-label">Cache Dollar Savings</div>
-                <div class="stat-val" style="color:var(--accent-blue);">$${(data.total_saved_usd || 0).toFixed(4)}</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-label">Input Tokens</div>
-                <div class="stat-val">${(data.total_input_tokens || 0).toLocaleString()}</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-label">Cache Tokens Read</div>
-                <div class="stat-val" style="color:var(--accent-purple);">${(data.total_cache_read_tokens || 0).toLocaleString()}</div>
-              </div>
-            </div>
-            <div style="font-size:0.85rem; color:var(--text-muted); line-height:1.5;">
-              Cline-style micro-token accounting: reads hitting Anthropic or DeepSeek prompt caches are calculated at 90% discount.
-            </div>
-          `;
+    async function fetchLatestArtifacts() {
+      try {
+        const res = await fetch('/artifacts');
+        const data = await res.json();
+        const manifest = data.manifest || {};
+        const keys = Object.keys(manifest);
+        if (keys.length > 0) {
+          latestArtifactName = keys[keys.length - 1];
+          const item = manifest[latestArtifactName];
+
+          document.getElementById('proceed-banner').style.display = 'flex';
+          document.getElementById('banner-artifact-title').textContent = latestArtifactName;
+          document.getElementById('banner-artifact-desc').textContent = item.summary || 'Architecture plan generated.';
+          document.getElementById('tab-artifact-label').textContent = latestArtifactName;
+
+          const contentRes = await fetch(`/artifacts/${latestArtifactName}`);
+          const text = await contentRes.text();
+          document.getElementById('studio-content-area').innerHTML = marked.parse(text);
+
+          if (window.Prism) window.Prism.highlightAllUnder(document.getElementById('studio-content-area'));
         }
       } catch (e) {}
     }
 
-    async function fetchSpawnTree() {
-      try {
-        const res = await fetch('/spawn-tree');
-        const data = await res.json();
-        const vp = document.getElementById('studio-viewport');
-        if (!data.tree || data.tree.length === 0) {
-          vp.innerHTML = '<div style="color:var(--text-muted);">No active subagent spawn trees registered.</div>';
-          return;
-        }
+    function acceptArtifact() {
+      quickPrompt(`Approved artifact ${latestArtifactName}. Proceed with the next implementation step.`);
+    }
 
-        let html = '<div style="font-weight:600; margin-bottom:1rem; color:var(--accent-blue);">Hermes Subagent Hierarchy (spawn-ledger.json)</div>';
-        function renderNodes(nodes, depth = 0) {
-          nodes.forEach(n => {
-            html += `
-              <div class="tree-node depth-${depth}">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                  <strong style="color:#f8fafc;">${escapeHtml(n.agent_name || n.task_id)}</strong>
-                  <span style="font-size:0.75rem; padding:2px 8px; border-radius:4px; background:#1e293b; color:var(--accent-green);">${n.status}</span>
-                </div>
-                <div style="font-size:0.8rem; color:var(--text-muted); margin-top:4px;">Role: ${escapeHtml(n.role || '')} | Depth: ${n.nesting_depth}</div>
-                <div style="font-size:0.85rem; color:#cbd5e1; margin-top:4px;">${escapeHtml(n.goal || '')}</div>
-              </div>
-            `;
-            if (n.children && n.children.length > 0) {
-              renderNodes(n.children, depth + 1);
-            }
-          });
-        }
-        renderNodes(data.tree);
-        vp.innerHTML = html;
-      } catch (e) {
-        console.error(e);
+    function requestArtifactChanges() {
+      const fb = prompt(`Enter feedback for ${latestArtifactName}:`);
+      if (fb) {
+        quickPrompt(`Please revise artifact ${latestArtifactName} with this feedback: ${fb}`);
       }
     }
 
-    function renderSandboxTab() {
-      const vp = document.getElementById('studio-viewport');
+    function renderArtifactView() {
+      fetchLatestArtifacts();
+    }
+
+    function renderSandboxView() {
+      const vp = document.getElementById('studio-content-area');
+      document.getElementById('proceed-banner').style.display = 'none';
       vp.innerHTML = `
-        <div style="margin-bottom:0.75rem; font-size:0.85rem; color:var(--text-muted);">
-          Dual-Port SOP Defense: Sandboxed content served securely on <strong>Port 8001</strong>.
+        <div style="margin-bottom:12px; font-size:12px; color:#a1a1aa; display:flex; justify-content:space-between; align-items:center;">
+          <span>Origin Isolation: Untrusted Sandbox on <strong>Port 8001</strong></span>
+          <button class="btn-changes" onclick="window.open('http://127.0.0.1:8001/health', '_blank')">Open in Browser ↗</button>
         </div>
-        <iframe class="sandbox-frame" src="http://127.0.0.1:8001/health"></iframe>
+        <iframe style="width:100%; height:540px; border:1px solid #27272a; border-radius:8px; background:#fff;" src="http://127.0.0.1:8001/health"></iframe>
       `;
     }
 
-    function renderArtifactTab() {
-      fetchArtifacts();
+    async function renderFilesView() {
+      const vp = document.getElementById('studio-content-area');
+      document.getElementById('proceed-banner').style.display = 'none';
+      vp.innerHTML = '<div style="color:#71717a;">Loading workspace files...</div>';
+      try {
+        const res = await fetch('/files');
+        const data = await res.json();
+        const files = data.files || [];
+        let html = '<div style="font-weight:600; font-size:13px; margin-bottom:12px; color:#38bdf8;">Workspace Files:</div>';
+        files.forEach(f => {
+          html += `
+            <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #1f1f23; font-family:var(--font-mono); font-size:12px; cursor:pointer;" onclick="quickPrompt('view file ${f.path}')">
+              <span style="color:#e4e4e7;">📄 ${escapeHtml(f.path)}</span>
+              <span style="color:#71717a;">${f.size} B</span>
+            </div>
+          `;
+        });
+        vp.innerHTML = html;
+      } catch (e) {
+        vp.innerHTML = 'Error loading files: ' + e.message;
+      }
     }
 
-    function renderSearchTab() {
-      const vp = document.getElementById('studio-viewport');
+    async function renderTreeView() {
+      const vp = document.getElementById('studio-content-area');
+      document.getElementById('proceed-banner').style.display = 'none';
+      vp.innerHTML = '<div style="color:#71717a;">Loading Hermes subagent DAG...</div>';
+      try {
+        const res = await fetch('/spawn-tree');
+        const data = await res.json();
+        const tree = data.tree || [];
+        if (tree.length === 0) {
+          vp.innerHTML = '<div style="color:#71717a; padding:16px;">No subagent hierarchies active in spawn-ledger.json.</div>';
+          return;
+        }
+        let html = '<div style="font-weight:600; font-size:13px; margin-bottom:12px; color:#38bdf8;">Hermes Subagent Hierarchy:</div>';
+        tree.forEach(t => {
+          html += `
+            <div style="background:#161619; border:1px solid #27272a; border-radius:8px; padding:12px; margin-bottom:8px;">
+              <div style="display:flex; justify-content:space-between;">
+                <strong>${escapeHtml(t.agent_name || t.task_id)}</strong>
+                <span class="tool-badge badge-success">${t.status}</span>
+              </div>
+              <div style="font-size:12px; color:#a1a1aa; margin-top:4px;">Goal: ${escapeHtml(t.goal || '')}</div>
+            </div>
+          `;
+        });
+        vp.innerHTML = html;
+      } catch (e) {
+        vp.innerHTML = 'Error loading tree: ' + e.message;
+      }
+    }
+
+    function renderSearchView() {
+      const vp = document.getElementById('studio-content-area');
+      document.getElementById('proceed-banner').style.display = 'none';
       vp.innerHTML = `
-        <div style="display:flex; gap:0.5rem; margin-bottom:1rem;">
-          <input type="text" id="rg-input" class="chat-textarea" style="height:40px; min-height:40px;" placeholder="Search codebase regex (Ripgrep)..."/>
-          <button class="btn btn-primary" onclick="executeRipgrep()">Search</button>
+        <div style="display:flex; gap:8px; margin-bottom:14px;">
+          <input type="text" id="rg-input" class="input-field" style="flex:1;" placeholder="Regex query (Ripgrep engine)..."/>
+          <button class="btn-proceed" onclick="runRipgrepSearch()">Search</button>
         </div>
-        <div id="rg-results" style="font-size:0.85rem; font-family:var(--font-mono); color:#cbd5e1;"></div>
+        <div id="rg-results" style="font-family:var(--font-mono); font-size:12px; color:#e2e8f0;"></div>
       `;
     }
 
-    async function executeRipgrep() {
+    async function runRipgrepSearch() {
       const q = document.getElementById('rg-input').value.trim();
       if (!q) return;
-      const resContainer = document.getElementById('rg-results');
-      resContainer.innerHTML = 'Searching...';
+      const list = document.getElementById('rg-results');
+      list.innerHTML = 'Searching codebase...';
       try {
         const res = await fetch('/search/code', {
           method: 'POST',
@@ -851,38 +1321,81 @@
         });
         const data = await res.json();
         if (data.matches && data.matches.length > 0) {
-          resContainer.innerHTML = data.matches.map(m => `
-            <div style="margin-bottom:6px; border-bottom:1px solid #1e293b; padding-bottom:4px;">
-              <span style="color:var(--accent-blue);">${escapeHtml(m.path)}:${m.line}</span>
-              <div style="color:#e2e8f0;">${escapeHtml(m.text)}</div>
+          list.innerHTML = data.matches.map(m => `
+            <div style="padding:6px 0; border-bottom:1px solid #1f1f23; cursor:pointer;" onclick="quickPrompt('view file ${m.path}')">
+              <span style="color:#38bdf8;">${escapeHtml(m.path)}:${m.line}</span>
+              <div style="color:#cbd5e1; margin-top:2px;">${escapeHtml(m.text)}</div>
             </div>
           `).join('');
         } else {
-          resContainer.innerHTML = 'No matches found.';
+          list.innerHTML = 'No matches found.';
         }
       } catch (e) {
-        resContainer.innerHTML = 'Search error: ' + e.message;
+        list.innerHTML = 'Search error: ' + e.message;
       }
     }
 
-    function sendArtifactAction(action) {
-      alert(`Action '${action}' submitted for ${currentArtifactFilename}`);
+    function resetConversation() {
+      document.getElementById('timeline').innerHTML = `
+        <div class="turn-card assistant-turn">
+          <div class="markdown-body"><p>Session reset. How can I assist you with your codebase?</p></div>
+        </div>
+      `;
     }
 
-    function openSandbox() {
-      window.open('http://127.0.0.1:8001/health', '_blank');
+    function openSettingsModal() {
+      loadSettings();
+      document.getElementById('settings-modal').classList.add('open');
     }
 
-    async function fetchSkills() {
-      const res = await fetch('/skills');
-      const data = await res.json();
-      alert(`Installed Skills (${data.skills.length}):\n` + data.skills.map(s => `• ${s.name} (${s.tier}): ${s.description}`).join('\n'));
+    function closeSettingsModal() {
+      document.getElementById('settings-modal').classList.remove('open');
     }
 
-    async function fetchTasks() {
-      const res = await fetch('/tasks');
-      const data = await res.json();
-      alert(`Background Tasks: ${JSON.stringify(data.tasks, null, 2)}`);
+    async function loadSettings() {
+      try {
+        const res = await fetch('/settings');
+        const data = await res.json();
+        if (data.configured_providers) {
+          const hasAny = Object.values(data.configured_providers).some(Boolean);
+          const pill = document.getElementById('api-status-pill');
+          if (hasAny) {
+            pill.textContent = '✓ API Key Set';
+            pill.style.color = '#4ade80';
+            pill.style.borderColor = 'rgba(34, 197, 94, 0.4)';
+          }
+        }
+        if (data.default_model) {
+          document.getElementById('model-selector').value = data.default_model;
+          document.getElementById('active-model-display').textContent = data.default_model;
+        }
+      } catch (e) {}
+    }
+
+    async function saveSettings() {
+      const anthropic = document.getElementById('key-anthropic').value.trim();
+      const openai = document.getElementById('key-openai').value.trim();
+      const gemini = document.getElementById('key-gemini').value.trim();
+      const deepseek = document.getElementById('key-deepseek').value.trim();
+
+      const keys = {};
+      if (anthropic) keys.anthropic = anthropic;
+      if (openai) keys.openai = openai;
+      if (gemini) keys.gemini = gemini;
+      if (deepseek) keys.deepseek = deepseek;
+
+      await fetch('/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          api_keys: keys,
+          default_model: document.getElementById('model-selector').value
+        })
+      });
+
+      closeSettingsModal();
+      loadSettings();
+      alert('Settings saved. API keys activated!');
     }
 
     function escapeHtml(str) {
@@ -891,22 +1404,9 @@
       );
     }
 
-    // Connect to Server-Sent Events (SSE) stream
-    const eventSource = new EventSource('/events');
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'NEW_ARTIFACT') {
-          fetchArtifacts();
-        } else if (data.type === 'SPAWN_UPDATE') {
-          if (activeTab === 'tree') fetchSpawnTree();
-        }
-      } catch (e) {}
-    };
-
-    // Initial load
-    fetchArtifacts();
-    fetchEconomics();
+    // Initialize on page load
+    loadSettings();
+    fetchLatestArtifacts();
   </script>
 </body>
 </html>

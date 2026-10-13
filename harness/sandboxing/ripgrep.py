@@ -42,7 +42,18 @@ class RipgrepSearcher:
         case_sensitive: bool,
         max_results: int,
     ) -> List[RipgrepMatch]:
-        cmd = [self.rg_bin, "--line-number", "--no-heading", "--color", "never"]
+        cmd = [
+            self.rg_bin,
+            "--line-number",
+            "--no-heading",
+            "--color", "never",
+            "--glob", "!.git/*",
+            "--glob", "!node_modules/*",
+            "--glob", "!.venv/*",
+            "--glob", "!dist/*",
+            "--glob", "!Library/*",
+            "--glob", "!build/*",
+        ]
         if not case_sensitive:
             cmd.append("-i")
         if glob_filter:

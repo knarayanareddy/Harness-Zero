@@ -62,13 +62,39 @@ class HarnessDaemon:
         self.app.router.add_post("/rpc", self._handle_rpc)
         self.app.router.add_get("/skills", self._handle_skills)
         self.app.router.add_get("/tasks", self._handle_tasks)
+        self.app.router.add_get("/files", self._handle_files)
         self.app.router.add_get("/artifacts", self._handle_artifacts_list)
         self.app.router.add_get("/artifacts/{filename}", self._handle_get_artifact)
         self.app.router.add_get("/spawn-tree", self._handle_spawn_tree)
         self.app.router.add_get("/economics", self._handle_economics)
         self.app.router.add_post("/search/code", self._handle_search_code)
+        self.app.router.add_get("/settings", self._handle_settings_get)
+        self.app.router.add_post("/settings", self._handle_settings_post)
         self.app.router.add_get("/events", self._handle_events)
         self.app.router.add_get("/login", self._handle_login)
+
+        # Serve static assets (Tailwind, Jetbox, Prism)
+        assets_dir = Path(__file__).resolve().parent.parent / "web" / "assets"
+        if assets_dir.exists():
+            self.app.router.add_static("/assets", str(assets_dir))
+
+    async def _handle_files(self, request: web.Request) -> web.Response:
+        """Returns workspace files tree for the Explorer view."""
+        files = []
+        for p in self.coordinator.workspace.rglob("*"):
+            if any(part.startswith(".") for part in p.parts):
+                continue
+            if "__pycache__" in p.parts or "node_modules" in p.parts or "dist" in p.parts:
+                continue
+            if p.is_file():
+                rel = p.relative_to(self.coordinator.workspace)
+                files.append({
+                    "path": str(rel),
+                    "name": p.name,
+                    "size": p.stat().st_size,
+                    "ext": p.suffix,
+                })
+        return web.json_response({"files": files[:100]})
 
     async def _handle_index(self, request: web.Request) -> web.Response:
         web_file = Path(__file__).resolve().parent.parent / "web" / "index.html"
@@ -105,9 +131,36 @@ class HarnessDaemon:
             pattern = body.get("pattern", "")
             matches = await self.coordinator.ripgrep.search(pattern)
             return web.json_response({"matches": [
-                {"path": m.file_path, "line": m.line_number, "text": m.line_text}
+                {"path": m.file_path, "line": m.line_number, "text": m.line_content}
                 for m in matches
             ]})
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=400)
+
+    async def _handle_settings_get(self, request: web.Request) -> web.Response:
+        router = self.coordinator.router
+        return web.json_response({
+            "configured_providers": {
+                p: bool(router.api_keys.get(p))
+                for p in ("anthropic", "openai", "gemini", "deepseek", "openrouter")
+            },
+            "default_provider": router.default_provider,
+            "default_model": router.default_model,
+            "local_base_url": router.local_base_url,
+        })
+
+    async def _handle_settings_post(self, request: web.Request) -> web.Response:
+        try:
+            body = await request.json()
+            keys = body.get("api_keys", {})
+            provider = body.get("default_provider")
+            model = body.get("default_model")
+            self.coordinator.router.save_config(
+                keys=keys,
+                default_provider=provider,
+                default_model=model
+            )
+            return web.json_response({"status": "saved", "active_provider": self.coordinator.router.default_provider})
         except Exception as e:
             return web.json_response({"error": str(e)}, status=400)
 
@@ -216,7 +269,8 @@ class HarnessDaemon:
             model = params.get("model")
             try:
                 res = await self.coordinator.execute_turn(prompt, provider=provider, model=model)
-                return web.json_response({"jsonrpc": "2.0", "result": {"output": res}, "id": rpc_id})
+                data = res.to_dict() if hasattr(res, "to_dict") else (res if isinstance(res, dict) else {"output": str(res)})
+                return web.json_response({"jsonrpc": "2.0", "result": data, "id": rpc_id})
             except Exception as e:
                 return web.json_response(
                     {"jsonrpc": "2.0", "error": {"code": -32603, "message": str(e)}, "id": rpc_id},
