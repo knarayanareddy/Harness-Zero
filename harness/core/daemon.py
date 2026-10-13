@@ -97,13 +97,16 @@ class HarnessDaemon:
             if "__pycache__" in p.parts or "node_modules" in p.parts or "dist" in p.parts:
                 continue
             if p.is_file():
-                rel = p.relative_to(self.coordinator.workspace)
-                files.append({
-                    "path": str(rel),
-                    "name": p.name,
-                    "size": p.stat().st_size,
-                    "ext": p.suffix,
-                })
+                try:
+                    rel = p.relative_to(self.coordinator.workspace)
+                    files.append({
+                        "path": str(rel),
+                        "name": p.name,
+                        "size": p.stat().st_size,
+                        "ext": p.suffix,
+                    })
+                except (OSError, ValueError):
+                    continue
         return web.json_response({"files": files[:100]})
 
     async def _handle_index(self, request: web.Request) -> web.Response:
@@ -220,11 +223,11 @@ class HarnessDaemon:
             return web.json_response({"error": "Missing path parameter"}, status=400)
 
         target = (self.coordinator.workspace / rel_path).resolve()
+        ws_resolved = self.coordinator.workspace.resolve()
         try:
-            if not str(target).startswith(str(self.coordinator.workspace.resolve())):
-                return web.json_response({"error": "Access denied: Path outside workspace"}, status=403)
-        except Exception:
-            return web.json_response({"error": "Invalid workspace path"}, status=403)
+            target.relative_to(ws_resolved)
+        except ValueError:
+            return web.json_response({"error": "Access denied: Path outside workspace"}, status=403)
 
         if not target.exists() or not target.is_file():
             return web.json_response({"error": f"File '{rel_path}' not found"}, status=404)
@@ -253,7 +256,10 @@ class HarnessDaemon:
                 return web.json_response({"error": "Missing path parameter"}, status=400)
 
             target = (self.coordinator.workspace / rel_path).resolve()
-            if not str(target).startswith(str(self.coordinator.workspace.resolve())):
+            ws_resolved = self.coordinator.workspace.resolve()
+            try:
+                target.relative_to(ws_resolved)
+            except ValueError:
                 return web.json_response({"error": "Access denied: Path outside workspace"}, status=403)
 
             target.parent.mkdir(parents=True, exist_ok=True)

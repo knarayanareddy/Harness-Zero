@@ -70,6 +70,7 @@ class CommandExecutor:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             stdin=asyncio.subprocess.PIPE,
+            start_new_session=True,
         )
 
         task_id = f"task_{uuid.uuid4().hex[:8]}"
@@ -113,15 +114,21 @@ class CommandExecutor:
             }
 
     async def _read_stream(
-        self, stream: Optional[asyncio.StreamReader], chunks: List[str]
+        self, stream: Optional[asyncio.StreamReader], chunks: List[str], max_chunks: int = 10000
     ) -> None:
         if not stream:
             return
+        total_bytes = 0
+        max_bytes = 10 * 1024 * 1024  # 10 MB buffer limit
         while True:
             line = await stream.readline()
             if not line:
                 break
-            chunks.append(line.decode("utf-8", errors="replace"))
+            if len(chunks) < max_chunks and total_bytes < max_bytes:
+                chunks.append(line.decode("utf-8", errors="replace"))
+                total_bytes += len(line)
+            elif len(chunks) == max_chunks:
+                chunks.append("\n[OUTPUT TRUNCATED: Stream buffer limit reached]\n")
 
     async def _monitor_background_task(
         self,
@@ -162,10 +169,32 @@ class CommandExecutor:
         if not task or task.status != "running":
             return False
         try:
-            task.process.terminate()
+            current_pgrp = os.getpgrp() if hasattr(os, "getpgrp") else -1
+            if hasattr(os, "killpg") and task.process.pid:
+                try:
+                    pgid = os.getpgid(task.process.pid)
+                    if pgid != current_pgrp and pgid > 1:
+                        os.killpg(pgid, signal.SIGTERM)
+                    else:
+                        task.process.terminate()
+                except Exception:
+                    task.process.terminate()
+            else:
+                task.process.terminate()
+
             await asyncio.sleep(0.2)
             if task.process.returncode is None:
-                task.process.kill()
+                if hasattr(os, "killpg") and task.process.pid:
+                    try:
+                        pgid = os.getpgid(task.process.pid)
+                        if pgid != current_pgrp and pgid > 1:
+                            os.killpg(pgid, signal.SIGKILL)
+                        else:
+                            task.process.kill()
+                    except Exception:
+                        task.process.kill()
+                else:
+                    task.process.kill()
             task.status = "killed"
             return True
         except Exception:

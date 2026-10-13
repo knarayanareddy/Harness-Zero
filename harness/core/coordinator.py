@@ -389,6 +389,15 @@ and verify your work with test runs.
                 raw_path = args.get("AbsolutePath") or args.get("TargetFile") or args.get("path", "")
                 p = Path(raw_path)
                 path = p.resolve() if p.is_absolute() else (self.workspace / p).resolve()
+
+                # Red-team credential security check: protect sensitive system paths
+                for protected in SecurityPolicy.PROTECTED_SYSTEM_PATHS:
+                    try:
+                        path.relative_to(protected.resolve())
+                        return ToolResult(tool_call.id, name, f"Security Violation: Access to protected system path '{path}' is blocked by SecurityPolicy", is_error=True)
+                    except ValueError:
+                        pass
+
                 if not path.exists():
                     return ToolResult(tool_call.id, name, f"Error: File {path} does not exist", is_error=True)
                 lines = path.read_text(encoding="utf-8", errors="replace").splitlines()

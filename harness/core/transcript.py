@@ -141,17 +141,26 @@ class TranscriptEngine:
 
         if full and step_index <= len(self._full_offsets):
             offset = self._full_offsets[step_index - 1]
-            with open(self.full_file, "rb") as f:
-                f.seek(offset)
-                line = f.readline().decode("utf-8")
-                return json.loads(line)
+            try:
+                with open(self.full_file, "rb") as f:
+                    f.seek(offset)
+                    line = f.readline().decode("utf-8", errors="replace")
+                    return json.loads(line)
+            except Exception:
+                pass
 
         # Fallback linear scan
-        with open(target_file, "r", encoding="utf-8") as f:
-            for line in f:
-                rec = json.loads(line)
-                if rec.get("step_index") == step_index:
-                    return rec
+        try:
+            with open(target_file, "r", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    try:
+                        rec = json.loads(line)
+                        if rec.get("step_index") == step_index:
+                            return rec
+                    except Exception:
+                        continue
+        except Exception:
+            pass
         return None
 
     def read_compact_history(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:

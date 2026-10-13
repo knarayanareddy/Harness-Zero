@@ -127,7 +127,10 @@ class SkillRegistry:
         skill = self.skills.get(name)
         if not skill:
             return None
-        return skill.path.read_text(encoding="utf-8")
+        try:
+            return skill.path.read_text(encoding="utf-8")
+        except Exception:
+            return skill.content or f"Skill playbook '{name}' loaded from memory."
 
     def list_skills(self) -> List[Skill]:
         return list(self.skills.values())
