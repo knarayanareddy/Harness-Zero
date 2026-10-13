@@ -6,10 +6,12 @@ synthesized from Claude Cowork (Operon) for browser SOP defense, plus JSON-RPC 2
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
+import uuid
 
 from aiohttp import web
 
@@ -76,6 +78,14 @@ class HarnessDaemon:
         self.app.router.add_post("/turn/stream", self._handle_turn_stream)
         self.app.router.add_get("/events", self._handle_events)
         self.app.router.add_get("/login", self._handle_login)
+        self.app.router.add_post("/media/upload", self._handle_media_upload)
+        self.app.router.add_get("/media/{filename}", self._handle_media_serve)
+        self.app.router.add_get("/sessions", self._handle_sessions_list)
+        self.app.router.add_get("/sessions/{session_id}", self._handle_session_get)
+        self.app.router.add_post("/sessions/new", self._handle_session_new)
+        self.app.router.add_post("/sessions/switch", self._handle_session_switch)
+        self.app.router.add_get("/skills/{name}", self._handle_skill_playbook)
+        self.app.router.add_get("/plugins", self._handle_plugins)
 
         # Serve static assets (Tailwind, Jetbox, Prism)
         assets_dir = Path(__file__).resolve().parent.parent / "web" / "assets"
@@ -318,6 +328,7 @@ class HarnessDaemon:
         prompt = body.get("prompt", "")
         model = body.get("model")
         mode = body.get("mode", "autonomous")
+        media = body.get("media")
 
         response = web.StreamResponse(
             status=200,
@@ -357,7 +368,7 @@ class HarnessDaemon:
                     }
                 })
             else:
-                res = await self.coordinator.execute_turn(prompt, model=model)
+                res = await self.coordinator.execute_turn(prompt, model=model, media=media)
                 data = res.to_dict() if hasattr(res, "to_dict") else (res if isinstance(res, dict) else {"output": str(res)})
 
                 # Stream thinking if present
@@ -483,8 +494,9 @@ class HarnessDaemon:
             prompt = params.get("prompt", "")
             provider = params.get("provider")
             model = params.get("model")
+            media = params.get("media")
             try:
-                res = await self.coordinator.execute_turn(prompt, provider=provider, model=model)
+                res = await self.coordinator.execute_turn(prompt, provider=provider, model=model, media=media)
                 data = res.to_dict() if hasattr(res, "to_dict") else (res if isinstance(res, dict) else {"output": str(res)})
                 return web.json_response({"jsonrpc": "2.0", "result": data, "id": rpc_id})
             except Exception as e:
@@ -542,6 +554,147 @@ class HarnessDaemon:
             {"jsonrpc": "2.0", "error": {"code": -32601, "message": f"Method {method} not found"}, "id": rpc_id},
             status=404,
         )
+
+    async def _handle_media_upload(self, request: web.Request) -> web.Response:
+        """Uploads media (images, files) into active session media store."""
+        media_dir = self.coordinator.session_dir / "media"
+        media_dir.mkdir(parents=True, exist_ok=True)
+        uploaded = []
+
+        if request.content_type.startswith("multipart/"):
+            reader = await request.multipart()
+            while True:
+                field = await reader.next()
+                if field is None:
+                    break
+                if field.filename:
+                    safe_name = Path(field.filename).name.replace(" ", "_")
+                    dest = media_dir / safe_name
+                    if dest.exists():
+                        safe_name = f"{uuid.uuid4().hex[:6]}_{safe_name}"
+                        dest = media_dir / safe_name
+                    size = 0
+                    with open(dest, "wb") as f:
+                        while True:
+                            chunk = await field.read_chunk()
+                            if not chunk:
+                                break
+                            size += len(chunk)
+                            f.write(chunk)
+                    mime_type = field.headers.get("Content-Type", "application/octet-stream")
+                    uploaded.append({
+                        "filename": safe_name,
+                        "url": f"/media/{safe_name}",
+                        "mime_type": mime_type,
+                        "size": size,
+                    })
+        else:
+            try:
+                body = await request.json()
+                filename = body.get("filename", f"upload_{uuid.uuid4().hex[:8]}.png")
+                safe_name = Path(filename).name.replace(" ", "_")
+                b64data = body.get("data", "")
+                if "," in b64data:
+                    b64data = b64data.split(",", 1)[1]
+                raw_bytes = base64.b64decode(b64data)
+                dest = media_dir / safe_name
+                dest.write_bytes(raw_bytes)
+                uploaded.append({
+                    "filename": safe_name,
+                    "url": f"/media/{safe_name}",
+                    "mime_type": body.get("mime_type", "image/png"),
+                    "size": len(raw_bytes),
+                })
+            except Exception as e:
+                return web.json_response({"error": f"Failed to parse upload: {str(e)}"}, status=400)
+
+        return web.json_response({"status": "ok", "files": uploaded})
+
+    async def _handle_media_serve(self, request: web.Request) -> web.Response:
+        """Serves media file from session media repository."""
+        filename = request.match_info.get("filename", "")
+        safe_name = Path(filename).name
+        target = self.coordinator.session_dir / "media" / safe_name
+        if not target.exists() or not target.is_file():
+            # Fallback across session media subdirectories
+            for s_dir in (self.coordinator.workspace / ".harness" / "sessions").glob(f"*/media/{safe_name}"):
+                if s_dir.exists() and s_dir.is_file():
+                    target = s_dir
+                    break
+        if not target.exists() or not target.is_file():
+            return web.Response(text="Media not found", status=404)
+
+        ext = target.suffix.lower()
+        content_types = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".gif": "image/gif",
+            ".webp": "image/webp",
+            ".svg": "image/svg+xml",
+            ".pdf": "application/pdf",
+            ".json": "application/json",
+            ".txt": "text/plain",
+        }
+        ct = content_types.get(ext, "application/octet-stream")
+        return web.Response(body=target.read_bytes(), content_type=ct)
+
+    async def _handle_sessions_list(self, request: web.Request) -> web.Response:
+        """Returns all historical and active sessions."""
+        sessions = self.coordinator.list_sessions()
+        return web.json_response({
+            "active_session_id": self.coordinator.session_id,
+            "sessions": sessions,
+        })
+
+    async def _handle_session_get(self, request: web.Request) -> web.Response:
+        """Returns history transcript for a specific historical session."""
+        session_id = request.match_info.get("session_id", "")
+        s_dir = self.coordinator.workspace / ".harness" / "sessions" / session_id
+        if not s_dir.exists():
+            return web.json_response({"error": "Session not found"}, status=404)
+        from harness.core.transcript import TranscriptEngine
+        engine = TranscriptEngine(s_dir)
+        history = engine.read_compact_history()
+        return web.json_response({
+            "session_id": session_id,
+            "is_current": session_id == self.coordinator.session_id,
+            "history": history,
+        })
+
+    async def _handle_session_new(self, request: web.Request) -> web.Response:
+        """Initializes a fresh session."""
+        new_sid = self.coordinator.new_session()
+        return web.json_response({"status": "created", "session_id": new_sid})
+
+    async def _handle_session_switch(self, request: web.Request) -> web.Response:
+        """Switches active session to the requested session_id."""
+        try:
+            body = await request.json()
+            sid = body.get("session_id")
+            if not sid:
+                return web.json_response({"error": "Missing session_id"}, status=400)
+            self.coordinator.switch_session(sid)
+            return web.json_response({"status": "switched", "session_id": sid})
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=400)
+
+    async def _handle_skill_playbook(self, request: web.Request) -> web.Response:
+        """Returns the full markdown playbook of a skill."""
+        name = request.match_info.get("name", "")
+        playbook = self.coordinator.skills.view_skill(name)
+        if not playbook:
+            return web.json_response({"error": f"Skill '{name}' not found"}, status=404)
+        return web.json_response({"name": name, "playbook": playbook})
+
+    async def _handle_plugins(self, request: web.Request) -> web.Response:
+        """Returns configured Model Context Protocol (MCP) servers and tools."""
+        servers = getattr(self.coordinator.mcp, "_servers", {})
+        tools = self.coordinator.mcp.get_tool_definitions() if hasattr(self.coordinator, "mcp") else []
+        return web.json_response({
+            "servers": servers,
+            "tools": tools,
+        })
 
     async def start(self) -> Tuple[web.AppRunner, web.AppRunner]:
         """Starts both Port 8000 API server and Port 8001 SOP Sandbox preview server."""

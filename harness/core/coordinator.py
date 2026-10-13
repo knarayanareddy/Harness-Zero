@@ -101,11 +101,36 @@ class AgentCoordinator:
         from harness.models.cost_tracker import TokenCostTracker
         from harness.memory.semantic_memories import SemanticMemoryStore
         from harness.sandboxing.tirith_security import TirithSecurityCapsule
+        from harness.skills.mcp_bridge import MCPBridge
 
         self.spawn_ledger = SpawnLedger(session_dir=self.session_dir)
         self.cost_tracker = TokenCostTracker()
         self.semantic_memory = SemanticMemoryStore(memory_dir=self.workspace / ".harness" / "memories")
         self.tirith = TirithSecurityCapsule()
+
+        # MCP Integration & Plugin Bridge
+        self.mcp = MCPBridge()
+        self.mcp.register_server("filesystem_mcp", "npx", ["-y", "@modelcontextprotocol/server-filesystem", str(self.workspace)])
+        self.mcp.register_tool(
+            "filesystem_mcp",
+            "list_directory",
+            "List directory entries via Model Context Protocol",
+            {"type": "object", "properties": {"path": {"type": "string"}}},
+        )
+        self.mcp.register_server("database_mcp", "npx", ["-y", "@modelcontextprotocol/server-sqlite", str(self.session_dir / "memory.db")])
+        self.mcp.register_tool(
+            "database_mcp",
+            "query_db",
+            "Execute read-only SQL query against SQLite database",
+            {"type": "object", "properties": {"sql": {"type": "string"}}, "required": ["sql"]},
+        )
+        self.mcp.register_server("github_mcp", "npx", ["-y", "@modelcontextprotocol/server-github"])
+        self.mcp.register_tool(
+            "github_mcp",
+            "search_repositories",
+            "Search GitHub repositories and issues via MCP",
+            {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
+        )
 
         # 2. Reactive Wakeup Inbox (0% Polling CPU)
         self.inbox: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
@@ -115,6 +140,82 @@ class AgentCoordinator:
 Operate with precision, inspect files before modifying them, use surgical search/replace edits,
 and verify your work with test runs.
 """.strip()
+
+    def list_sessions(self) -> List[Dict[str, Any]]:
+        """Scans workspace sessions directory and returns historical sessions metadata."""
+        sessions_root = self.workspace / ".harness" / "sessions"
+        sessions_list: List[Dict[str, Any]] = []
+
+        if sessions_root.exists():
+            for s_dir in sorted(sessions_root.iterdir(), key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True):
+                if not s_dir.is_dir():
+                    continue
+                sid = s_dir.name
+                t_compact = s_dir / "transcript.jsonl"
+                title = f"Session {sid[:8]}"
+                step_count = 0
+                created_at = datetime.fromtimestamp(s_dir.stat().st_mtime, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
+
+                if t_compact.exists():
+                    try:
+                        with open(t_compact, "r", encoding="utf-8") as f:
+                            lines = [ln.strip() for ln in f if ln.strip()]
+                            step_count = len(lines)
+                            for ln in lines:
+                                try:
+                                    rec = json.loads(ln)
+                                    if rec.get("type") == "USER_INPUT" and rec.get("content"):
+                                        c = rec["content"]
+                                        title = c[:48] + ("..." if len(c) > 48 else "")
+                                        break
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+
+                sessions_list.append({
+                    "session_id": sid,
+                    "title": title,
+                    "step_count": step_count,
+                    "is_current": sid == self.session_id,
+                    "updated_at": created_at,
+                })
+
+        # Ensure current session is always represented
+        if not any(s["session_id"] == self.session_id for s in sessions_list):
+            sessions_list.insert(0, {
+                "session_id": self.session_id,
+                "title": f"Session {self.session_id[:8]}",
+                "step_count": self.transcripts.step_counter,
+                "is_current": True,
+                "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
+            })
+
+        return sessions_list
+
+    def switch_session(self, session_id: str) -> None:
+        """Switches active session context, transcripts, memory index, and artifacts."""
+        self.session_id = session_id
+        self.session_dir = self.workspace / ".harness" / "sessions" / self.session_id
+        self.session_dir.mkdir(parents=True, exist_ok=True)
+
+        self.transcripts = TranscriptEngine(self.session_dir)
+        self.memory = FTS5MemoryIndex(self.session_dir / "memory.db")
+        self.memory.register_conversation(
+            conversation_id=self.session_id,
+            title=f"Harness Session {self.session_id}",
+            workspace_uri=str(self.workspace),
+        )
+        self.artifacts = ArtifactManager(brain_dir=self.session_dir / "artifacts")
+        self.desktop = MacOSDesktopBridge(scratch_dir=self.session_dir / "scratch")
+        from harness.orchestration.spawn_ledger import SpawnLedger
+        self.spawn_ledger = SpawnLedger(session_dir=self.session_dir)
+
+    def new_session(self, session_id: Optional[str] = None) -> str:
+        """Initializes and activates a new session."""
+        new_sid = session_id or f"session_{uuid.uuid4().hex[:12]}"
+        self.switch_session(new_sid)
+        return new_sid
 
     def get_tool_schemas(self) -> List[Dict[str, Any]]:
         """Returns deterministic, alphabetically-sorted tool definitions."""
@@ -234,6 +335,19 @@ and verify your work with test runs.
                     "required": ["TargetFile", "CodeContent"],
                 },
             },
+            {
+                "name": "call_mcp_tool",
+                "description": "Invoke an active Model Context Protocol (MCP) server tool.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "server": {"type": "string", "description": "MCP server name (e.g. filesystem_mcp, database_mcp, github_mcp)"},
+                        "tool": {"type": "string", "description": "MCP tool name"},
+                        "arguments": {"type": "object", "description": "Tool input arguments"},
+                    },
+                    "required": ["server", "tool"],
+                },
+            },
         ]
 
     async def execute_turn(
@@ -242,6 +356,7 @@ and verify your work with test runs.
         max_tool_iterations: int = 10,
         provider: Optional[str] = None,
         model: Optional[str] = None,
+        media: Optional[List[Dict[str, Any]]] = None,
     ) -> TurnResult:
         """Executes a reactive agent turn with multi-step tool calls."""
         # 1. Log and index user input
@@ -249,6 +364,7 @@ and verify your work with test runs.
             source=StepSource.USER,
             step_type=StepType.USER_INPUT,
             content=user_prompt,
+            media=media,
         )
         self.memory.index_turn(
             conversation_id=self.session_id,
@@ -506,6 +622,18 @@ and verify your work with test runs.
                 filename = args.get("Filename", "screen.png")
                 path = await self.desktop.take_screenshot(filename)
                 return ToolResult(tool_call.id, name, f"Screenshot saved at {path}")
+
+            elif name == "call_mcp_tool":
+                server = args.get("server", "")
+                tool_name = args.get("tool", "")
+                tool_args = args.get("arguments", {})
+                namespaced = f"{server}__{tool_name}"
+                res = await self.mcp.call_tool(namespaced, tool_args)
+                return ToolResult(tool_call.id, name, res.get("content", ""), is_error=res.get("is_error", False))
+
+            elif "__" in name or name.startswith("mcp__"):
+                res = await self.mcp.call_tool(name, args)
+                return ToolResult(tool_call.id, name, res.get("content", ""), is_error=res.get("is_error", False))
 
             return ToolResult(tool_call.id, name, f"Unknown tool: {name}", is_error=True)
 

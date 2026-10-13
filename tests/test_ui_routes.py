@@ -82,5 +82,65 @@ async def test_ui_and_studio_endpoints(tmp_path: Path):
             assert res_diffs.status_code == 200
             assert "diff" in res_diffs.json()
             assert "modified_files" in res_diffs.json()
+
+            # 9. Test Media Upload & Serving
+            upload_payload = {
+                "filename": "screenshot_test.png",
+                "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+                "mime_type": "image/png"
+            }
+            res_upload = await client.post("http://127.0.0.1:8990/media/upload", json=upload_payload)
+            assert res_upload.status_code == 200
+            up_data = res_upload.json()
+            assert up_data["status"] == "ok"
+            assert len(up_data["files"]) == 1
+            uploaded_fn = up_data["files"][0]["filename"]
+
+            res_media = await client.get(f"http://127.0.0.1:8990/media/{uploaded_fn}")
+            assert res_media.status_code == 200
+            assert res_media.headers["content-type"] == "image/png"
+            assert len(res_media.content) > 0
+
+            # 10. Test Sessions List, New, Switch, and History
+            res_sess = await client.get("http://127.0.0.1:8990/sessions")
+            assert res_sess.status_code == 200
+            sessions_data = res_sess.json()
+            assert "sessions" in sessions_data
+            assert len(sessions_data["sessions"]) >= 1
+
+            # New Session
+            res_new_s = await client.post("http://127.0.0.1:8990/sessions/new")
+            assert res_new_s.status_code == 200
+            new_sid = res_new_s.json()["session_id"]
+            assert new_sid.startswith("session_")
+            assert coordinator.session_id == new_sid
+
+            # Switch Session
+            res_switch = await client.post("http://127.0.0.1:8990/sessions/switch", json={"session_id": new_sid})
+            assert res_switch.status_code == 200
+            assert res_switch.json()["status"] == "switched"
+
+            # Session History
+            res_hist = await client.get(f"http://127.0.0.1:8990/sessions/{new_sid}")
+            assert res_hist.status_code == 200
+            assert "history" in res_hist.json()
+
+            # 11. Test Skills Playbook & Plugins
+            res_skills = await client.get("http://127.0.0.1:8990/skills")
+            assert res_skills.status_code == 200
+            skills_list = res_skills.json()["skills"]
+            if skills_list:
+                first_skill_name = skills_list[0]["name"]
+                res_pb = await client.get(f"http://127.0.0.1:8990/skills/{first_skill_name}")
+                assert res_pb.status_code == 200
+                assert "playbook" in res_pb.json()
+
+            # Plugins endpoint
+            res_plugins = await client.get("http://127.0.0.1:8990/plugins")
+            assert res_plugins.status_code == 200
+            plug_data = res_plugins.json()
+            assert "servers" in plug_data
+            assert "tools" in plug_data
+            assert "filesystem_mcp" in plug_data["servers"]
     finally:
         await app_runner.cleanup()

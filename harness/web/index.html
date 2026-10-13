@@ -471,11 +471,133 @@
       backdrop-filter: blur(8px);
     }
 
-    .suggestion-chip:hover {
-      background: rgba(56, 189, 248, 0.15);
-      border-color: rgba(56, 189, 248, 0.4);
+    .media-tray {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 6px 10px;
+      background: rgba(24, 24, 28, 0.95);
+      border: 1px dashed rgba(56, 189, 248, 0.4);
+      border-radius: 8px;
+      align-items: center;
+    }
+    .media-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #27272a;
+      border: 1px solid #3f3f46;
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 11px;
+      color: #e4e4e7;
+    }
+    .media-chip img {
+      width: 20px;
+      height: 20px;
+      object-fit: cover;
+      border-radius: 4px;
+    }
+    .media-chip-remove {
+      cursor: pointer;
+      color: #a1a1aa;
+      font-size: 12px;
+      margin-left: 2px;
+    }
+    .media-chip-remove:hover {
+      color: #ef4444;
+    }
+    .user-media-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .user-media-thumb {
+      max-width: 220px;
+      max-height: 160px;
+      border-radius: 6px;
+      border: 1px solid #3f3f46;
+      cursor: pointer;
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    .user-media-thumb:hover {
+      transform: scale(1.02);
+      border-color: #38bdf8;
+    }
+    .media-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .media-modal-backdrop.open {
+      display: flex;
+    }
+    .media-modal-img {
+      max-width: 90vw;
+      max-height: 85vh;
+      border-radius: 8px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+      border: 1px solid #38bdf8;
+    }
+    .settings-tab-bar {
+      display: flex;
+      gap: 6px;
+      border-bottom: 1px solid #27272a;
+      padding-bottom: 8px;
+      margin-bottom: 14px;
+    }
+    .settings-tab-btn {
+      background: transparent;
+      border: none;
+      color: #71717a;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .settings-tab-btn:hover {
+      color: #e4e4e7;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .settings-tab-btn.active {
       color: #38bdf8;
-      transform: translateY(-1px);
+      background: rgba(56, 189, 248, 0.12);
+      font-weight: 600;
+    }
+    .settings-page {
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .settings-page.active {
+      display: flex;
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+    }
+    .toggle-row span {
+      font-size: 13px;
+      color: #e4e4e7;
+    }
+    .toggle-desc {
+      font-size: 11px;
+      color: #71717a;
+      margin-top: 2px;
     }
 
     .composer-card {
@@ -887,6 +1009,10 @@
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>
         <span>main</span>
       </span>
+      <span class="titlebar-pill" id="top-session-pill" onclick="selectStudioTab('sessions')" style="cursor:pointer;" title="Click to browse historical sessions">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+        <span id="top-session-id-text">Session: active</span>
+      </span>
     </div>
 
     <div class="titlebar-status">
@@ -945,6 +1071,9 @@
           </div>
 
           <div class="header-actions">
+            <button class="btn-icon" onclick="selectStudioTab('sessions')" title="Conversation History & Sessions">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            </button>
             <button class="btn-icon" onclick="resetConversation()" title="New Session">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </button>
@@ -980,7 +1109,11 @@
           </div>
 
           <!-- Input Card -->
-          <div class="composer-card" style="position:relative;">
+          <div class="composer-card" id="composer-card" style="position:relative;">
+            <!-- Media Attachment Preview Tray -->
+            <div class="media-tray" id="media-tray" style="display:none;"></div>
+            <input type="file" id="media-file-input" multiple accept="image/*,.pdf,.txt,.py,.json" style="display:none;" onchange="handleFileSelect(event)">
+
             <!-- Slash Commands Menu Popover -->
             <div id="slash-menu" class="slash-menu" style="display:none;">
               <div class="slash-item" onclick="selectSlashCommand('/plan')">
@@ -1029,11 +1162,15 @@
               class="composer-input"
               id="prompt-input"
               rows="1"
-              placeholder="Ask Antigravity anything... (/ for commands, @ for files)"
+              placeholder="Ask Antigravity anything... (/ commands, @ files, drag/paste images)"
             ></textarea>
 
             <div class="composer-controls">
               <div class="controls-left">
+                <button class="btn-icon" id="btn-attach" onclick="document.getElementById('media-file-input').click()" title="Attach image or file (or paste/drag screenshot)">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                </button>
+
                 <select class="select-pill" id="mode-selector">
                   <option value="autonomous">Autonomous Agent</option>
                   <option value="architect">Architect/Editor Loop</option>
@@ -1053,7 +1190,7 @@
                 </select>
 
                 <button class="select-pill" id="api-status-pill" onclick="openSettingsModal()">
-                  🔑 API Keys
+                  ⚙️ Settings
                 </button>
               </div>
 
@@ -1081,6 +1218,21 @@
           <div class="studio-tab" id="tab-diffs" onclick="selectStudioTab('diffs')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
             <span>Git Diffs</span>
+          </div>
+
+          <div class="studio-tab" id="tab-skills" onclick="selectStudioTab('skills')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+            <span>Skills & MCP</span>
+          </div>
+
+          <div class="studio-tab" id="tab-sessions" onclick="selectStudioTab('sessions')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            <span>Sessions</span>
+          </div>
+
+          <div class="studio-tab" id="tab-economics" onclick="selectStudioTab('economics')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+            <span>Economics</span>
           </div>
 
           <div class="studio-tab" id="tab-sandbox" onclick="selectStudioTab('sandbox')">
@@ -1150,49 +1302,145 @@
     </div>
   </div>
 
-  <!-- Settings Modal -->
+  <!-- Enhanced Multi-Tab Settings Modal -->
   <div class="modal-backdrop" id="settings-modal">
-    <div class="modal-dialog">
+    <div class="modal-dialog" style="max-width:640px; width:92vw;">
       <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #27272a; padding-bottom:12px;">
-        <span style="font-weight:600; font-size:15px; color:#f4f4f5;">Agent Settings & API Keys</span>
+        <span style="font-weight:600; font-size:15px; color:#f4f4f5;">Agent Preferences & System Configuration</span>
         <button class="btn-icon" onclick="closeSettingsModal()">✕</button>
       </div>
 
-      <div style="display:flex; flex-direction:column; gap:6px;">
-        <label style="font-size:12px; color:#a1a1aa;">OpenRouter API Key (LFM 2.5, Nemotron, DeepSeek, Multi-Cloud)</label>
-        <input type="password" class="input-field" id="key-openrouter" placeholder="sk-or-v1-..."/>
+      <div class="settings-tab-bar">
+        <button class="settings-tab-btn active" id="stab-keys" onclick="switchSettingsTab('keys')">API Keys & Providers</button>
+        <button class="settings-tab-btn" id="stab-models" onclick="switchSettingsTab('models')">Model Parameters</button>
+        <button class="settings-tab-btn" id="stab-security" onclick="switchSettingsTab('security')">Security & Guardrails</button>
+        <button class="settings-tab-btn" id="stab-budget" onclick="switchSettingsTab('budget')">Budget & Economics</button>
       </div>
 
-      <div style="display:flex; flex-direction:column; gap:6px;">
-        <label style="font-size:12px; color:#a1a1aa;">Anthropic API Key (Claude 3.7 / 3.5 Sonnet)</label>
-        <input type="password" class="input-field" id="key-anthropic" placeholder="sk-ant-api03-..."/>
+      <!-- Tab 1: API Keys -->
+      <div class="settings-page active" id="spage-keys">
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:12px; color:#a1a1aa;">OpenRouter API Key (LFM 2.5, Nemotron, DeepSeek, Multi-Cloud)</label>
+          <input type="password" class="input-field" id="key-openrouter" placeholder="sk-or-v1-..."/>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:12px; color:#a1a1aa;">Anthropic API Key (Claude 3.7 / 3.5 Sonnet)</label>
+          <input type="password" class="input-field" id="key-anthropic" placeholder="sk-ant-api03-..."/>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:12px; color:#a1a1aa;">OpenAI API Key (GPT-4o / o3-mini)</label>
+          <input type="password" class="input-field" id="key-openai" placeholder="sk-proj-..."/>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:12px; color:#a1a1aa;">Google Gemini API Key (Gemini 2.0 Flash / Pro)</label>
+          <input type="password" class="input-field" id="key-gemini" placeholder="AIzaSy..."/>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:12px; color:#a1a1aa;">DeepSeek API Key (DeepSeek-R1 / V3)</label>
+          <input type="password" class="input-field" id="key-deepseek" placeholder="sk-..."/>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:12px; color:#a1a1aa;">Local Ollama Base URL</label>
+          <input type="text" class="input-field" id="key-ollama" placeholder="http://localhost:11434/v1"/>
+        </div>
       </div>
 
-      <div style="display:flex; flex-direction:column; gap:6px;">
-        <label style="font-size:12px; color:#a1a1aa;">OpenAI API Key (GPT-4o / o3-mini)</label>
-        <input type="password" class="input-field" id="key-openai" placeholder="sk-proj-..."/>
+      <!-- Tab 2: Model Parameters -->
+      <div class="settings-page" id="spage-models">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-size:13px; font-weight:500; color:#e4e4e7;">Sampling Temperature</div>
+            <div class="toggle-desc">Controls creativity vs surgical determinism (0.0 = deterministic)</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input type="range" id="param-temp" min="0" max="1" step="0.05" value="0.2" oninput="document.getElementById('temp-val').textContent = this.value" style="width:120px;"/>
+            <span id="temp-val" style="font-family:var(--font-mono); font-size:12px; color:#38bdf8;">0.20</span>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+          <div>
+            <div style="font-size:13px; font-weight:500; color:#e4e4e7;">Max Tool Execution Iterations</div>
+            <div class="toggle-desc">Maximum consecutive tool calls before turn completion</div>
+          </div>
+          <input type="number" id="param-iterations" class="input-field" value="10" min="1" max="50" style="width:70px; text-align:center;"/>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
+          <label style="font-size:12px; color:#a1a1aa;">Sovereign System Identity Prompt</label>
+          <textarea class="input-field" id="param-system-identity" rows="3" style="font-family:var(--font-mono); font-size:12px;">You are Harness-Zero, a sovereign autonomous agent. Operate with precision, inspect files before modifying them, use surgical search/replace edits, and verify your work with test runs.</textarea>
+        </div>
       </div>
 
-      <div style="display:flex; flex-direction:column; gap:6px;">
-        <label style="font-size:12px; color:#a1a1aa;">Google Gemini API Key (Gemini 2.0 Flash / Pro)</label>
-        <input type="password" class="input-field" id="key-gemini" placeholder="AIzaSy..."/>
+      <!-- Tab 3: Security & Guardrails -->
+      <div class="settings-page" id="spage-security">
+        <div class="toggle-row">
+          <div>
+            <span>🛡️ Tirith AST & Secret Detection</span>
+            <div class="toggle-desc">Scans tool calls and memory for exfiltrated private keys, tokens, and credentials</div>
+          </div>
+          <input type="checkbox" id="guard-tirith" checked style="transform:scale(1.2); cursor:pointer;"/>
+        </div>
+
+        <div class="toggle-row">
+          <div>
+            <span>🌐 SSRF Cloud Metadata Shield</span>
+            <div class="toggle-desc">Blocks outbound requests targeting 169.254.169.254, AWS IMDSv2, GCP metadata, and 127.0.0.1 port hijacking</div>
+          </div>
+          <input type="checkbox" id="guard-ssrf" checked style="transform:scale(1.2); cursor:pointer;"/>
+        </div>
+
+        <div class="toggle-row">
+          <div>
+            <span>⚠️ Destructive Command Approval Gate</span>
+            <div class="toggle-desc">Enforces interactive approval before executing dangerous operations (rm -rf, git reset --hard, dd, mkfs)</div>
+          </div>
+          <input type="checkbox" id="guard-destructive" checked style="transform:scale(1.2); cursor:pointer;"/>
+        </div>
+
+        <div class="toggle-row">
+          <div>
+            <span>🔒 Protected System Paths Check</span>
+            <div class="toggle-desc">Prevents file viewing or editing in ~/.ssh, ~/.aws, /etc, /var/root, and private keys</div>
+          </div>
+          <input type="checkbox" id="guard-paths" checked style="transform:scale(1.2); cursor:pointer;"/>
+        </div>
       </div>
 
-      <div style="display:flex; flex-direction:column; gap:6px;">
-        <label style="font-size:12px; color:#a1a1aa;">DeepSeek API Key (DeepSeek-R1 / V3)</label>
-        <input type="password" class="input-field" id="key-deepseek" placeholder="sk-..."/>
+      <!-- Tab 4: Budget & Economics -->
+      <div class="settings-page" id="spage-budget">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-size:13px; font-weight:500; color:#e4e4e7;">Session Budget Limit ($USD)</div>
+            <div class="toggle-desc">Halts autonomous execution if session spend exceeds threshold</div>
+          </div>
+          <input type="number" id="budget-limit" class="input-field" value="5.00" step="0.50" min="0.10" style="width:90px; text-align:center;"/>
+        </div>
+
+        <div class="toggle-row" style="margin-top:8px;">
+          <div>
+            <span>⚡ Cost & Token Spike Alerts</span>
+            <div class="toggle-desc">Show notification banner when single turn consumes &gt; 15,000 tokens</div>
+          </div>
+          <input type="checkbox" id="budget-alerts" checked style="transform:scale(1.2); cursor:pointer;"/>
+        </div>
       </div>
 
-      <div style="display:flex; flex-direction:column; gap:6px;">
-        <label style="font-size:12px; color:#a1a1aa;">Local Ollama Base URL</label>
-        <input type="text" class="input-field" id="key-ollama" placeholder="http://localhost:11434/v1"/>
-      </div>
-
-      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px; border-top:1px solid #27272a; padding-top:10px;">
         <button class="btn-changes" onclick="closeSettingsModal()">Cancel</button>
         <button class="btn-proceed" onclick="saveSettings()">Save & Activate</button>
       </div>
     </div>
+  </div>
+
+  <!-- Media Preview Modal -->
+  <div class="media-modal-backdrop" id="media-modal" onclick="closeMediaModal()">
+    <img id="media-modal-img" class="media-modal-img" src="" alt="Media Preview"/>
   </div>
 
   <script src="/assets/prism_bundle.js"></script>
@@ -1310,6 +1558,9 @@
       if (tab === 'artifact') renderArtifactView();
       else if (tab === 'editor') renderEditorView();
       else if (tab === 'diffs') renderDiffsView();
+      else if (tab === 'skills') renderSkillsView();
+      else if (tab === 'sessions') renderSessionsView();
+      else if (tab === 'economics') renderEconomicsView();
       else if (tab === 'sandbox') renderSandboxView();
       else if (tab === 'tree') renderTreeView();
       else if (tab === 'files') renderFilesView();
@@ -1324,17 +1575,22 @@
 
     async function submitPrompt() {
       const text = textarea.value.trim();
-      if (!text) return;
+      if (!text && pendingMediaAttachments.length === 0) return;
 
       // Handle slash commands directly
       if (text === '/diff') { textarea.value = ''; return selectStudioTab('diffs'); }
       if (text === '/tree') { textarea.value = ''; return selectStudioTab('tree'); }
       if (text === '/browser') { textarea.value = ''; return selectStudioTab('sandbox'); }
+      if (text === '/skills') { textarea.value = ''; return selectStudioTab('skills'); }
 
       const mode = document.getElementById('mode-selector').value;
       const model = document.getElementById('model-selector').value;
 
-      appendUserBubble(text);
+      const mediaToSend = [...pendingMediaAttachments];
+      appendUserBubble(text, mediaToSend);
+      pendingMediaAttachments = [];
+      renderMediaTray();
+
       textarea.value = '';
       textarea.style.height = '44px';
 
@@ -1345,7 +1601,7 @@
         const streamRes = await fetch('/turn/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: text, model: model, mode: mode })
+          body: JSON.stringify({ prompt: text, model: model, mode: mode, media: mediaToSend })
         });
 
         if (streamRes.ok && streamRes.body) {
@@ -1409,7 +1665,7 @@
             jsonrpc: '2.0',
             id: Date.now(),
             method: mode === 'architect' ? 'architect.submit' : 'turn.submit',
-            params: { prompt: text, model: model }
+            params: { prompt: text, model: model, media: mediaToSend }
           })
         });
 
@@ -1426,11 +1682,23 @@
       fetchLatestArtifacts();
     }
 
-    function appendUserBubble(text) {
+    function appendUserBubble(text, media = []) {
       const tl = document.getElementById('timeline');
       const row = document.createElement('div');
       row.className = 'turn-card user-turn';
-      row.innerHTML = `<div class="user-bubble">${escapeHtml(text)}</div>`;
+      let mediaHtml = '';
+      if (media && media.length > 0) {
+        mediaHtml += '<div class="user-media-grid">';
+        media.forEach(m => {
+          if (m.mime_type && m.mime_type.startsWith('image/')) {
+            mediaHtml += `<img src="${m.url}" class="user-media-thumb" onclick="openMediaModal('${m.url}')" title="${m.filename}"/>`;
+          } else {
+            mediaHtml += `<div class="media-chip">📄 ${escapeHtml(m.filename)} (${Math.round((m.size||0)/1024)} KB)</div>`;
+          }
+        });
+        mediaHtml += '</div>';
+      }
+      row.innerHTML = `<div class="user-bubble">${escapeHtml(text)}${mediaHtml}</div>`;
       tl.appendChild(row);
       tl.scrollTop = tl.scrollHeight;
     }
@@ -1827,12 +2095,435 @@
       }
     }
 
-    function resetConversation() {
-      document.getElementById('timeline').innerHTML = `
-        <div class="turn-card assistant-turn">
-          <div class="markdown-body"><p>Session reset. How can I assist you with your codebase?</p></div>
+    // Media Upload & Attachment Handlers
+    let pendingMediaAttachments = [];
+
+    function handleFileSelect(event) {
+      const files = event.target.files;
+      if (!files || files.length === 0) return;
+      uploadFiles(files);
+      event.target.value = '';
+    }
+
+    async function uploadFiles(fileList) {
+      const formData = new FormData();
+      for (let i = 0; i < fileList.length; i++) {
+        formData.append('file_' + i, fileList[i]);
+      }
+      try {
+        const res = await fetch('/media/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (data.files && data.files.length > 0) {
+          pendingMediaAttachments.push(...data.files);
+          renderMediaTray();
+        }
+      } catch (e) {
+        console.error('Failed to upload media:', e);
+      }
+    }
+
+    function removeMedia(idx) {
+      pendingMediaAttachments.splice(idx, 1);
+      renderMediaTray();
+    }
+
+    function renderMediaTray() {
+      const tray = document.getElementById('media-tray');
+      if (!pendingMediaAttachments || pendingMediaAttachments.length === 0) {
+        tray.style.display = 'none';
+        tray.innerHTML = '';
+        return;
+      }
+      tray.style.display = 'flex';
+      tray.innerHTML = pendingMediaAttachments.map((m, idx) => `
+        <div class="media-chip">
+          ${m.mime_type && m.mime_type.startsWith('image/') ? `<img src="${m.url}"/>` : '📄'}
+          <span>${escapeHtml(m.filename)}</span>
+          <span class="media-chip-remove" onclick="removeMedia(${idx})">✕</span>
         </div>
-      `;
+      `).join('');
+    }
+
+    function openMediaModal(url) {
+      document.getElementById('media-modal-img').src = url;
+      document.getElementById('media-modal').classList.add('open');
+    }
+
+    function closeMediaModal() {
+      document.getElementById('media-modal').classList.remove('open');
+    }
+
+    // Drag-and-drop & Clipboard Paste Image Listeners
+    window.addEventListener('DOMContentLoaded', () => {
+      const card = document.getElementById('composer-card');
+      if (card) {
+        ['dragenter', 'dragover'].forEach(name => {
+          card.addEventListener(name, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            card.style.borderColor = '#38bdf8';
+          });
+        });
+        ['dragleave', 'drop'].forEach(name => {
+          card.addEventListener(name, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            card.style.borderColor = '#2e2e34';
+          });
+        });
+        card.addEventListener('drop', (e) => {
+          if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            uploadFiles(e.dataTransfer.files);
+          }
+        });
+      }
+
+      window.addEventListener('paste', (e) => {
+        if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
+          const files = e.clipboardData.files;
+          const imgFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+          if (imgFiles.length > 0) {
+            uploadFiles(imgFiles);
+          }
+        }
+      });
+    });
+
+    // Real Persistent Sessions Management
+    async function resetConversation() {
+      try {
+        const res = await fetch('/sessions/new', { method: 'POST' });
+        const data = await res.json();
+        const sid = data.session_id;
+        document.getElementById('top-session-id-text').textContent = `Session: ${sid.slice(0, 10)}`;
+        document.getElementById('timeline').innerHTML = `
+          <div class="turn-card assistant-turn">
+            <div class="markdown-body">
+              <p>Fresh session <code>${escapeHtml(sid)}</code> activated. Memory and transcripts isolated.</p>
+              <blockquote><strong>[!NOTE]</strong> All past sessions remain preserved in SQLite &amp; JSONL. Browse them in the <strong>Sessions</strong> tab.</blockquote>
+            </div>
+          </div>
+        `;
+        if (currentStudioTab === 'sessions') renderSessionsView();
+      } catch (e) {
+        document.getElementById('timeline').innerHTML = `
+          <div class="turn-card assistant-turn">
+            <div class="markdown-body"><p>Session reset. How can I assist you with your codebase?</p></div>
+          </div>
+        `;
+      }
+    }
+
+    async function switchSession(sid) {
+      try {
+        const res = await fetch('/sessions/switch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sid })
+        });
+        const switchData = await res.json();
+        if (switchData.status === 'switched') {
+          await loadSessionTranscript(sid);
+          document.getElementById('top-session-id-text').textContent = `Session: ${sid.slice(0, 10)}`;
+          if (currentStudioTab === 'sessions') renderSessionsView();
+        }
+      } catch (err) {
+        alert('Failed to switch session: ' + err.message);
+      }
+    }
+
+    async function loadSessionTranscript(sid) {
+      const res = await fetch(`/sessions/${sid}`);
+      const data = await res.json();
+      const history = data.history || [];
+      const tl = document.getElementById('timeline');
+      tl.innerHTML = '';
+
+      if (history.length === 0) {
+        tl.innerHTML = `
+          <div class="turn-card assistant-turn">
+            <div class="markdown-body"><p>Session <code>${escapeHtml(sid)}</code> resumed (no turns recorded yet).</p></div>
+          </div>
+        `;
+        return;
+      }
+
+      history.forEach(item => {
+        if (item.type === 'USER_INPUT') {
+          appendUserBubble(item.content, item.media || []);
+        } else if (item.type === 'PLANNER_RESPONSE') {
+          const row = document.createElement('div');
+          row.className = 'turn-card assistant-turn';
+          renderAssistantResponse(row, {
+            output: item.content,
+            thinking: item.thinking,
+            tool_calls: item.tool_calls
+          });
+          tl.appendChild(row);
+        }
+      });
+      tl.scrollTop = tl.scrollHeight;
+    }
+
+    async function renderSessionsView() {
+      const vp = document.getElementById('studio-content-area');
+      document.getElementById('proceed-banner').style.display = 'none';
+      vp.innerHTML = '<div style="color:#71717a; padding:12px;">Loading conversation history...</div>';
+      try {
+        const res = await fetch('/sessions');
+        const data = await res.json();
+        const sessions = data.sessions || [];
+        const activeSid = data.active_session_id;
+
+        let html = `
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <div>
+              <h3 style="font-size:15px; font-weight:600; color:#f4f4f5; margin:0;">Conversation Sessions & History</h3>
+              <p style="font-size:12px; color:#71717a; margin:4px 0 0 0;">Persistent SQLite memory &amp; compact JSONL transcripts</p>
+            </div>
+            <button class="btn-proceed" onclick="resetConversation()">+ New Session</button>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+        `;
+
+        sessions.forEach(s => {
+          const isActive = s.session_id === activeSid;
+          html += `
+            <div style="background:#161618; border:1px solid ${isActive ? '#38bdf8' : '#27272a'}; border-radius:10px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <strong style="color:#f4f4f5; font-size:13px;">${escapeHtml(s.title || 'Session ' + s.session_id.slice(0, 8))}</strong>
+                  ${isActive ? '<span class="tool-badge badge-success">ACTIVE</span>' : ''}
+                </div>
+                <div style="font-size:11.5px; color:#71717a; margin-top:4px; display:flex; gap:12px; font-family:var(--font-mono);">
+                  <span>ID: ${escapeHtml(s.session_id.slice(0, 12))}...</span>
+                  <span>Steps: ${s.step_count}</span>
+                  <span>${s.updated_at || 'Recent'}</span>
+                </div>
+              </div>
+              <div>
+                ${isActive ? '<span style="color:#4ade80; font-size:12px; font-weight:600;">Current Session</span>' : `<button class="select-pill" onclick="switchSession('${s.session_id}')" style="background:#27272a; color:#38bdf8; font-weight:500;">Resume ↗</button>`}
+              </div>
+            </div>
+          `;
+        });
+
+        html += '</div>';
+        vp.innerHTML = html;
+      } catch (err) {
+        vp.innerHTML = `<span style="color:var(--accent-red)">Failed to load sessions: ${escapeHtml(err.message)}</span>`;
+      }
+    }
+
+    // Skills & MCP Studio View
+    async function renderSkillsView() {
+      const vp = document.getElementById('studio-content-area');
+      document.getElementById('proceed-banner').style.display = 'none';
+      vp.innerHTML = '<div style="color:#71717a; padding:12px;">Loading progressive skills and MCP plugins...</div>';
+      try {
+        const [skillsRes, pluginsRes] = await Promise.all([
+          fetch('/skills'),
+          fetch('/plugins')
+        ]);
+        const skillsData = await skillsRes.json();
+        const pluginsData = await pluginsRes.json();
+
+        const skills = skillsData.skills || [];
+        const servers = pluginsData.servers || {};
+        const tools = pluginsData.tools || [];
+
+        let html = `
+          <div style="margin-bottom:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <div>
+                <h3 style="font-size:15px; font-weight:600; color:#f4f4f5; margin:0;">Progressive Skills Catalog</h3>
+                <p style="font-size:12px; color:#71717a; margin:4px 0 0 0;">Deterministic playbooks progressively loaded on demand</p>
+              </div>
+              <span class="tool-badge badge-success">${skills.length} Skills Installed</span>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:10px;">
+        `;
+
+        skills.forEach(s => {
+          html += `
+            <div style="background:#161618; border:1px solid #27272a; border-radius:8px; padding:12px; display:flex; flex-direction:column; justify-content:space-between;">
+              <div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                  <strong style="color:#38bdf8; font-size:12.5px; font-family:var(--font-mono);">${escapeHtml(s.name)}</strong>
+                  <span class="tool-badge badge-success">${escapeHtml(s.tier || 'progressive')}</span>
+                </div>
+                <p style="font-size:11.5px; color:#cbd5e1; line-height:1.4; margin-bottom:10px;">${escapeHtml(s.description || 'Sovereign capability playbook')}</p>
+              </div>
+              <button class="select-pill" onclick="viewSkillPlaybook('${s.name}')" style="align-self:flex-start; color:#38bdf8; background:rgba(56, 189, 248, 0.1);">
+                📖 Read Playbook
+              </button>
+            </div>
+          `;
+        });
+
+        html += `
+            </div>
+          </div>
+
+          <div style="margin-top:20px; border-top:1px solid #27272a; padding-top:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <div>
+                <h3 style="font-size:15px; font-weight:600; color:#f4f4f5; margin:0;">Model Context Protocol (MCP) Ecosystem</h3>
+                <p style="font-size:12px; color:#71717a; margin:4px 0 0 0;">Connected tool servers and schemas</p>
+              </div>
+              <span class="tool-badge badge-success">${Object.keys(servers).length} Active Servers</span>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:10px;">
+        `;
+
+        Object.entries(servers).forEach(([sName, sCfg]) => {
+          const sTools = tools.filter(t => t.server === sName);
+          html += `
+            <div style="background:#161618; border:1px solid #27272a; border-radius:8px; padding:12px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <strong style="color:#4ade80; font-size:13px; font-family:var(--font-mono);">${escapeHtml(sName)}</strong>
+                  <span class="tool-badge badge-success">ONLINE</span>
+                </div>
+                <span style="font-size:11px; color:#71717a; font-family:var(--font-mono);">${escapeHtml(sCfg.command)} ${escapeHtml((sCfg.args||[]).join(' '))}</span>
+              </div>
+              <div style="display:flex; flex-direction:column; gap:6px;">
+          `;
+          sTools.forEach(t => {
+            html += `
+              <div style="background:#121214; border:1px solid #27272a; border-radius:6px; padding:6px 10px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                  <span style="color:#e4e4e7; font-size:12px; font-weight:500; font-family:var(--font-mono);">${escapeHtml(t.raw_name)}</span>
+                  <span style="color:#71717a; font-size:11px; margin-left:8px;">${escapeHtml(t.description)}</span>
+                </div>
+                <span class="titlebar-pill" style="font-size:10px; font-family:var(--font-mono);">${escapeHtml(t.name)}</span>
+              </div>
+            `;
+          });
+          html += `
+              </div>
+            </div>
+          `;
+        });
+
+        html += `
+            </div>
+          </div>
+        `;
+
+        vp.innerHTML = html;
+      } catch (err) {
+        vp.innerHTML = `<span style="color:var(--accent-red)">Failed to load skills: ${escapeHtml(err.message)}</span>`;
+      }
+    }
+
+    async function viewSkillPlaybook(name) {
+      try {
+        const res = await fetch(`/skills/${name}`);
+        const data = await res.json();
+        const vp = document.getElementById('studio-content-area');
+        vp.innerHTML = `
+          <div style="margin-bottom:14px;">
+            <button class="select-pill" onclick="renderSkillsView()" style="margin-bottom:10px;">← Back to Skills &amp; MCP</button>
+            <h2 style="font-size:16px; color:#f4f4f5; margin:0 0 6px 0;">Playbook: <code style="color:#38bdf8;">${escapeHtml(name)}</code></h2>
+          </div>
+          <div class="markdown-body">
+            ${marked.parse(data.playbook || 'No playbook markdown found.')}
+          </div>
+        `;
+      } catch (err) {
+        alert('Failed to load playbook: ' + err.message);
+      }
+    }
+
+    // Economics Dashboard View
+    async function renderEconomicsView() {
+      const vp = document.getElementById('studio-content-area');
+      document.getElementById('proceed-banner').style.display = 'none';
+      vp.innerHTML = '<div style="color:#71717a; padding:12px;">Calculating token economics &amp; spend...</div>';
+      try {
+        const res = await fetch('/economics');
+        const data = await res.json();
+
+        const promptTok = data.total_prompt_tokens || 0;
+        const compTok = data.total_completion_tokens || 0;
+        const totalTok = promptTok + compTok;
+        const totalCost = (data.total_cost_usd || 0).toFixed(4);
+        const cacheSavings = (data.cache_savings_usd || 0).toFixed(4);
+
+        vp.innerHTML = `
+          <div style="margin-bottom:16px;">
+            <h3 style="font-size:15px; font-weight:600; color:#f4f4f5; margin:0;">Token Economics &amp; Spend Dashboard</h3>
+            <p style="font-size:12px; color:#71717a; margin:4px 0 14px 0;">Autonomous spend ledger with 5-Tier Prefix Cache telemetry</p>
+
+            <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-bottom:18px;">
+              <div style="background:#161618; border:1px solid #27272a; border-radius:8px; padding:12px;">
+                <div style="font-size:10.5px; color:#71717a; text-transform:uppercase;">Total Tokens</div>
+                <div style="font-size:20px; font-weight:700; color:#38bdf8; margin-top:2px;">${totalTok.toLocaleString()}</div>
+                <div style="font-size:10.5px; color:#94a3b8; margin-top:2px;">Prompt: ${promptTok.toLocaleString()}</div>
+              </div>
+
+              <div style="background:#161618; border:1px solid #27272a; border-radius:8px; padding:12px;">
+                <div style="font-size:10.5px; color:#71717a; text-transform:uppercase;">Completion Tokens</div>
+                <div style="font-size:20px; font-weight:700; color:#c084fc; margin-top:2px;">${compTok.toLocaleString()}</div>
+                <div style="font-size:10.5px; color:#94a3b8; margin-top:2px;">Agent reasoning output</div>
+              </div>
+
+              <div style="background:#161618; border:1px solid #27272a; border-radius:8px; padding:12px;">
+                <div style="font-size:10.5px; color:#71717a; text-transform:uppercase;">Session Spend</div>
+                <div style="font-size:20px; font-weight:700; color:#4ade80; margin-top:2px;">$${totalCost}</div>
+                <div style="font-size:10.5px; color:#94a3b8; margin-top:2px;">Budget: $5.00 limit</div>
+              </div>
+
+              <div style="background:#161618; border:1px solid #27272a; border-radius:8px; padding:12px;">
+                <div style="font-size:10.5px; color:#71717a; text-transform:uppercase;">Cache Hit Savings</div>
+                <div style="font-size:20px; font-weight:700; color:#f59e0b; margin-top:2px;">$${cacheSavings}</div>
+                <div style="font-size:10.5px; color:#94a3b8; margin-top:2px;">Prefix Cache Invariance</div>
+              </div>
+            </div>
+
+            <div style="background:#161618; border:1px solid #27272a; border-radius:8px; padding:14px;">
+              <h4 style="font-size:13px; font-weight:600; color:#f4f4f5; margin-bottom:10px;">Model Usage Breakdown</h4>
+              <table style="width:100%; border-collapse:collapse; font-size:12px; color:#cbd5e1; text-align:left;">
+                <thead>
+                  <tr style="border-bottom:1px solid #27272a; color:#71717a;">
+                    <th style="padding:6px 0;">Model / Provider</th>
+                    <th style="padding:6px 0;">Prompt Tokens</th>
+                    <th style="padding:6px 0;">Completion Tokens</th>
+                    <th style="padding:6px 0; text-align:right;">Total Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${(data.by_model ? Object.entries(data.by_model) : []).map(([m, stats]) => `
+                    <tr style="border-bottom:1px solid #1f1f23;">
+                      <td style="padding:6px 0; font-family:var(--font-mono); color:#38bdf8;">${escapeHtml(m)}</td>
+                      <td style="padding:6px 0;">${(stats.prompt_tokens||0).toLocaleString()}</td>
+                      <td style="padding:6px 0;">${(stats.completion_tokens||0).toLocaleString()}</td>
+                      <td style="padding:6px 0; text-align:right; font-weight:600; color:#4ade80;">$${(stats.cost_usd||0).toFixed(4)}</td>
+                    </tr>
+                  `).join('') || '<tr><td colspan="4" style="padding:10px 0; color:#71717a; text-align:center;">No paid token usage recorded in this session.</td></tr>'}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      } catch (err) {
+        vp.innerHTML = `<span style="color:var(--accent-red)">Failed to load economics: ${escapeHtml(err.message)}</span>`;
+      }
+    }
+
+    // Settings Modal Tabs
+    function switchSettingsTab(tabName) {
+      document.querySelectorAll('.settings-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.settings-page').forEach(p => p.classList.remove('active'));
+      const activeBtn = document.getElementById(`stab-${tabName}`);
+      const activePage = document.getElementById(`spage-${tabName}`);
+      if (activeBtn) activeBtn.classList.add('active');
+      if (activePage) activePage.classList.add('active');
     }
 
     function openSettingsModal() {
@@ -1852,7 +2543,7 @@
           const hasAny = Object.values(data.configured_providers).some(Boolean);
           const pill = document.getElementById('api-status-pill');
           if (hasAny) {
-            pill.textContent = '✓ API Key Set';
+            pill.textContent = '⚙️ Active';
             pill.style.color = '#4ade80';
             pill.style.borderColor = 'rgba(34, 197, 94, 0.4)';
           }
@@ -1876,6 +2567,15 @@
         if (data.default_model) {
           document.getElementById('model-selector').value = data.default_model;
           document.getElementById('active-model-display').textContent = data.default_model;
+        }
+      } catch (e) {}
+
+      // Fetch active session info
+      try {
+        const sRes = await fetch('/sessions');
+        const sData = await sRes.json();
+        if (sData.active_session_id) {
+          document.getElementById('top-session-id-text').textContent = `Session: ${sData.active_session_id.slice(0, 10)}`;
         }
       } catch (e) {}
     }
@@ -1907,7 +2607,7 @@
 
       closeSettingsModal();
       loadSettings();
-      alert('Settings saved. API keys activated!');
+      alert('Preferences saved and activated.');
     }
 
     function escapeHtml(str) {

@@ -5,12 +5,14 @@ from aiohttp import web
 
 from harness.core.coordinator import AgentCoordinator
 from harness.core.daemon import HarnessDaemon
+from harness.core.types import ModelResponse
 from harness.artifacts.manager import ArtifactMetadata
 
 
 @pytest.mark.asyncio
 async def test_daemon_dual_port_endpoints(tmp_path: Path):
     coordinator = AgentCoordinator(workspace=tmp_path)
+    coordinator.router.set_mock_responses([ModelResponse(content="Hello from mock")])
     coordinator.artifacts.write_artifact(
         "preview.html",
         "<h1>Generative UI Widget</h1>",
