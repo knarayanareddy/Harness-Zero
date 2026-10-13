@@ -105,15 +105,74 @@ All 22 modular engineering blueprints, protocol schemas, and reference implement
 
 ---
 
-## 4. Getting Started
+## 4. Getting Started & Running the Harness
 
-To explore the architecture and run the initial starter proof-of-concept:
+Harness-Zero is implemented as a high-performance Python 3.11+ engine with zero external daemon bloat.
+
+### Installation
 
 ```bash
 # Clone the repository
 git clone https://github.com/knarayanareddy/Harness-Zero.git
 cd Harness-Zero
 
-# Read the quickstart implementation guide
-cat docs/08_BUILD_BLUEPRINT_AND_STARTER_IMPLEMENTATION.md
+# Create virtual environment and install with uv
+uv venv
+source .venv/bin/activate
+uv pip install -e ".[dev]"
 ```
+
+### Running Autonomous Turns
+
+```bash
+# Run a single turn with your chosen model provider:
+harness run "Analyze repository structure and run test suite" --workspace . --provider mock
+
+# Use cloud BYOK (OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter):
+export ANTHROPIC_API_KEY="sk-ant-..."
+harness run "Refactor database migrations" --provider anthropic --model claude-3-5-sonnet-latest
+
+# Or run 100% offline via local Ollama / vLLM / MLX:
+harness run "Fix unit tests" --provider local --model qwen2.5-coder:32b
+```
+
+### Interactive Pair-Programming TUI
+
+Start an interactive pair-programming session with full slash command support:
+
+```bash
+harness interactive
+```
+
+Available slash commands within the session:
+* `/skills` - View all progressively discovered skills across Workspace, User, and Builtin tiers.
+* `/model <provider> <model>` - Switch active model dynamically mid-session.
+* `/search <query>` - Instant O(1) byte-offset search through conversation history via SQLite FTS5.
+* `/tasks` - Inspect running background commands and async workers.
+* `/status` - Display active session IDs, memory databases, and transcript logs.
+* `/help` - Show all interactive commands.
+* `/exit` - Terminate session cleanly.
+
+### Running the Daemon IPC Server
+
+Expose Harness-Zero over JSON-RPC 2.0 / REST API for web or external client connections:
+
+```bash
+harness daemon --port 8080 --host 127.0.0.1
+```
+
+### Running the Test Suite
+
+```bash
+pytest -v
+```
+All 15 modular test suites verify:
+- Progressive skill discovery and YAML frontmatter parsing
+- Tiered `transcript.jsonl` logging and O(1) byte-offset seeking
+- SQLite FTS5 instant memory indexing and BM25 ranking
+- Safe shell execution with `PAGER=cat` and background transitions
+- Tool safety guardrails and destructive command regex gating
+- Aider search/replace surgical diff application
+- Strict 5-tier deterministic prefix-invariant prompt caching
+- End-to-end multi-turn reactive coordinator tool loops
+- Git worktree dynamic subagent sandbox lifecycle

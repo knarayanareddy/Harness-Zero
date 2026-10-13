@@ -1,0 +1,436 @@
+"""
+Reactive Turn Coordinator & Agent Event Loop.
+Synthesizes Reactive Wakeup Inbox (0% polling), 5-Tier Prefix Cache,
+Progressive Skills, SQLite FTS5 Memory, Tool Execution, and Worktree Sandboxing.
+"""
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime, timezone
+import json
+import logging
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
+import uuid
+
+from harness.artifacts.manager import ArtifactManager, ArtifactMetadata
+from harness.core.transcript import TranscriptEngine
+from harness.core.types import (
+    ModelResponse,
+    ModelTier,
+    StepSource,
+    StepType,
+    ToolCall,
+    ToolResult,
+)
+from harness.desktop.macos_bridge import MacOSDesktopBridge
+from harness.memory.fts5_index import FTS5MemoryIndex
+from harness.models.circuits import IntelligentModelRouter
+from harness.models.prefix_cache import PromptCacheBuilder, PromptTiers
+from harness.models.router import ModelRouter
+from harness.sandboxing.diff_applier import DiffApplier
+from harness.sandboxing.executor import BackgroundTask, CommandExecutor
+from harness.sandboxing.guardrails import RiskLevel, SecurityPolicy
+from harness.sandboxing.worktree import WorktreeManager
+from harness.skills.registry import SkillRegistry
+
+logger = logging.getLogger("harness.coordinator")
+
+
+class AgentCoordinator:
+    def __init__(
+        self,
+        workspace: Path,
+        session_id: Optional[str] = None,
+        session_dir: Optional[Path] = None,
+        router: Optional[ModelRouter] = None,
+    ):
+        self.workspace = Path(workspace).resolve()
+        self.session_id = session_id or f"session_{uuid.uuid4().hex[:12]}"
+        self.session_dir = (
+            Path(session_dir)
+            if session_dir
+            else self.workspace / ".harness" / "sessions" / self.session_id
+        )
+        self.session_dir.mkdir(parents=True, exist_ok=True)
+
+        # 1. Subsystems
+        self.transcripts = TranscriptEngine(self.session_dir)
+        self.skills = SkillRegistry(workspace_root=self.workspace)
+        self.memory = FTS5MemoryIndex(self.session_dir / "memory.db")
+        self.memory.register_conversation(
+            conversation_id=self.session_id,
+            title="Active Harness Session",
+            workspace_uri=str(self.workspace),
+        )
+
+        self.executor = CommandExecutor(on_task_completed=self._on_background_task_completed)
+        self.worktrees = WorktreeManager(repo_root=self.workspace)
+        self.artifacts = ArtifactManager(brain_dir=self.session_dir / "artifacts")
+        self.desktop = MacOSDesktopBridge(scratch_dir=self.session_dir / "scratch")
+        self.router = router or ModelRouter()
+        self.circuit_router = IntelligentModelRouter()
+
+        # 2. Reactive Wakeup Inbox (0% Polling CPU)
+        self.inbox: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
+
+        # Static System Identity
+        self.system_identity = """You are Harness-Zero, a sovereign autonomous agent.
+Operate with precision, inspect files before modifying them, use surgical search/replace edits,
+and verify your work with test runs.
+""".strip()
+
+    def get_tool_schemas(self) -> List[Dict[str, Any]]:
+        """Returns deterministic, alphabetically-sorted tool definitions."""
+        return [
+            {
+                "name": "edit_file",
+                "description": "Applies surgical SEARCH/REPLACE diff blocks to an existing file.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "TargetFile": {"type": "string", "description": "Absolute path to file"},
+                        "DiffBlock": {
+                            "type": "string",
+                            "description": "<<<<<<< SEARCH\\n...\\n=======\\n...\\n>>>>>>> REPLACE block",
+                        },
+                    },
+                    "required": ["TargetFile", "DiffBlock"],
+                },
+            },
+            {
+                "name": "manage_task",
+                "description": "Manage running background tasks: list, status, kill, or send_input.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "Action": {"type": "string", "enum": ["list", "status", "kill", "send_input"]},
+                        "TaskId": {"type": "string"},
+                        "Input": {"type": "string"},
+                    },
+                    "required": ["Action"],
+                },
+            },
+            {
+                "name": "run_command",
+                "description": "Execute a safe shell command with timeouts, PAGER=cat, and async transition.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "CommandLine": {"type": "string"},
+                        "Cwd": {"type": "string"},
+                        "WaitMsBeforeAsync": {"type": "integer", "default": 5000},
+                    },
+                    "required": ["CommandLine"],
+                },
+            },
+            {
+                "name": "search_memory",
+                "description": "Search previous conversation turns and decisions using SQLite FTS5 instant recall.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "Query": {"type": "string"},
+                        "Limit": {"type": "integer", "default": 5},
+                    },
+                    "required": ["Query"],
+                },
+            },
+            {
+                "name": "take_screenshot",
+                "description": "Capture screen image of the macOS desktop.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "Filename": {"type": "string", "default": "screen.png"},
+                    },
+                },
+            },
+            {
+                "name": "view_file",
+                "description": "View contents of a file with line slicing.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "AbsolutePath": {"type": "string"},
+                        "StartLine": {"type": "integer", "default": 1},
+                        "EndLine": {"type": "integer", "default": 200},
+                    },
+                    "required": ["AbsolutePath"],
+                },
+            },
+            {
+                "name": "view_skill",
+                "description": "Progressively read the full playbook instructions for a skill from the catalog.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "SkillName": {"type": "string"},
+                    },
+                    "required": ["SkillName"],
+                },
+            },
+            {
+                "name": "write_to_file",
+                "description": "Create a new file or write an artifact.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "TargetFile": {"type": "string"},
+                        "CodeContent": {"type": "string"},
+                        "Overwrite": {"type": "boolean", "default": True},
+                        "Description": {"type": "string", "default": ""},
+                        "ArtifactSummary": {"type": "string"},
+                    },
+                    "required": ["TargetFile", "CodeContent"],
+                },
+            },
+        ]
+
+    async def execute_turn(
+        self,
+        user_prompt: str,
+        max_tool_iterations: int = 10,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> str:
+        """Executes a reactive agent turn with multi-step tool calls."""
+        # 1. Log and index user input
+        step_idx, byte_off = self.transcripts.append_step(
+            source=StepSource.USER,
+            step_type=StepType.USER_INPUT,
+            content=user_prompt,
+        )
+        self.memory.index_turn(
+            conversation_id=self.session_id,
+            step_index=step_idx,
+            transcript_path=self.transcripts.full_file,
+            byte_offset=byte_off,
+            source=StepSource.USER.value,
+            step_type=StepType.USER_INPUT.value,
+            content=user_prompt,
+        )
+
+        iteration = 0
+        final_text = ""
+
+        while iteration < max_tool_iterations:
+            iteration += 1
+
+            # Build 5-Tier Prefix-Invariant Prompt
+            raw_history = self.transcripts.read_compact_history(limit=25)
+            formatted_history = []
+            for r in raw_history:
+                if r["type"] == StepType.USER_INPUT.value:
+                    formatted_history.append({"role": "user", "content": r.get("content", "")})
+                elif r["type"] == StepType.PLANNER_RESPONSE.value:
+                    formatted_history.append({"role": "assistant", "content": r.get("content", "")})
+                elif r["type"] == StepType.TOOL_RESULT.value:
+                    formatted_history.append({"role": "user", "content": f"[Tool Result]: {r.get('content', '')}"})
+
+            prompt_tiers = PromptTiers(
+                static_system_identity=self.system_identity,
+                tool_schemas=self.get_tool_schemas(),
+                skills_catalog=self.skills.render_catalog(),
+                conversation_history=formatted_history,
+                current_user_prompt=user_prompt if iteration == 1 else "Continue solving the task.",
+            )
+            messages = PromptCacheBuilder.build_cached_prompt(prompt_tiers)
+
+            # Determine target provider & model
+            endpoint = None
+            if self.router.default_provider == "mock" or self.router._mock_responses:
+                target_provider = "mock"
+                target_model = "mock-model"
+            elif provider:
+                target_provider = provider
+                target_model = model or "default"
+            else:
+                tier = self.circuit_router.classify_intent(user_prompt)
+                endpoint = self.circuit_router.select_active_endpoint(tier, preferred_provider=provider)
+                target_provider = endpoint.provider
+                target_model = model or endpoint.model
+
+            # Model Call
+            try:
+                response: ModelResponse = await self.router.generate(
+                    messages=messages,
+                    tools=self.get_tool_schemas(),
+                    provider=target_provider,
+                    model=target_model,
+                )
+                if endpoint:
+                    endpoint.record_success()
+            except Exception as e:
+                if endpoint:
+                    endpoint.record_failure()
+                raise e
+
+            # Log Model Response
+            serialized_tool_calls = [tc.to_dict() for tc in response.tool_calls]
+            p_step, p_off = self.transcripts.append_step(
+                source=StepSource.MODEL,
+                step_type=StepType.PLANNER_RESPONSE,
+                content=response.content,
+                thinking=response.thinking,
+                tool_calls=serialized_tool_calls,
+            )
+            self.memory.index_turn(
+                conversation_id=self.session_id,
+                step_index=p_step,
+                transcript_path=self.transcripts.full_file,
+                byte_offset=p_off,
+                source=StepSource.MODEL.value,
+                step_type=StepType.PLANNER_RESPONSE.value,
+                content=response.content,
+            )
+
+            final_text = response.content
+
+            # If no tools requested, turn is complete
+            if not response.tool_calls:
+                break
+
+            # Execute tool calls
+            for tool_call in response.tool_calls:
+                tool_result = await self._dispatch_tool(tool_call)
+
+                # Log Tool Result
+                t_step, t_off = self.transcripts.append_step(
+                    source=StepSource.TOOL,
+                    step_type=StepType.TOOL_RESULT,
+                    content=tool_result.output,
+                )
+                self.memory.index_turn(
+                    conversation_id=self.session_id,
+                    step_index=t_step,
+                    transcript_path=self.transcripts.full_file,
+                    byte_offset=t_off,
+                    source=StepSource.TOOL.value,
+                    step_type=StepType.TOOL_RESULT.value,
+                    content=tool_result.output,
+                )
+
+        return final_text
+
+    async def _dispatch_tool(self, tool_call: ToolCall) -> ToolResult:
+        name = tool_call.name
+        args = tool_call.arguments
+
+        try:
+            if name == "view_file":
+                path = Path(args.get("AbsolutePath", "")).resolve()
+                if not path.exists():
+                    return ToolResult(tool_call.id, name, f"Error: File {path} does not exist", is_error=True)
+                lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+                start = max(1, int(args.get("StartLine", 1)))
+                end = min(len(lines), int(args.get("EndLine", len(lines))))
+                selected = lines[start - 1 : end]
+                numbered = [f"{i}: {line}" for i, line in enumerate(selected, start=start)]
+                return ToolResult(tool_call.id, name, "\n".join(numbered))
+
+            elif name == "write_to_file":
+                target = Path(args.get("TargetFile", "")).resolve()
+                risk = SecurityPolicy.evaluate_file_write_risk(target, self.workspace)
+                if risk.requires_approval and risk.level == RiskLevel.DESTRUCTIVE:
+                    return ToolResult(tool_call.id, name, f"Security Violation: {risk.reason}", is_error=True)
+
+                content = args.get("CodeContent", "")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content, encoding="utf-8")
+
+                if args.get("ArtifactSummary"):
+                    self.artifacts.write_artifact(
+                        target.name,
+                        content,
+                        ArtifactMetadata(summary=args.get("ArtifactSummary")),
+                    )
+
+                return ToolResult(tool_call.id, name, f"File successfully written to {target}")
+
+            elif name == "edit_file":
+                target = Path(args.get("TargetFile", "")).resolve()
+                diff_block = args.get("DiffBlock", "")
+                ok, msg = DiffApplier.apply_diff(target, diff_block)
+                return ToolResult(tool_call.id, name, msg, is_error=not ok)
+
+            elif name == "run_command":
+                cmd = args.get("CommandLine", "")
+                cwd_path = Path(args.get("Cwd", str(self.workspace))).resolve()
+                risk = SecurityPolicy.evaluate_command_risk(cmd, cwd_path)
+                if risk.requires_approval and risk.level == RiskLevel.DESTRUCTIVE:
+                    return ToolResult(tool_call.id, name, f"Blocked Destructive Command: {risk.reason}", is_error=True)
+
+                wait_ms = int(args.get("WaitMsBeforeAsync", 5000))
+                res = await self.executor.run(cmd, cwd_path, wait_ms_before_async=wait_ms)
+                if res.get("is_background"):
+                    return ToolResult(tool_call.id, name, res["message"], task_id=res["task_id"])
+                out = res.get("stdout", "")
+                err = res.get("stderr", "")
+                combined = f"Exit Code: {res.get('exit_code')}\nSTDOUT:\n{out}"
+                if err:
+                    combined += f"\nSTDERR:\n{err}"
+                return ToolResult(tool_call.id, name, combined, is_error=res.get("exit_code") != 0)
+
+            elif name == "view_skill":
+                skill_name = args.get("SkillName", "")
+                playbook = self.skills.view_skill(skill_name)
+                if not playbook:
+                    return ToolResult(tool_call.id, name, f"Skill '{skill_name}' not found in registry", is_error=True)
+                return ToolResult(tool_call.id, name, playbook)
+
+            elif name == "search_memory":
+                q = args.get("Query", "")
+                limit = int(args.get("Limit", 5))
+                results = self.memory.search(q, limit=limit)
+                if not results:
+                    return ToolResult(tool_call.id, name, "No memory matches found.")
+                lines = ["## Memory Recall Matches:"]
+                for r in results:
+                    lines.append(f"- Step {r.step_index} [{r.snippet}] (Rank: {r.rank:.2f})")
+                return ToolResult(tool_call.id, name, "\n".join(lines))
+
+            elif name == "manage_task":
+                action = args.get("Action", "list")
+                task_id = args.get("TaskId", "")
+                if action == "list":
+                    tasks = self.executor.list_tasks()
+                    return ToolResult(tool_call.id, name, json.dumps(tasks, indent=2))
+                elif action == "status":
+                    t = self.executor.get_task(task_id)
+                    if not t:
+                        return ToolResult(tool_call.id, name, f"Task {task_id} not found", is_error=True)
+                    return ToolResult(tool_call.id, name, f"Task {task_id}: {t.status}\nOutput: {t.stdout}")
+                elif action == "kill":
+                    ok = await self.executor.kill_task(task_id)
+                    return ToolResult(tool_call.id, name, f"Task {task_id} killed: {ok}")
+
+            elif name == "take_screenshot":
+                filename = args.get("Filename", "screen.png")
+                path = await self.desktop.take_screenshot(filename)
+                return ToolResult(tool_call.id, name, f"Screenshot saved at {path}")
+
+            return ToolResult(tool_call.id, name, f"Unknown tool: {name}", is_error=True)
+
+        except Exception as e:
+            return ToolResult(tool_call.id, name, f"Error executing tool {name}: {str(e)}", is_error=True)
+
+    async def _on_background_task_completed(self, task: BackgroundTask) -> None:
+        """Reactive Wakeup callback from background supervisor."""
+        event = {
+            "type": "TASK_COMPLETED",
+            "task_id": task.task_id,
+            "exit_code": task.exit_code,
+            "stdout": task.stdout,
+            "stderr": task.stderr,
+        }
+        await self.inbox.put(event)
+
+    async def wait_for_wakeup(self, timeout: Optional[float] = None) -> Optional[Dict[str, Any]]:
+        """Zero-polling reactive wait on inbox."""
+        try:
+            if timeout:
+                return await asyncio.wait_for(self.inbox.get(), timeout=timeout)
+            return await self.inbox.get()
+        except asyncio.TimeoutError:
+            return None
