@@ -205,13 +205,32 @@ async def _run_daemon(workspace: Path, host: str, port: int):
     coordinator = AgentCoordinator(workspace=workspace)
     d = HarnessDaemon(coordinator=coordinator, host=host, port=port)
     console.print(f"[bold green]Starting Harness-Zero daemon on http://{host}:{port}...[/bold green]")
-    runner = await d.start()
+    api_runner, sandbox_runner = await d.start()
     try:
         while True:
             await asyncio.sleep(3600)
     except (KeyboardInterrupt, asyncio.CancelledError):
         console.print("[yellow]Stopping daemon...[/yellow]")
-        await runner.cleanup()
+        await api_runner.cleanup()
+        await sandbox_runner.cleanup()
+
+
+
+@main.command()
+@click.option("--workspace", "-w", default=".", help="Workspace path")
+@click.option("--port", "-p", default=8000, help="HTTP port")
+@click.option("--host", "-h", default="127.0.0.1", help="HTTP host")
+def url(workspace: str, port: int, host: str):
+    """Generate a single-use 3-minute login link (Claude Cowork pattern)."""
+    coordinator = AgentCoordinator(workspace=Path(workspace))
+    d = HarnessDaemon(coordinator=coordinator, host=host, port=port)
+    login_url = d.generate_login_url()
+    console.print(Panel(
+        f"[bold green]Single-Use Remote Login Link:[/bold green]\n{login_url}\n\n"
+        "[yellow]Link expires in 3 minutes. Paste into browser to connect over SSH / remote session.[/yellow]",
+        title="[bold cyan]Harness-Zero Remote Access[/bold cyan]",
+        border_style="green",
+    ))
 
 
 if __name__ == "__main__":

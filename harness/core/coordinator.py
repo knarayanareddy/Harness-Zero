@@ -28,9 +28,11 @@ from harness.memory.fts5_index import FTS5MemoryIndex
 from harness.models.circuits import IntelligentModelRouter
 from harness.models.prefix_cache import PromptCacheBuilder, PromptTiers
 from harness.models.router import ModelRouter
+from harness.core.concurrency_gate import ConcurrencyGate
 from harness.sandboxing.diff_applier import DiffApplier
 from harness.sandboxing.executor import BackgroundTask, CommandExecutor
 from harness.sandboxing.guardrails import RiskLevel, SecurityPolicy
+from harness.sandboxing.ripgrep import RipgrepSearcher
 from harness.sandboxing.worktree import WorktreeManager
 from harness.skills.registry import SkillRegistry
 
@@ -70,6 +72,8 @@ class AgentCoordinator:
         self.desktop = MacOSDesktopBridge(scratch_dir=self.session_dir / "scratch")
         self.router = router or ModelRouter()
         self.circuit_router = IntelligentModelRouter()
+        self.concurrency = ConcurrencyGate(limit=64)
+        self.ripgrep = RipgrepSearcher(workspace_root=self.workspace)
 
         # 2. Reactive Wakeup Inbox (0% Polling CPU)
         self.inbox: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
@@ -122,6 +126,19 @@ and verify your work with test runs.
                         "WaitMsBeforeAsync": {"type": "integer", "default": 5000},
                     },
                     "required": ["CommandLine"],
+                },
+            },
+            {
+                "name": "search_codebase",
+                "description": "High-performance ripgrep regex search across codebase files matching ChatGPT Desktop.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "Query": {"type": "string", "description": "Search pattern or regex"},
+                        "GlobFilter": {"type": "string", "description": "Optional glob filter e.g. '*.py'"},
+                        "CaseSensitive": {"type": "boolean", "default": False},
+                    },
+                    "required": ["Query"],
                 },
             },
             {
@@ -388,6 +405,20 @@ and verify your work with test runs.
                 lines = ["## Memory Recall Matches:"]
                 for r in results:
                     lines.append(f"- Step {r.step_index} [{r.snippet}] (Rank: {r.rank:.2f})")
+                return ToolResult(tool_call.id, name, "\n".join(lines))
+
+            elif name == "search_codebase":
+                query = args.get("Query", "")
+                glob_filter = args.get("GlobFilter")
+                case_sensitive = bool(args.get("CaseSensitive", False))
+                matches = await self.ripgrep.search(
+                    query, glob_filter=glob_filter, case_sensitive=case_sensitive
+                )
+                if not matches:
+                    return ToolResult(tool_call.id, name, "No ripgrep matches found.")
+                lines = ["## Ripgrep Codebase Matches:"]
+                for m in matches[:30]:
+                    lines.append(f"- {m.file_path}:{m.line_number}: {m.line_content}")
                 return ToolResult(tool_call.id, name, "\n".join(lines))
 
             elif name == "manage_task":

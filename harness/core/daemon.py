@@ -33,6 +33,8 @@ class HarnessDaemon:
         self.sandbox_port = sandbox_port
         self.socket_path = socket_path
 
+        self._login_tokens: Dict[str, float] = {}
+
         # Dual-Port Isolation Applications
         self.app = web.Application()
         self.sandbox_app = web.Application()
@@ -40,11 +42,65 @@ class HarnessDaemon:
         self._setup_api_routes()
         self._setup_sandbox_routes()
 
+    def generate_login_url(self) -> str:
+        """
+        Generates a cryptographically random, single-use 3-minute login link.
+        Synthesized from Claude Cowork's 'claude-science url' remote SSH access pattern.
+        """
+        import secrets
+        import time
+
+        token = secrets.token_urlsafe(32)
+        # Valid for 180 seconds (3 minutes)
+        self._login_tokens[token] = time.time() + 180.0
+        return f"http://{self.host}:{self.port}/login?token={token}"
+
     def _setup_api_routes(self) -> None:
         self.app.router.add_get("/health", self._handle_health)
         self.app.router.add_post("/rpc", self._handle_rpc)
         self.app.router.add_get("/skills", self._handle_skills)
         self.app.router.add_get("/tasks", self._handle_tasks)
+        self.app.router.add_get("/events", self._handle_events)
+        self.app.router.add_get("/login", self._handle_login)
+
+    async def _handle_login(self, request: web.Request) -> web.Response:
+        import time
+
+        token = request.query.get("token")
+        if not token or token not in self._login_tokens:
+            return web.Response(text="Invalid or expired login link.", status=403)
+
+        expires_at = self._login_tokens.pop(token)
+        if time.time() > expires_at:
+            return web.Response(text="Login link has expired.", status=403)
+
+        return web.json_response({
+            "status": "authenticated",
+            "session_id": self.coordinator.session_id,
+            "workspace": str(self.coordinator.workspace),
+            "message": "Authenticated successfully with single-use token.",
+        })
+
+    async def _handle_events(self, request: web.Request) -> web.StreamResponse:
+        """Server-Sent Events (SSE) stream for live agent state updates."""
+        response = web.StreamResponse(
+            status=200,
+            headers={
+                "Content-Type": "text/event-stream",
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            },
+        )
+        await response.prepare(request)
+
+        # Emit initial session state
+        initial_event = json.dumps({
+            "type": "SESSION_CONNECTED",
+            "session_id": self.coordinator.session_id,
+            "step_count": self.coordinator.transcripts.step_counter,
+        })
+        await response.write(f"data: {initial_event}\n\n".encode("utf-8"))
+        return response
 
     def _setup_sandbox_routes(self) -> None:
         """Port 8001: Untrusted sandbox serving generated artifacts & Generative UI."""
