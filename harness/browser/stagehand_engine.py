@@ -40,7 +40,11 @@ class BrowserCDPEngine:
         self.is_connected = False
         self._mock_mode = False
         self._current_url = "about:blank"
-        self._mock_elements: List[InteractiveElement] = []
+        self._mock_elements: List[InteractiveElement] = [
+            InteractiveElement(1, "BUTTON", "button", "Submit", {"x": 200, "y": 150, "w": 80, "h": 32}),
+            InteractiveElement(2, "INPUT", "textbox", "Email Address", {"x": 200, "y": 100, "w": 240, "h": 36}),
+            InteractiveElement(3, "A", "link", "Forgot Password?", {"x": 200, "y": 200, "w": 120, "h": 20}),
+        ]
 
     def enable_mock_mode(self, elements: Optional[List[InteractiveElement]] = None) -> None:
         """Enables deterministic offline testing without requiring a live Chrome instance."""
