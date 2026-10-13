@@ -233,5 +233,40 @@ def url(workspace: str, port: int, host: str):
     ))
 
 
+@main.command()
+@click.option("--workspace", "-w", default=".", help="Workspace path")
+@click.option("--port", "-p", default=8000, help="HTTP port")
+@click.option("--sandbox-port", "-s", default=8001, help="Sandbox port")
+@click.option("--host", "-h", default="127.0.0.1", help="HTTP host")
+@click.option("--no-open", is_flag=True, help="Don't open browser automatically")
+def ui(workspace: str, port: int, sandbox_port: int, host: str, no_open: bool):
+    """Launch the full-featured Sovereign Agent Studio Web UI."""
+    asyncio.run(_run_ui(Path(workspace), host, port, sandbox_port, not no_open))
+
+
+async def _run_ui(workspace: Path, host: str, port: int, sandbox_port: int, open_browser: bool):
+    import webbrowser
+    coordinator = AgentCoordinator(workspace=workspace)
+    d = HarnessDaemon(coordinator=coordinator, host=host, port=port, sandbox_port=sandbox_port)
+    console.print(Panel(
+        f"[bold green]Harness-Zero Sovereign Agent Studio[/bold green]\n\n"
+        f"• Core UI & API: [bold cyan]http://{host}:{port}/[/bold cyan]\n"
+        f"• SOP Preview Sandbox: [bold magenta]http://{host}:{sandbox_port}/[/bold magenta]\n"
+        f"• Workspace: [yellow]{coordinator.workspace}[/yellow]\n",
+        title="[bold green]UI Online[/bold green]",
+        border_style="green",
+    ))
+    api_runner, sandbox_runner = await d.start()
+    if open_browser:
+        webbrowser.open(f"http://{host}:{port}/")
+    try:
+        while True:
+            await asyncio.sleep(3600)
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        console.print("[yellow]Stopping UI Studio...[/yellow]")
+        await api_runner.cleanup()
+        await sandbox_runner.cleanup()
+
+
 if __name__ == "__main__":
     main()

@@ -75,6 +75,16 @@ class AgentCoordinator:
         self.concurrency = ConcurrencyGate(limit=64)
         self.ripgrep = RipgrepSearcher(workspace_root=self.workspace)
 
+        from harness.orchestration.spawn_ledger import SpawnLedger
+        from harness.models.cost_tracker import TokenCostTracker
+        from harness.memory.semantic_memories import SemanticMemoryStore
+        from harness.sandboxing.tirith_security import TirithSecurityCapsule
+
+        self.spawn_ledger = SpawnLedger(session_dir=self.session_dir)
+        self.cost_tracker = TokenCostTracker()
+        self.semantic_memory = SemanticMemoryStore(memory_dir=self.workspace / ".harness" / "memories")
+        self.tirith = TirithSecurityCapsule()
+
         # 2. Reactive Wakeup Inbox (0% Polling CPU)
         self.inbox: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
 

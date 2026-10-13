@@ -56,12 +56,60 @@ class HarnessDaemon:
         return f"http://{self.host}:{self.port}/login?token={token}"
 
     def _setup_api_routes(self) -> None:
+        self.app.router.add_get("/", self._handle_index)
+        self.app.router.add_get("/ui", self._handle_index)
         self.app.router.add_get("/health", self._handle_health)
         self.app.router.add_post("/rpc", self._handle_rpc)
         self.app.router.add_get("/skills", self._handle_skills)
         self.app.router.add_get("/tasks", self._handle_tasks)
+        self.app.router.add_get("/artifacts", self._handle_artifacts_list)
+        self.app.router.add_get("/artifacts/{filename}", self._handle_get_artifact)
+        self.app.router.add_get("/spawn-tree", self._handle_spawn_tree)
+        self.app.router.add_get("/economics", self._handle_economics)
+        self.app.router.add_post("/search/code", self._handle_search_code)
         self.app.router.add_get("/events", self._handle_events)
         self.app.router.add_get("/login", self._handle_login)
+
+    async def _handle_index(self, request: web.Request) -> web.Response:
+        web_file = Path(__file__).resolve().parent.parent / "web" / "index.html"
+        if web_file.exists():
+            return web.Response(text=web_file.read_text(encoding="utf-8"), content_type="text/html")
+        return web.Response(text="<h1>Harness-Zero Web UI not found</h1>", content_type="text/html", status=404)
+
+    async def _handle_artifacts_list(self, request: web.Request) -> web.Response:
+        manifest = self.coordinator.artifacts.load_manifest()
+        return web.json_response({"manifest": manifest})
+
+    async def _handle_get_artifact(self, request: web.Request) -> web.Response:
+        filename = request.match_info.get("filename", "")
+        content = self.coordinator.artifacts.get_artifact(filename)
+        if content is None:
+            return web.Response(text="Artifact not found", status=404)
+        return web.Response(text=content, content_type="text/plain")
+
+    async def _handle_spawn_tree(self, request: web.Request) -> web.Response:
+        tree = []
+        if hasattr(self.coordinator, "spawn_ledger"):
+            tree = self.coordinator.spawn_ledger.get_tree()
+        return web.json_response({"tree": tree})
+
+    async def _handle_economics(self, request: web.Request) -> web.Response:
+        summary = {}
+        if hasattr(self.coordinator, "cost_tracker"):
+            summary = self.coordinator.cost_tracker.get_summary()
+        return web.json_response(summary)
+
+    async def _handle_search_code(self, request: web.Request) -> web.Response:
+        try:
+            body = await request.json()
+            pattern = body.get("pattern", "")
+            matches = await self.coordinator.ripgrep.search(pattern)
+            return web.json_response({"matches": [
+                {"path": m.file_path, "line": m.line_number, "text": m.line_text}
+                for m in matches
+            ]})
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=400)
 
     async def _handle_login(self, request: web.Request) -> web.Response:
         import time
@@ -164,9 +212,43 @@ class HarnessDaemon:
 
         if method == "turn.submit":
             prompt = params.get("prompt", "")
+            provider = params.get("provider")
+            model = params.get("model")
             try:
-                res = await self.coordinator.execute_turn(prompt)
+                res = await self.coordinator.execute_turn(prompt, provider=provider, model=model)
                 return web.json_response({"jsonrpc": "2.0", "result": {"output": res}, "id": rpc_id})
+            except Exception as e:
+                return web.json_response(
+                    {"jsonrpc": "2.0", "error": {"code": -32603, "message": str(e)}, "id": rpc_id},
+                    status=500,
+                )
+
+        elif method == "architect.submit":
+            prompt = params.get("prompt", "")
+            files = [Path(f) for f in params.get("files", [])]
+            test_cmd = params.get("test_command")
+            from harness.orchestration.architect_editor import ArchitectEditorLoop
+            loop = ArchitectEditorLoop(
+                workspace_root=self.coordinator.workspace,
+                router=self.coordinator.router,
+            )
+            try:
+                arch_res = await loop.execute(
+                    task_prompt=prompt,
+                    target_files=files or list(self.coordinator.workspace.glob("*.py")),
+                    test_command=test_cmd,
+                )
+                return web.json_response({
+                    "jsonrpc": "2.0",
+                    "result": {
+                        "success": arch_res.success,
+                        "plan": arch_res.plan,
+                        "final_message": arch_res.final_message,
+                        "commit_sha": arch_res.commit_sha,
+                        "iterations_count": len(arch_res.iterations),
+                    },
+                    "id": rpc_id,
+                })
             except Exception as e:
                 return web.json_response(
                     {"jsonrpc": "2.0", "error": {"code": -32603, "message": str(e)}, "id": rpc_id},
