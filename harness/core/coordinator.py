@@ -386,7 +386,9 @@ and verify your work with test runs.
 
         try:
             if name == "view_file":
-                path = Path(args.get("AbsolutePath", "")).resolve()
+                raw_path = args.get("AbsolutePath") or args.get("TargetFile") or args.get("path", "")
+                p = Path(raw_path)
+                path = p.resolve() if p.is_absolute() else (self.workspace / p).resolve()
                 if not path.exists():
                     return ToolResult(tool_call.id, name, f"Error: File {path} does not exist", is_error=True)
                 lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -397,7 +399,9 @@ and verify your work with test runs.
                 return ToolResult(tool_call.id, name, "\n".join(numbered))
 
             elif name == "write_to_file":
-                target = Path(args.get("TargetFile", "")).resolve()
+                raw_path = args.get("TargetFile") or args.get("AbsolutePath") or args.get("path", "")
+                p = Path(raw_path)
+                target = p.resolve() if p.is_absolute() else (self.workspace / p).resolve()
                 risk = SecurityPolicy.evaluate_file_write_risk(target, self.workspace)
                 if risk.requires_approval and risk.level == RiskLevel.DESTRUCTIVE:
                     return ToolResult(tool_call.id, name, f"Security Violation: {risk.reason}", is_error=True)
@@ -416,14 +420,17 @@ and verify your work with test runs.
                 return ToolResult(tool_call.id, name, f"File successfully written to {target}")
 
             elif name == "edit_file":
-                target = Path(args.get("TargetFile", "")).resolve()
+                raw_path = args.get("TargetFile") or args.get("AbsolutePath") or args.get("path", "")
+                p = Path(raw_path)
+                target = p.resolve() if p.is_absolute() else (self.workspace / p).resolve()
                 diff_block = args.get("DiffBlock", "")
                 ok, msg = DiffApplier.apply_diff(target, diff_block)
                 return ToolResult(tool_call.id, name, msg, is_error=not ok)
 
             elif name == "run_command":
-                cmd = args.get("CommandLine", "")
-                cwd_path = Path(args.get("Cwd", str(self.workspace))).resolve()
+                cmd = args.get("CommandLine") or args.get("command", "")
+                cwd_raw = args.get("Cwd")
+                cwd_path = Path(cwd_raw).resolve() if cwd_raw else self.workspace
                 risk = SecurityPolicy.evaluate_command_risk(cmd, cwd_path)
                 if risk.requires_approval and risk.level == RiskLevel.DESTRUCTIVE:
                     return ToolResult(tool_call.id, name, f"Blocked Destructive Command: {risk.reason}", is_error=True)

@@ -18,6 +18,33 @@ from harness.core.types import ModelResponse, ToolCall
 
 
 class ModelRouter:
+    @staticmethod
+    def _load_hermes_env() -> Dict[str, str]:
+        hermes_env = Path.home() / ".hermes" / ".env"
+        keys: Dict[str, str] = {}
+        if hermes_env.exists():
+            try:
+                for line in hermes_env.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip('"').strip("'")
+                    if k in ("OPENROUTER_API_KEY_2", "OPENROUTER_API_KEY") and not keys.get("openrouter"):
+                        keys["openrouter"] = v
+                    elif k == "OPENAI_API_KEY" and not keys.get("openai"):
+                        keys["openai"] = v
+                    elif k == "ANTHROPIC_API_KEY" and not keys.get("anthropic"):
+                        keys["anthropic"] = v
+                    elif k == "GEMINI_API_KEY" and not keys.get("gemini"):
+                        keys["gemini"] = v
+                    elif k == "DEEPSEEK_API_KEY" and not keys.get("deepseek"):
+                        keys["deepseek"] = v
+            except Exception:
+                pass
+        return keys
+
     def __init__(
         self,
         default_provider: str = "mock",
@@ -27,13 +54,14 @@ class ModelRouter:
     ):
         config = self._load_config()
         saved_keys = config.get("api_keys", {})
+        hermes_keys = self._load_hermes_env()
         
         self.api_keys = api_keys or {
-            "openai": saved_keys.get("openai") or os.environ.get("OPENAI_API_KEY", ""),
-            "anthropic": saved_keys.get("anthropic") or os.environ.get("ANTHROPIC_API_KEY", ""),
-            "gemini": saved_keys.get("gemini") or os.environ.get("GEMINI_API_KEY", ""),
-            "deepseek": saved_keys.get("deepseek") or os.environ.get("DEEPSEEK_API_KEY", ""),
-            "openrouter": saved_keys.get("openrouter") or os.environ.get("OPENROUTER_API_KEY", ""),
+            "openai": saved_keys.get("openai") or os.environ.get("OPENAI_API_KEY", "") or hermes_keys.get("openai", ""),
+            "anthropic": saved_keys.get("anthropic") or os.environ.get("ANTHROPIC_API_KEY", "") or hermes_keys.get("anthropic", ""),
+            "gemini": saved_keys.get("gemini") or os.environ.get("GEMINI_API_KEY", "") or hermes_keys.get("gemini", ""),
+            "deepseek": saved_keys.get("deepseek") or os.environ.get("DEEPSEEK_API_KEY", "") or hermes_keys.get("deepseek", ""),
+            "openrouter": saved_keys.get("openrouter") or os.environ.get("OPENROUTER_API_KEY", "") or hermes_keys.get("openrouter", ""),
         }
         
         # If user configured a default provider in config, use it
@@ -44,12 +72,15 @@ class ModelRouter:
         if cfg_provider:
             self.default_provider = cfg_provider
             self.default_model = cfg_model or "default"
+        elif self.api_keys.get("openrouter"):
+            self.default_provider = "openrouter"
+            self.default_model = "liquid/lfm-2.5-2.6b:free"
+        elif self.api_keys.get("openai"):
+            self.default_provider = "openai"
+            self.default_model = "gpt-4o-mini"
         elif self.api_keys.get("anthropic"):
             self.default_provider = "anthropic"
             self.default_model = "claude-3-7-sonnet"
-        elif self.api_keys.get("openai"):
-            self.default_provider = "openai"
-            self.default_model = "gpt-4o"
         elif self.api_keys.get("deepseek"):
             self.default_provider = "deepseek"
             self.default_model = "deepseek-reasoner"
@@ -112,7 +143,9 @@ class ModelRouter:
 
         # Auto-map model name to provider if provider not explicitly set or is mock
         if prov == "mock" or not provider:
-            if mdl.startswith("claude"):
+            if "/" in mdl or mdl.startswith("openrouter"):
+                prov = "openrouter" if self.api_keys.get("openrouter") else "mock"
+            elif mdl.startswith("claude"):
                 prov = "anthropic" if self.api_keys.get("anthropic") else "mock"
             elif mdl.startswith("gpt-") or mdl.startswith("o1") or mdl.startswith("o3"):
                 prov = "openai" if self.api_keys.get("openai") else "mock"
@@ -124,7 +157,7 @@ class ModelRouter:
                 prov = "local"
 
         # Check API key presence for commercial frontier models
-        if prov in ("anthropic", "openai", "gemini", "deepseek") and not self.api_keys.get(prov):
+        if prov in ("anthropic", "openai", "gemini", "deepseek", "openrouter") and not self.api_keys.get(prov):
             resp = self._mock_agent_turn(messages, tools)
             resp.content = f"> [!NOTE]\n> No **{prov.upper()} API Key** detected. Operating in Sovereign Autonomous Engine. Configure your key in **Settings (⚙️)** to activate frontier cloud reasoning.\n\n" + resp.content
             return resp
@@ -443,6 +476,10 @@ Proceeding with the plan. You can review the active artifact in the right studio
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
+        if provider == "openrouter":
+            headers["HTTP-Referer"] = "https://github.com/knarayanareddy/Harness-Zero"
+            headers["X-Title"] = "Harness-Zero Sovereign Agent"
+
         payload: Dict[str, Any] = {
             "model": model,
             "messages": messages,
@@ -468,14 +505,19 @@ Proceeding with the plan. You can review the active artifact in the right studio
             data = resp.json()
             choice = data["choices"][0]["message"]
             content = choice.get("content") or ""
-            thinking = choice.get("reasoning_content") or ""
+            thinking = choice.get("reasoning_content") or choice.get("reasoning") or ""
+            if not content and thinking and not choice.get("tool_calls"):
+                content = thinking
 
             parsed_tools: List[ToolCall] = []
             if "tool_calls" in choice and choice["tool_calls"]:
                 for tc in choice["tool_calls"]:
                     fn = tc.get("function", {})
                     args = fn.get("arguments", "{}")
-                    parsed_args = json.loads(args) if isinstance(args, str) else args
+                    try:
+                        parsed_args = json.loads(args) if isinstance(args, str) else (args or {})
+                    except Exception:
+                        parsed_args = {}
                     parsed_tools.append(
                         ToolCall(
                             id=tc.get("id", f"call_{uuid.uuid4().hex[:8]}"),
