@@ -74,7 +74,7 @@ class ModelRouter:
             self.default_model = cfg_model or "default"
         elif self.api_keys.get("openrouter"):
             self.default_provider = "openrouter"
-            self.default_model = "liquid/lfm-2.5-2.6b:free"
+            self.default_model = "deepseek/deepseek-chat"
         elif self.api_keys.get("openai"):
             self.default_provider = "openai"
             self.default_model = "gpt-4o-mini"
@@ -499,39 +499,69 @@ Proceeding with the plan. You can review the active artifact in the right studio
                 for t in tools
             ]
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(f"{base_urls[provider]}/chat/completions", headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            choice = data["choices"][0]["message"]
-            content = choice.get("content") or ""
-            thinking = choice.get("reasoning_content") or choice.get("reasoning") or ""
-            if not content and thinking and not choice.get("tool_calls"):
-                content = thinking
+        candidates = [model]
+        if provider == "openrouter":
+            for fb in ["deepseek/deepseek-chat", "meta-llama/llama-3.3-70b-instruct"]:
+                if fb not in candidates:
+                    candidates.append(fb)
 
-            parsed_tools: List[ToolCall] = []
-            if "tool_calls" in choice and choice["tool_calls"]:
-                for tc in choice["tool_calls"]:
-                    fn = tc.get("function", {})
-                    args = fn.get("arguments", "{}")
-                    try:
-                        parsed_args = json.loads(args) if isinstance(args, str) else (args or {})
-                    except Exception:
-                        parsed_args = {}
-                    parsed_tools.append(
-                        ToolCall(
-                            id=tc.get("id", f"call_{uuid.uuid4().hex[:8]}"),
-                            name=fn.get("name", ""),
-                            arguments=parsed_args,
-                        )
+        last_error = None
+        for candidate_model in candidates:
+            payload["model"] = candidate_model
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.post(f"{base_urls[provider]}/chat/completions", headers=headers, json=payload)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    choice = data["choices"][0]["message"]
+                    content = choice.get("content") or ""
+                    thinking = choice.get("reasoning_content") or choice.get("reasoning") or ""
+                    if not content and thinking and not choice.get("tool_calls"):
+                        content = thinking
+
+                    parsed_tools: List[ToolCall] = []
+                    if "tool_calls" in choice and choice["tool_calls"]:
+                        for tc in choice["tool_calls"]:
+                            fn = tc.get("function", {})
+                            args = fn.get("arguments", "{}")
+                            try:
+                                parsed_args = json.loads(args) if isinstance(args, str) else (args or {})
+                            except Exception:
+                                parsed_args = {}
+                            parsed_tools.append(
+                                ToolCall(
+                                    id=tc.get("id", f"call_{uuid.uuid4().hex[:8]}"),
+                                    name=fn.get("name", ""),
+                                    arguments=parsed_args,
+                                )
+                            )
+
+                    # If fallback was used, prepend a notification note
+                    if candidate_model != model:
+                        notice = f"> [!NOTE]\n> Note: Model `{model}` was unavailable or rate-limited. Auto-routed via Claude Cowork fallback policy to `{candidate_model}`.\n\n"
+                        content = notice + content
+
+                    return ModelResponse(
+                        content=content,
+                        thinking=thinking,
+                        tool_calls=parsed_tools,
+                        raw_response=data,
                     )
+            except Exception as e:
+                last_error = e
+                continue
 
-            return ModelResponse(
-                content=content,
-                thinking=thinking,
-                tool_calls=parsed_tools,
-                raw_response=data,
-            )
+        # If all candidates fail on OpenRouter, try OpenAI if key exists
+        if provider == "openrouter" and self.api_keys.get("openai"):
+            try:
+                return await self._call_openai_compatible("openai", "gpt-4o-mini", messages, tools, temperature)
+            except Exception:
+                pass
+
+        # Final resilient fallback to Sovereign Autonomous Heuristic
+        mock_resp = self._mock_agent_turn(messages, tools)
+        mock_resp.content = f"> [!WARNING]\n> Remote provider `{provider}` error ({type(last_error).__name__}: {last_error}). Seamlessly failed over to Sovereign Autonomous Engine.\n\n" + mock_resp.content
+        return mock_resp
 
     async def _call_anthropic(
         self,

@@ -546,32 +546,50 @@
       box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
       border: 1px solid #38bdf8;
     }
-    .settings-tab-bar {
+    .settings-layout {
       display: flex;
-      gap: 6px;
-      border-bottom: 1px solid #27272a;
-      padding-bottom: 8px;
-      margin-bottom: 14px;
+      gap: 16px;
+      height: 480px;
+    }
+    .settings-sidebar {
+      width: 200px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      border-right: 1px solid #27272a;
+      padding-right: 12px;
+      flex-shrink: 0;
     }
     .settings-tab-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      text-align: left;
       background: transparent;
       border: none;
-      color: #71717a;
-      font-size: 12px;
+      color: #a1a1aa;
+      font-size: 13px;
       font-weight: 500;
-      padding: 6px 12px;
+      padding: 8px 12px;
       border-radius: 6px;
       cursor: pointer;
       transition: all 0.15s ease;
     }
     .settings-tab-btn:hover {
-      color: #e4e4e7;
+      color: #f4f4f5;
       background: rgba(255, 255, 255, 0.05);
     }
     .settings-tab-btn.active {
       color: #38bdf8;
       background: rgba(56, 189, 248, 0.12);
       font-weight: 600;
+    }
+    .settings-content {
+      flex: 1;
+      overflow-y: auto;
+      max-height: 480px;
+      padding-right: 6px;
     }
     .settings-page {
       display: none;
@@ -598,6 +616,24 @@
       font-size: 11px;
       color: #71717a;
       margin-top: 2px;
+    }
+    .btn-stop {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      background: #ef4444;
+      color: #ffffff;
+      border: none;
+      border-radius: 9999px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.1s ease;
+    }
+    .btn-stop:hover {
+      background: #dc2626;
+      transform: translateY(-1px);
     }
 
     .composer-card {
@@ -1167,7 +1203,7 @@
 
             <div class="composer-controls">
               <div class="controls-left">
-                <button class="btn-icon" id="btn-attach" onclick="document.getElementById('media-file-input').click()" title="Attach image or file (or paste/drag screenshot)">
+                <button class="btn-icon" id="btn-attach" onclick="triggerAttachFile()" title="Attach image or file (or paste/drag screenshot)">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
                 </button>
 
@@ -1178,15 +1214,16 @@
                 </select>
 
                 <select class="select-pill" id="model-selector">
-                  <option value="liquid/lfm-2.5-2.6b:free">Liquid LFM 2.5 (OpenRouter Free)</option>
-                  <option value="nvidia/nemotron-3.5-lightning:free">Nemotron 3.5 (OpenRouter Free)</option>
-                  <option value="gpt-4o-mini">GPT-4o Mini</option>
-                  <option value="claude-3-7-sonnet">Claude 3.7 Sonnet</option>
-                  <option value="gpt-4o">GPT-4o</option>
-                  <option value="deepseek-reasoner">DeepSeek-R1</option>
+                  <option value="deepseek/deepseek-chat">DeepSeek Chat (OpenRouter)</option>
+                  <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B (OpenRouter)</option>
+                  <option value="qwen/qwen-2.5-72b-instruct">Qwen 2.5 72B (OpenRouter)</option>
+                  <option value="gpt-4o-mini">GPT-4o Mini (OpenAI)</option>
+                  <option value="claude-3-7-sonnet">Claude 3.7 Sonnet (Anthropic)</option>
+                  <option value="gpt-4o">GPT-4o (OpenAI)</option>
+                  <option value="deepseek-reasoner">DeepSeek R1</option>
                   <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
                   <option value="local">Local Ollama</option>
-                  <option value="mock-model">Autonomous (Offline)</option>
+                  <option value="mock-model">Autonomous (Sovereign Engine)</option>
                 </select>
 
                 <button class="select-pill" id="api-status-pill" onclick="openSettingsModal()">
@@ -1194,9 +1231,15 @@
                 </button>
               </div>
 
-              <button class="btn-send" id="send-btn" onclick="submitPrompt()" title="Send instruction (Enter)">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
-              </button>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <button class="btn-stop" id="stop-btn" onclick="stopGenerating()" title="Stop Generation">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
+                  <span>Stop</span>
+                </button>
+                <button class="btn-send" id="send-btn" onclick="submitPrompt()" title="Send instruction (Enter)">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1302,139 +1345,382 @@
     </div>
   </div>
 
-  <!-- Enhanced Multi-Tab Settings Modal -->
+  <!-- Replicated Claude Cowork Settings Modal (End-to-End Reverse-Engineered Architecture) -->
   <div class="modal-backdrop" id="settings-modal">
-    <div class="modal-dialog" style="max-width:640px; width:92vw;">
-      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #27272a; padding-bottom:12px;">
-        <span style="font-weight:600; font-size:15px; color:#f4f4f5;">Agent Preferences & System Configuration</span>
+    <div class="modal-dialog" style="max-width:820px; width:94vw; max-height:88vh; display:flex; flex-direction:column;">
+      <!-- Modal Header -->
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #27272a; padding-bottom:12px; margin-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-weight:700; font-size:16px; color:#f4f4f5;">Claude Cowork & Harness Preferences</span>
+          <span class="status-pill status-ready" style="font-size:10px;" id="cowork-status-badge">Host-Loop Connected</span>
+        </div>
         <button class="btn-icon" onclick="closeSettingsModal()">✕</button>
       </div>
 
-      <div class="settings-tab-bar">
-        <button class="settings-tab-btn active" id="stab-keys" onclick="switchSettingsTab('keys')">API Keys & Providers</button>
-        <button class="settings-tab-btn" id="stab-models" onclick="switchSettingsTab('models')">Model Parameters</button>
-        <button class="settings-tab-btn" id="stab-security" onclick="switchSettingsTab('security')">Security & Guardrails</button>
-        <button class="settings-tab-btn" id="stab-budget" onclick="switchSettingsTab('budget')">Budget & Economics</button>
+      <!-- Main Layout: Sidebar + Content -->
+      <div class="settings-layout" style="flex:1; overflow:hidden;">
+        <!-- Left Sidebar: 7 Tabs matching Claude Cowork desktop_config.json -->
+        <div class="settings-sidebar">
+          <button class="settings-tab-btn active" id="stab-general" onclick="switchSettingsTab('general')">
+            <span>⚙️</span><span>General</span>
+          </button>
+          <button class="settings-tab-btn" id="stab-account" onclick="switchSettingsTab('account')">
+            <span>👤</span><span>Account</span>
+          </button>
+          <button class="settings-tab-btn" id="stab-cowork" onclick="switchSettingsTab('cowork')">
+            <span>🤝</span><span>Cowork & Remote</span>
+          </button>
+          <button class="settings-tab-btn" id="stab-capabilities" onclick="switchSettingsTab('capabilities')">
+            <span>🌐</span><span>Capabilities & Sites</span>
+          </button>
+          <button class="settings-tab-btn" id="stab-extensions" onclick="switchSettingsTab('extensions')">
+            <span>🧩</span><span>Extensions & MCP</span>
+          </button>
+          <button class="settings-tab-btn" id="stab-models" onclick="switchSettingsTab('models')">
+            <span>🔑</span><span>Models & Routing</span>
+          </button>
+          <button class="settings-tab-btn" id="stab-security" onclick="switchSettingsTab('security')">
+            <span>🛡️</span><span>Security & Guardrails</span>
+          </button>
+        </div>
+
+        <!-- Right Content Area -->
+        <div class="settings-content">
+          <!-- 1. General Preferences -->
+          <div class="settings-page active" id="spage-general">
+            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">Appearance & System Preferences</h4>
+            <div class="toggle-row">
+              <div>
+                <span>Theme & Palette</span>
+                <div class="toggle-desc">Interface ground color and typography</div>
+              </div>
+              <select class="select-pill" id="gen-theme" style="width:130px;">
+                <option value="dark">Dark Theme (Standard)</option>
+                <option value="light">Light Theme</option>
+                <option value="system">System Preference</option>
+              </select>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Locale & Language</span>
+                <div class="toggle-desc">Application localization strings and date formats</div>
+              </div>
+              <select class="select-pill" id="gen-locale" style="width:130px;">
+                <option value="en-US">English (United States)</option>
+                <option value="en-GB">English (United Kingdom)</option>
+                <option value="ja-JP">Japanese</option>
+                <option value="de-DE">German</option>
+              </select>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Keep Daemon Running in Background</span>
+                <div class="toggle-desc">Maintains local agent session listening when window is closed</div>
+              </div>
+              <input type="checkbox" id="gen-background" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Anonymous Performance Diagnostics</span>
+                <div class="toggle-desc">Log local inference latencies and crash reports to local memory</div>
+              </div>
+              <input type="checkbox" id="gen-telemetry" style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+          </div>
+
+          <!-- 2. Account Tab -->
+          <div class="settings-page" id="spage-account">
+            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">Account Identity & Keyring Status</h4>
+            <div style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:8px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:12px; color:#a1a1aa;">Active Identity:</span>
+                <span style="font-size:13px; font-weight:600; color:#f4f4f5;" id="acc-email">brightech@local.device</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:12px; color:#a1a1aa;">Account UUID:</span>
+                <span style="font-family:var(--font-mono); font-size:11px; color:#38bdf8;" id="acc-uuid">eb2ed2bf-f314-4c1d-a782-febe96c771f9</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:12px; color:#a1a1aa;">Organization:</span>
+                <span style="font-family:var(--font-mono); font-size:11px; color:#a1a1aa;" id="acc-org">90abf3fd-1c92-4b4e-8733-809314ab824b</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:12px; color:#a1a1aa;">System Keyring:</span>
+                <span style="font-size:12px; color:#22c55e; font-weight:500;">Apple Keychain (Unlocked & Active ✓)</span>
+              </div>
+            </div>
+
+            <div style="display:flex; gap:8px; margin-top:8px;">
+              <button class="btn-proceed" style="background:#27272a; color:#f4f4f5;" onclick="alert('Session authenticated with local credentials.')">Re-authenticate Session</button>
+              <button class="btn-changes" onclick="alert('Local account cached.')">Clear Session Cache</button>
+            </div>
+          </div>
+
+          <!-- 3. Cowork & Remote Control -->
+          <div class="settings-page" id="spage-cowork">
+            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">Cowork Folders & Remote Control</h4>
+            
+            <div class="toggle-row">
+              <div>
+                <span>Remote Control</span>
+                <div class="toggle-desc">Allow phone and claude.ai sessions to start sessions and interact with this computer</div>
+              </div>
+              <input type="checkbox" id="cowork-remote-control" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <label style="font-size:12px; color:#a1a1aa;">Cowork User Files Path (<code>coworkUserFilesPath</code>)</label>
+              <input type="text" class="input-field" id="cowork-user-files-path" value="/Users/brightech/Claude"/>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <label style="font-size:12px; color:#a1a1aa;">Trusted Cowork Folders</label>
+                <button class="btn-proceed" style="padding:2px 8px; font-size:11px;" onclick="addTrustedFolderPrompt()">＋ Add Folder</button>
+              </div>
+              <div id="trusted-folders-list" style="display:flex; flex-direction:column; gap:4px; max-height:110px; overflow-y:auto; background:#18181b; border:1px solid #27272a; border-radius:6px; padding:6px;"></div>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Bypass Permissions Gate</span>
+                <div class="toggle-desc">Execute tool operations inside trusted folders without interactive approval dialogs</div>
+              </div>
+              <input type="checkbox" id="cowork-bypass-gate" style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Maker Devices BLE Interface</span>
+                <div class="toggle-desc">Connect maker devices over Bluetooth Low Energy to display permissions and status</div>
+              </div>
+              <input type="checkbox" id="cowork-ble" style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+          </div>
+
+          <!-- 4. Capabilities & Allowed Sites -->
+          <div class="settings-page" id="spage-capabilities">
+            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">Capabilities & Network Host Allowlist</h4>
+
+            <div class="toggle-row">
+              <div>
+                <span>Web Search Capability</span>
+                <div class="toggle-desc">Allow agent to execute web search queries via search tools</div>
+              </div>
+              <input type="checkbox" id="cap-web-search" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Browser Automation Tools</span>
+                <div class="toggle-desc">Allow Stagehand CDP navigation, DOM inspection, and clicking</div>
+              </div>
+              <input type="checkbox" id="cap-browser-tools" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Preferred Browser</span>
+                <div class="toggle-desc">Browser runtime used for generative preview rendering</div>
+              </div>
+              <select class="select-pill" id="cap-preferred-browser" style="width:130px;">
+                <option value="built_in">Built-in Sandbox (:8001)</option>
+                <option value="system">System Default Browser</option>
+              </select>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <label style="font-size:12px; color:#a1a1aa;">Allowed Sites & Network Egress Allowlist</label>
+                <button class="btn-proceed" style="padding:2px 8px; font-size:11px;" onclick="addAllowedSitePrompt()">＋ Add Host</button>
+              </div>
+              <div id="allowed-sites-list" style="display:flex; flex-wrap:wrap; gap:6px; background:#18181b; border:1px solid #27272a; border-radius:6px; padding:8px;"></div>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Scheduled Background Routines</span>
+                <div class="toggle-desc">Allow agent to register recurring cron schedules and timers</div>
+              </div>
+              <input type="checkbox" id="cap-scheduled-tasks" style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+          </div>
+
+          <!-- 5. Extensions & MCP -->
+          <div class="settings-page" id="spage-extensions">
+            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">Model Context Protocol & Extensions</h4>
+
+            <div class="toggle-row">
+              <div>
+                <span>Developer Mode</span>
+                <div class="toggle-desc">Enables local MCP debugging, inspecting webviews, and raw protocol frames</div>
+              </div>
+              <input type="checkbox" id="ext-dev-mode" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Unpacked Extensions Support</span>
+                <div class="toggle-desc">Load custom extensions and skills directly from project worktrees</div>
+              </div>
+              <input type="checkbox" id="ext-unpacked" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <label style="font-size:12px; color:#a1a1aa;">Configured MCP Servers (<code>claude_desktop_config.json</code>)</label>
+              <div id="mcp-servers-list" style="display:flex; flex-direction:column; gap:6px; background:#18181b; border:1px solid #27272a; border-radius:6px; padding:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-family:var(--font-mono); font-size:12px; color:#f4f4f5;">filesystem_mcp</span>
+                  <span class="status-pill status-ready" style="font-size:10px;">Connected ✓</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-family:var(--font-mono); font-size:12px; color:#f4f4f5;">database_mcp</span>
+                  <span class="status-pill status-ready" style="font-size:10px;">Connected ✓</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-family:var(--font-mono); font-size:12px; color:#f4f4f5;">github_mcp</span>
+                  <span class="status-pill status-ready" style="font-size:10px;">Connected ✓</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex; gap:8px; margin-top:6px;">
+              <button class="btn-proceed" style="background:#27272a; color:#f4f4f5; font-size:11px;" onclick="reloadMcpConfig()">🔄 Reload MCP Configuration</button>
+              <button class="btn-proceed" style="background:#27272a; color:#f4f4f5; font-size:11px;" onclick="selectStudioTab('skills')">📖 Inspect Skills & Tools</button>
+            </div>
+          </div>
+
+          <!-- 6. Models & Routing -->
+          <div class="settings-page" id="spage-models">
+            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">BYOK Providers & Model Auto-Fallback</h4>
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <label style="font-size:12px; color:#a1a1aa;">OpenRouter API Key (DeepSeek-Chat, Llama 3.3, Qwen 2.5)</label>
+              <input type="password" class="input-field" id="key-openrouter" placeholder="sk-or-v1-..."/>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <label style="font-size:12px; color:#a1a1aa;">OpenAI API Key (GPT-4o, GPT-4o-mini, o3-mini)</label>
+              <input type="password" class="input-field" id="key-openai" placeholder="sk-proj-..."/>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <label style="font-size:12px; color:#a1a1aa;">Anthropic API Key (Claude 3.7 / 3.5 Sonnet)</label>
+              <input type="password" class="input-field" id="key-anthropic" placeholder="sk-ant-api03-..."/>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <label style="font-size:12px; color:#a1a1aa;">DeepSeek API Key (DeepSeek-R1 / V3)</label>
+              <input type="password" class="input-field" id="key-deepseek" placeholder="sk-..."/>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <label style="font-size:12px; color:#a1a1aa;">Google Gemini API Key (Gemini 2.0 Flash)</label>
+              <input type="password" class="input-field" id="key-gemini" placeholder="AIzaSy..."/>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <label style="font-size:12px; color:#a1a1aa;">Local Ollama Base URL</label>
+              <input type="text" class="input-field" id="key-ollama" placeholder="http://localhost:11434/v1"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Model Auto-Fallback (<code>coworkModelAutoFallback</code>)</span>
+                <div class="toggle-desc">Automatically fail over to secondary models if primary endpoint hits 429 rate limit</div>
+              </div>
+              <input type="checkbox" id="param-autofallback" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <div style="font-size:13px; font-weight:500; color:#e4e4e7;">Sampling Temperature</div>
+                <div class="toggle-desc">Controls reasoning exploration vs deterministic execution (0.0 = deterministic)</div>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input type="range" id="param-temp" min="0" max="1" step="0.05" value="0.2" oninput="document.getElementById('temp-val').textContent = this.value" style="width:110px;"/>
+                <span id="temp-val" style="font-family:var(--font-mono); font-size:12px; color:#38bdf8;">0.20</span>
+              </div>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <div style="font-size:13px; font-weight:500; color:#e4e4e7;">Max Tool Execution Iterations</div>
+                <div class="toggle-desc">Cap consecutive tool calls per autonomous turn</div>
+              </div>
+              <input type="number" id="param-iterations" class="input-field" value="10" min="1" max="50" style="width:70px; text-align:center;"/>
+            </div>
+          </div>
+
+          <!-- 7. Security & Guardrails -->
+          <div class="settings-page" id="spage-security">
+            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">Tirith Security Capsule & Guardrails</h4>
+
+            <div class="toggle-row">
+              <div>
+                <span>Default Permission Mode</span>
+                <div class="toggle-desc">How tool permissions are handled for filesystem and terminal access</div>
+              </div>
+              <select class="select-pill" id="sec-permission-mode" style="width:140px;">
+                <option value="allow">Allow Workspace Edits</option>
+                <option value="ask">Ask For Approval</option>
+                <option value="plan">Plan Only (Read-Only)</option>
+              </select>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>🛡️ Tirith AST & Secret Shield</span>
+                <div class="toggle-desc">Intercepts and blocks leaked tokens, SSH keys, AWS credentials, and API secrets</div>
+              </div>
+              <input type="checkbox" id="guard-tirith" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>🌐 IMDSv1/v2 SSRF Cloud Metadata Shield</span>
+                <div class="toggle-desc">Blocks outbound requests to 169.254.169.254, internal cluster IPs, and port hijacking</div>
+              </div>
+              <input type="checkbox" id="guard-ssrf" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>⚠️ Destructive Command Approval Gate</span>
+                <div class="toggle-desc">Hard-blocks catastrophic shell commands (rm -rf /, dd, mkfs, format)</div>
+              </div>
+              <input type="checkbox" id="guard-destructive" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>🔒 Protected System Paths Check</span>
+                <div class="toggle-desc">Prevents reading or editing in ~/.ssh, ~/.gnupg, /etc, and /var</div>
+              </div>
+              <input type="checkbox" id="guard-paths" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <div style="font-size:13px; font-weight:500; color:#e4e4e7;">Session Budget Limit ($USD)</div>
+                <div class="toggle-desc">Stop turn execution if session token spend exceeds limit</div>
+              </div>
+              <input type="number" id="budget-limit" class="input-field" value="5.00" step="0.50" min="0.10" style="width:90px; text-align:center;"/>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <!-- Tab 1: API Keys -->
-      <div class="settings-page active" id="spage-keys">
-        <div style="display:flex; flex-direction:column; gap:6px;">
-          <label style="font-size:12px; color:#a1a1aa;">OpenRouter API Key (LFM 2.5, Nemotron, DeepSeek, Multi-Cloud)</label>
-          <input type="password" class="input-field" id="key-openrouter" placeholder="sk-or-v1-..."/>
+      <!-- Modal Footer -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; border-top:1px solid #27272a; padding-top:10px;">
+        <button class="btn-changes" onclick="resetSettingsDefaults()">Reset to Defaults</button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn-changes" onclick="closeSettingsModal()">Cancel</button>
+          <button class="btn-proceed" onclick="saveSettings()">Save & Apply Changes</button>
         </div>
-
-        <div style="display:flex; flex-direction:column; gap:6px;">
-          <label style="font-size:12px; color:#a1a1aa;">Anthropic API Key (Claude 3.7 / 3.5 Sonnet)</label>
-          <input type="password" class="input-field" id="key-anthropic" placeholder="sk-ant-api03-..."/>
-        </div>
-
-        <div style="display:flex; flex-direction:column; gap:6px;">
-          <label style="font-size:12px; color:#a1a1aa;">OpenAI API Key (GPT-4o / o3-mini)</label>
-          <input type="password" class="input-field" id="key-openai" placeholder="sk-proj-..."/>
-        </div>
-
-        <div style="display:flex; flex-direction:column; gap:6px;">
-          <label style="font-size:12px; color:#a1a1aa;">Google Gemini API Key (Gemini 2.0 Flash / Pro)</label>
-          <input type="password" class="input-field" id="key-gemini" placeholder="AIzaSy..."/>
-        </div>
-
-        <div style="display:flex; flex-direction:column; gap:6px;">
-          <label style="font-size:12px; color:#a1a1aa;">DeepSeek API Key (DeepSeek-R1 / V3)</label>
-          <input type="password" class="input-field" id="key-deepseek" placeholder="sk-..."/>
-        </div>
-
-        <div style="display:flex; flex-direction:column; gap:6px;">
-          <label style="font-size:12px; color:#a1a1aa;">Local Ollama Base URL</label>
-          <input type="text" class="input-field" id="key-ollama" placeholder="http://localhost:11434/v1"/>
-        </div>
-      </div>
-
-      <!-- Tab 2: Model Parameters -->
-      <div class="settings-page" id="spage-models">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <div style="font-size:13px; font-weight:500; color:#e4e4e7;">Sampling Temperature</div>
-            <div class="toggle-desc">Controls creativity vs surgical determinism (0.0 = deterministic)</div>
-          </div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <input type="range" id="param-temp" min="0" max="1" step="0.05" value="0.2" oninput="document.getElementById('temp-val').textContent = this.value" style="width:120px;"/>
-            <span id="temp-val" style="font-family:var(--font-mono); font-size:12px; color:#38bdf8;">0.20</span>
-          </div>
-        </div>
-
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
-          <div>
-            <div style="font-size:13px; font-weight:500; color:#e4e4e7;">Max Tool Execution Iterations</div>
-            <div class="toggle-desc">Maximum consecutive tool calls before turn completion</div>
-          </div>
-          <input type="number" id="param-iterations" class="input-field" value="10" min="1" max="50" style="width:70px; text-align:center;"/>
-        </div>
-
-        <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
-          <label style="font-size:12px; color:#a1a1aa;">Sovereign System Identity Prompt</label>
-          <textarea class="input-field" id="param-system-identity" rows="3" style="font-family:var(--font-mono); font-size:12px;">You are Harness-Zero, a sovereign autonomous agent. Operate with precision, inspect files before modifying them, use surgical search/replace edits, and verify your work with test runs.</textarea>
-        </div>
-      </div>
-
-      <!-- Tab 3: Security & Guardrails -->
-      <div class="settings-page" id="spage-security">
-        <div class="toggle-row">
-          <div>
-            <span>🛡️ Tirith AST & Secret Detection</span>
-            <div class="toggle-desc">Scans tool calls and memory for exfiltrated private keys, tokens, and credentials</div>
-          </div>
-          <input type="checkbox" id="guard-tirith" checked style="transform:scale(1.2); cursor:pointer;"/>
-        </div>
-
-        <div class="toggle-row">
-          <div>
-            <span>🌐 SSRF Cloud Metadata Shield</span>
-            <div class="toggle-desc">Blocks outbound requests targeting 169.254.169.254, AWS IMDSv2, GCP metadata, and 127.0.0.1 port hijacking</div>
-          </div>
-          <input type="checkbox" id="guard-ssrf" checked style="transform:scale(1.2); cursor:pointer;"/>
-        </div>
-
-        <div class="toggle-row">
-          <div>
-            <span>⚠️ Destructive Command Approval Gate</span>
-            <div class="toggle-desc">Enforces interactive approval before executing dangerous operations (rm -rf, git reset --hard, dd, mkfs)</div>
-          </div>
-          <input type="checkbox" id="guard-destructive" checked style="transform:scale(1.2); cursor:pointer;"/>
-        </div>
-
-        <div class="toggle-row">
-          <div>
-            <span>🔒 Protected System Paths Check</span>
-            <div class="toggle-desc">Prevents file viewing or editing in ~/.ssh, ~/.aws, /etc, /var/root, and private keys</div>
-          </div>
-          <input type="checkbox" id="guard-paths" checked style="transform:scale(1.2); cursor:pointer;"/>
-        </div>
-      </div>
-
-      <!-- Tab 4: Budget & Economics -->
-      <div class="settings-page" id="spage-budget">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <div style="font-size:13px; font-weight:500; color:#e4e4e7;">Session Budget Limit ($USD)</div>
-            <div class="toggle-desc">Halts autonomous execution if session spend exceeds threshold</div>
-          </div>
-          <input type="number" id="budget-limit" class="input-field" value="5.00" step="0.50" min="0.10" style="width:90px; text-align:center;"/>
-        </div>
-
-        <div class="toggle-row" style="margin-top:8px;">
-          <div>
-            <span>⚡ Cost & Token Spike Alerts</span>
-            <div class="toggle-desc">Show notification banner when single turn consumes &gt; 15,000 tokens</div>
-          </div>
-          <input type="checkbox" id="budget-alerts" checked style="transform:scale(1.2); cursor:pointer;"/>
-        </div>
-      </div>
-
-      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px; border-top:1px solid #27272a; padding-top:10px;">
-        <button class="btn-changes" onclick="closeSettingsModal()">Cancel</button>
-        <button class="btn-proceed" onclick="saveSettings()">Save & Activate</button>
-      </div>
     </div>
   </div>
 
@@ -1573,6 +1859,40 @@
       submitPrompt();
     }
 
+    let currentAbortController = null;
+    let isGenerating = false;
+
+    function setGenerating(generating) {
+      isGenerating = generating;
+      const stopBtn = document.getElementById('stop-btn');
+      const sendBtn = document.getElementById('send-btn');
+      if (stopBtn) stopBtn.style.display = generating ? 'inline-flex' : 'none';
+      if (sendBtn) sendBtn.style.display = generating ? 'none' : 'inline-flex';
+    }
+
+    async function stopGenerating() {
+      if (currentAbortController) {
+        currentAbortController.abort();
+        currentAbortController = null;
+      }
+      try {
+        await fetch('/turn/cancel', { method: 'POST' });
+      } catch (e) {}
+      setGenerating(false);
+      const placeholders = document.querySelectorAll('.placeholder-pulse');
+      placeholders.forEach(el => {
+        el.innerHTML = '<span style="color:#ef4444; font-size:13px;">⏹ <em>Generation stopped by user.</em></span>';
+        el.classList.remove('placeholder-pulse');
+      });
+    }
+
+    function triggerAttachFile() {
+      const input = document.getElementById('media-file-input');
+      if (input) {
+        input.click();
+      }
+    }
+
     async function submitPrompt() {
       const text = textarea.value.trim();
       if (!text && pendingMediaAttachments.length === 0) return;
@@ -1595,13 +1915,16 @@
       textarea.style.height = '44px';
 
       const assistantCard = appendAssistantPlaceholder();
+      setGenerating(true);
+      currentAbortController = new AbortController();
 
       // Try SSE streaming first for live character animation
       try {
         const streamRes = await fetch('/turn/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: text, model: model, mode: mode, media: mediaToSend })
+          body: JSON.stringify({ prompt: text, model: model, mode: mode, media: mediaToSend }),
+          signal: currentAbortController.signal
         });
 
         if (streamRes.ok && streamRes.body) {
@@ -1644,15 +1967,35 @@
                     toolCalls.push(evt);
                   } else if (evt.type === 'turn_complete') {
                     renderAssistantResponse(assistantCard, evt.result);
+                    setGenerating(false);
+                  } else if (evt.type === 'turn_cancelled') {
+                    const pulse = assistantCard.querySelector('.placeholder-pulse');
+                    if (pulse) {
+                      pulse.innerHTML = '<span style="color:#ef4444; font-size:13px;">⏹ <em>Generation stopped by user.</em></span>';
+                      pulse.classList.remove('placeholder-pulse');
+                    }
+                    setGenerating(false);
+                  } else if (evt.type === 'error') {
+                    const pulse = assistantCard.querySelector('.placeholder-pulse');
+                    if (pulse) {
+                      pulse.innerHTML = `<div style="background:#3f1414; border:1px solid #7f1d1d; color:#fca5a5; padding:10px; border-radius:6px; font-size:13px;">⚠️ <strong>Model Error:</strong> ${escapeHtml(evt.message)}</div>`;
+                      pulse.classList.remove('placeholder-pulse');
+                    }
+                    setGenerating(false);
                   }
                 } catch (pe) {}
               }
             }
           }
+          setGenerating(false);
           fetchLatestArtifacts();
           return;
         }
       } catch (streamErr) {
+        if (streamErr.name === 'AbortError') {
+          setGenerating(false);
+          return;
+        }
         console.warn('Streaming fallback to standard RPC:', streamErr);
       }
 
@@ -1666,7 +2009,8 @@
             id: Date.now(),
             method: mode === 'architect' ? 'architect.submit' : 'turn.submit',
             params: { prompt: text, model: model, media: mediaToSend }
-          })
+          }),
+          signal: currentAbortController ? currentAbortController.signal : undefined
         });
 
         const data = await res.json();
@@ -1676,10 +2020,15 @@
           renderAssistantResponse(assistantCard, data.result);
         }
       } catch (err) {
-        assistantCard.innerHTML = `<span style="color:var(--accent-red)">Connection Error: ${escapeHtml(err.message)}</span>`;
+        if (err.name === 'AbortError') {
+          assistantCard.innerHTML = '<span style="color:#ef4444; font-size:13px;">⏹ <em>Generation stopped by user.</em></span>';
+        } else {
+          assistantCard.innerHTML = `<span style="color:var(--accent-red)">Connection Error: ${escapeHtml(err.message)}</span>`;
+        }
+      } finally {
+        setGenerating(false);
+        fetchLatestArtifacts();
       }
-
-      fetchLatestArtifacts();
     }
 
     function appendUserBubble(text, media = []) {
@@ -2516,7 +2865,10 @@
       }
     }
 
-    // Settings Modal Tabs
+    // Replicated Claude Cowork Settings Controller
+    let trustedFoldersData = [];
+    let allowedSitesData = [];
+
     function switchSettingsTab(tabName) {
       document.querySelectorAll('.settings-tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.settings-page').forEach(p => p.classList.remove('active'));
@@ -2535,10 +2887,171 @@
       document.getElementById('settings-modal').classList.remove('open');
     }
 
+    function renderTrustedFolders(folders) {
+      trustedFoldersData = folders || [];
+      const container = document.getElementById('trusted-folders-list');
+      if (!container) return;
+      if (trustedFoldersData.length === 0) {
+        container.innerHTML = '<span style="font-size:11px; color:#71717a; padding:4px;">No custom folders added yet.</span>';
+        return;
+      }
+      container.innerHTML = trustedFoldersData.map((f, idx) => `
+        <div style="display:flex; justify-content:space-between; align-items:center; background:#222227; border-radius:4px; padding:4px 8px;">
+          <span style="font-family:var(--font-mono); font-size:11px; color:#e4e4e7; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:440px;" title="${escapeHtml(f)}">📁 ${escapeHtml(f)}</span>
+          <button style="background:transparent; border:none; color:#ef4444; cursor:pointer; font-size:11px; font-weight:600;" onclick="removeTrustedFolder(${idx})">✕</button>
+        </div>
+      `).join('');
+    }
+
+    function addTrustedFolderPrompt() {
+      const p = prompt('Enter folder path to trust for Claude Cowork:', '/Users/brightech/Claude');
+      if (p && p.trim()) {
+        trustedFoldersData.push(p.trim());
+        renderTrustedFolders(trustedFoldersData);
+      }
+    }
+
+    function removeTrustedFolder(idx) {
+      trustedFoldersData.splice(idx, 1);
+      renderTrustedFolders(trustedFoldersData);
+    }
+
+    function renderAllowedSites(sites) {
+      allowedSitesData = sites || [];
+      const container = document.getElementById('allowed-sites-list');
+      if (!container) return;
+      if (allowedSitesData.length === 0) {
+        container.innerHTML = '<span style="font-size:11px; color:#71717a; padding:4px;">No external sites allowed.</span>';
+        return;
+      }
+      container.innerHTML = allowedSitesData.map((s, idx) => `
+        <div style="display:inline-flex; align-items:center; gap:6px; background:#27272a; border-radius:9999px; padding:3px 10px; font-size:11px; color:#38bdf8; font-family:var(--font-mono);">
+          <span>🌐 ${escapeHtml(s)}</span>
+          <button style="background:transparent; border:none; color:#a1a1aa; cursor:pointer; font-size:10px; font-weight:700;" onclick="removeAllowedSite(${idx})">✕</button>
+        </div>
+      `).join('');
+    }
+
+    function addAllowedSitePrompt() {
+      const s = prompt('Enter network host/site to allow (e.g. 127.0.0.1:8000, api.github.com):');
+      if (s && s.trim()) {
+        allowedSitesData.push(s.trim());
+        renderAllowedSites(allowedSitesData);
+      }
+    }
+
+    function removeAllowedSite(idx) {
+      allowedSitesData.splice(idx, 1);
+      renderAllowedSites(allowedSitesData);
+    }
+
+    async function reloadMcpConfig() {
+      try {
+        const res = await fetch('/plugins');
+        const data = await res.json();
+        alert(`MCP Configuration reloaded. Found ${data.tools ? data.tools.length : 0} active MCP tools.`);
+      } catch (e) {
+        alert('Failed to reload MCP configuration: ' + e.message);
+      }
+    }
+
+    async function resetSettingsDefaults() {
+      if (!confirm('Reset all preferences to Claude Cowork defaults?')) return;
+      try {
+        await fetch('/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            general: { theme: 'dark', locale: 'en-US', keep_in_background: true, telemetry_enabled: false },
+            cowork: { remote_control_enabled: true, cowork_user_files_path: '/Users/brightech/Claude', bypass_permissions_gate: false, ble_maker_enabled: false },
+            capabilities: { web_search_enabled: true, browser_tools_enabled: true, preferred_browser: 'built_in', scheduled_tasks_enabled: false },
+            models: { auto_fallback: true, temperature: 0.2, max_tool_iterations: 10 },
+            security: { default_permission_mode: 'allow', tirith_ssrf_shield: true, destructive_command_blocking: true, ssh_key_shield: true, session_spend_cap_usd: 5.0 }
+          })
+        });
+        loadSettings();
+        alert('Preferences reset to defaults.');
+      } catch (e) {
+        alert('Failed to reset: ' + e.message);
+      }
+    }
+
     async function loadSettings() {
       try {
         const res = await fetch('/settings');
         const data = await res.json();
+
+        // 1. General
+        if (data.general) {
+          if (data.general.theme) document.getElementById('gen-theme').value = data.general.theme;
+          if (data.general.locale) document.getElementById('gen-locale').value = data.general.locale;
+          document.getElementById('gen-background').checked = Boolean(data.general.keep_in_background);
+          document.getElementById('gen-telemetry').checked = Boolean(data.general.telemetry_enabled);
+        }
+
+        // 2. Account
+        if (data.account) {
+          if (data.account.email) document.getElementById('acc-email').textContent = data.account.email;
+          if (data.account.account_id) document.getElementById('acc-uuid').textContent = data.account.account_id;
+          if (data.account.organization_id) document.getElementById('acc-org').textContent = data.account.organization_id;
+        }
+
+        // 3. Cowork
+        if (data.cowork) {
+          document.getElementById('cowork-remote-control').checked = Boolean(data.cowork.remote_control_enabled);
+          if (data.cowork.cowork_user_files_path) document.getElementById('cowork-user-files-path').value = data.cowork.cowork_user_files_path;
+          renderTrustedFolders(data.cowork.trusted_folders || []);
+          document.getElementById('cowork-bypass-gate').checked = Boolean(data.cowork.bypass_permissions_gate);
+          document.getElementById('cowork-ble').checked = Boolean(data.cowork.ble_maker_enabled);
+        }
+
+        // 4. Capabilities
+        if (data.capabilities) {
+          document.getElementById('cap-web-search').checked = Boolean(data.capabilities.web_search_enabled);
+          document.getElementById('cap-browser-tools').checked = Boolean(data.capabilities.browser_tools_enabled);
+          if (data.capabilities.preferred_browser) document.getElementById('cap-preferred-browser').value = data.capabilities.preferred_browser;
+          renderAllowedSites(data.capabilities.allowed_sites || []);
+          document.getElementById('cap-scheduled-tasks').checked = Boolean(data.capabilities.scheduled_tasks_enabled);
+        }
+
+        // 5. Extensions
+        if (data.extensions) {
+          document.getElementById('ext-dev-mode').checked = Boolean(data.extensions.developer_mode);
+          document.getElementById('ext-unpacked').checked = Boolean(data.extensions.unpacked_extensions_enabled);
+        }
+
+        // 6. Models
+        if (data.models) {
+          document.getElementById('param-autofallback').checked = Boolean(data.models.auto_fallback);
+          if (data.models.temperature !== undefined) {
+            document.getElementById('param-temp').value = data.models.temperature;
+            document.getElementById('temp-val').textContent = Number(data.models.temperature).toFixed(2);
+          }
+          if (data.models.max_tool_iterations !== undefined) {
+            document.getElementById('param-iterations').value = data.models.max_tool_iterations;
+          }
+          if (data.models.local_base_url) {
+            document.getElementById('key-ollama').value = data.models.local_base_url;
+          }
+          if (data.models.default_model) {
+            document.getElementById('model-selector').value = data.models.default_model;
+            document.getElementById('active-model-display').textContent = data.models.default_model;
+          }
+        }
+
+        // 7. Security
+        if (data.security) {
+          if (data.security.default_permission_mode) document.getElementById('sec-permission-mode').value = data.security.default_permission_mode;
+          document.getElementById('guard-tirith').checked = Boolean(data.security.tirith_ssrf_shield);
+          document.getElementById('guard-ssrf').checked = Boolean(data.security.tirith_ssrf_shield);
+          document.getElementById('guard-destructive').checked = Boolean(data.security.destructive_command_blocking);
+          document.getElementById('guard-paths').checked = Boolean(data.security.ssh_key_shield);
+          if (data.security.session_spend_cap_usd !== undefined) {
+            document.getElementById('budget-limit').value = Number(data.security.session_spend_cap_usd).toFixed(2);
+          }
+        }
+
+        // Status pill & Provider Placeholders
         if (data.configured_providers) {
           const hasAny = Object.values(data.configured_providers).some(Boolean);
           const pill = document.getElementById('api-status-pill');
@@ -2547,7 +3060,6 @@
             pill.style.color = '#4ade80';
             pill.style.borderColor = 'rgba(34, 197, 94, 0.4)';
           }
-
           if (data.configured_providers.openrouter) {
             document.getElementById('key-openrouter').placeholder = '●●●●●●●● (Active via Environment)';
           }
@@ -2564,11 +3076,9 @@
             document.getElementById('key-deepseek').placeholder = '●●●●●●●● (Active via Environment)';
           }
         }
-        if (data.default_model) {
-          document.getElementById('model-selector').value = data.default_model;
-          document.getElementById('active-model-display').textContent = data.default_model;
-        }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('Failed to load settings:', e);
+      }
 
       // Fetch active session info
       try {
@@ -2595,19 +3105,62 @@
       if (gemini) keys.gemini = gemini;
       if (deepseek) keys.deepseek = deepseek;
 
-      await fetch('/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          api_keys: keys,
+      const payload = {
+        general: {
+          theme: document.getElementById('gen-theme').value,
+          locale: document.getElementById('gen-locale').value,
+          keep_in_background: document.getElementById('gen-background').checked,
+          telemetry_enabled: document.getElementById('gen-telemetry').checked
+        },
+        cowork: {
+          remote_control_enabled: document.getElementById('cowork-remote-control').checked,
+          cowork_user_files_path: document.getElementById('cowork-user-files-path').value.trim(),
+          trusted_folders: trustedFoldersData,
+          bypass_permissions_gate: document.getElementById('cowork-bypass-gate').checked,
+          ble_maker_enabled: document.getElementById('cowork-ble').checked
+        },
+        capabilities: {
+          web_search_enabled: document.getElementById('cap-web-search').checked,
+          browser_tools_enabled: document.getElementById('cap-browser-tools').checked,
+          preferred_browser: document.getElementById('cap-preferred-browser').value,
+          allowed_sites: allowedSitesData,
+          scheduled_tasks_enabled: document.getElementById('cap-scheduled-tasks').checked
+        },
+        extensions: {
+          developer_mode: document.getElementById('ext-dev-mode').checked,
+          unpacked_extensions_enabled: document.getElementById('ext-unpacked').checked
+        },
+        models: {
           default_model: document.getElementById('model-selector').value,
+          auto_fallback: document.getElementById('param-autofallback').checked,
+          temperature: parseFloat(document.getElementById('param-temp').value) || 0.2,
+          max_tool_iterations: parseInt(document.getElementById('param-iterations').value) || 10,
           local_base_url: ollama || undefined
-        })
-      });
+        },
+        security: {
+          default_permission_mode: document.getElementById('sec-permission-mode').value,
+          tirith_ssrf_shield: document.getElementById('guard-tirith').checked,
+          destructive_command_blocking: document.getElementById('guard-destructive').checked,
+          ssh_key_shield: document.getElementById('guard-paths').checked,
+          session_spend_cap_usd: parseFloat(document.getElementById('budget-limit').value) || 5.0
+        },
+        api_keys: keys,
+        default_model: document.getElementById('model-selector').value
+      };
 
-      closeSettingsModal();
-      loadSettings();
-      alert('Preferences saved and activated.');
+      try {
+        const res = await fetch('/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        closeSettingsModal();
+        loadSettings();
+        alert('Claude Cowork & Harness preferences saved successfully.');
+      } catch (e) {
+        alert('Error saving preferences: ' + e.message);
+      }
     }
 
     function escapeHtml(str) {

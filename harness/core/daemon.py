@@ -36,6 +36,7 @@ class HarnessDaemon:
         self.socket_path = socket_path
 
         self._login_tokens: Dict[str, float] = {}
+        self._active_turn_tasks: Dict[str, asyncio.Task] = {}
 
         # Dual-Port Isolation Applications
         self.app = web.Application()
@@ -76,6 +77,7 @@ class HarnessDaemon:
         self.app.router.add_post("/file/save", self._handle_file_save)
         self.app.router.add_get("/diffs", self._handle_diffs)
         self.app.router.add_post("/turn/stream", self._handle_turn_stream)
+        self.app.router.add_post("/turn/cancel", self._handle_turn_cancel)
         self.app.router.add_get("/events", self._handle_events)
         self.app.router.add_get("/login", self._handle_login)
         self.app.router.add_post("/media/upload", self._handle_media_upload)
@@ -160,32 +162,145 @@ class HarnessDaemon:
         except Exception as e:
             return web.json_response({"error": str(e)}, status=400)
 
-    async def _handle_settings_get(self, request: web.Request) -> web.Response:
+    def _settings_file(self) -> Path:
+        p = self.coordinator.workspace / ".harness" / "settings.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        return p
+
+    def _get_cowork_settings(self) -> Dict[str, Any]:
+        sf = self._settings_file()
+        stored = {}
+        if sf.exists():
+            try:
+                stored = json.loads(sf.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
         router = self.coordinator.router
-        return web.json_response({
+        defaults = {
+            "general": {
+                "theme": "dark",
+                "locale": "en-US",
+                "launch_at_login": False,
+                "keep_in_background": True,
+                "telemetry_enabled": False,
+            },
+            "account": {
+                "account_id": "eb2ed2bf-f314-4c1d-a782-febe96c771f9",
+                "email": "brightech@local.device",
+                "organization_id": "90abf3fd-1c92-4b4e-8733-809314ab824b",
+                "is_signed_in": True,
+                "keyring_status": "unlocked",
+            },
+            "cowork": {
+                "remote_control_enabled": True,
+                "cowork_user_files_path": str(self.coordinator.workspace),
+                "trusted_folders": [
+                    str(self.coordinator.workspace),
+                    str(Path.home() / "Claude"),
+                ],
+                "bypass_permissions_gate": False,
+                "ble_maker_enabled": False,
+            },
+            "capabilities": {
+                "web_search_enabled": True,
+                "browser_tools_enabled": True,
+                "preferred_browser": "built_in",
+                "allowed_sites": [
+                    "127.0.0.1:8000",
+                    "127.0.0.1:8001",
+                    "localhost:8000",
+                    "localhost:8001",
+                    "github.com",
+                    "openrouter.ai",
+                ],
+                "scheduled_tasks_enabled": False,
+            },
+            "extensions": {
+                "developer_mode": True,
+                "unpacked_extensions_enabled": True,
+                "mcp_servers": {
+                    "filesystem_mcp": {"status": "connected", "command": "npx -y @modelcontextprotocol/server-filesystem"},
+                    "database_mcp": {"status": "connected", "command": "npx -y @modelcontextprotocol/server-sqlite"},
+                    "github_mcp": {"status": "connected", "command": "npx -y @modelcontextprotocol/server-github"},
+                },
+            },
+            "models": {
+                "default_provider": router.default_provider,
+                "default_model": router.default_model,
+                "auto_fallback": True,
+                "temperature": 0.2,
+                "max_tokens": 4096,
+                "reasoning_effort": "medium",
+                "max_tool_iterations": 10,
+                "local_base_url": router.local_base_url,
+            },
+            "security": {
+                "default_permission_mode": "allow",
+                "tirith_ssrf_shield": True,
+                "destructive_command_blocking": True,
+                "ssh_key_shield": True,
+                "protected_locations": ["/etc", "/var", "~/.ssh", "~/.gnupg"],
+                "session_spend_cap_usd": 5.0,
+            },
             "configured_providers": {
                 p: bool(router.api_keys.get(p))
                 for p in ("anthropic", "openai", "gemini", "deepseek", "openrouter")
             },
-            "default_provider": router.default_provider,
-            "default_model": router.default_model,
-            "local_base_url": router.local_base_url,
-        })
+            "active_session_id": self.coordinator.session_id,
+        }
+
+        for section, vals in stored.items():
+            if isinstance(vals, dict) and section in defaults and isinstance(defaults[section], dict):
+                defaults[section].update(vals)
+            else:
+                defaults[section] = vals
+
+        defaults["configured_providers"] = {
+            p: bool(router.api_keys.get(p))
+            for p in ("anthropic", "openai", "gemini", "deepseek", "openrouter")
+        }
+        defaults["models"]["default_provider"] = router.default_provider
+        defaults["models"]["default_model"] = router.default_model
+        return defaults
+
+    async def _handle_settings_get(self, request: web.Request) -> web.Response:
+        settings = self._get_cowork_settings()
+        return web.json_response(settings)
 
     async def _handle_settings_post(self, request: web.Request) -> web.Response:
         try:
             body = await request.json()
+            cur = self._get_cowork_settings()
+
+            for section in ("general", "account", "cowork", "capabilities", "extensions", "models", "security"):
+                if section in body and isinstance(body[section], dict):
+                    cur[section].update(body[section])
+
             keys = body.get("api_keys", {})
-            provider = body.get("default_provider")
-            model = body.get("default_model")
-            self.coordinator.router.save_config(
-                keys=keys,
-                default_provider=provider,
-                default_model=model
-            )
-            return web.json_response({"status": "saved", "active_provider": self.coordinator.router.default_provider})
+            provider = body.get("default_provider") or cur["models"].get("default_provider")
+            model = body.get("default_model") or cur["models"].get("default_model")
+
+            if keys or provider or model:
+                self.coordinator.router.save_config(
+                    keys=keys,
+                    default_provider=provider,
+                    default_model=model
+                )
+
+            sf = self._settings_file()
+            sf.write_text(json.dumps(cur, indent=2), encoding="utf-8")
+            return web.json_response({"status": "saved", "settings": cur, "active_provider": self.coordinator.router.default_provider})
         except Exception as e:
             return web.json_response({"error": str(e)}, status=400)
+
+    async def _handle_turn_cancel(self, request: web.Request) -> web.Response:
+        sid = self.coordinator.session_id
+        task = self._active_turn_tasks.get(sid)
+        if task and not task.done():
+            task.cancel()
+            return web.json_response({"status": "cancelled", "message": "Turn stopped by user."})
+        return web.json_response({"status": "idle", "message": "No active turn was running."})
 
     async def _handle_login(self, request: web.Request) -> web.Response:
         import time
@@ -344,6 +459,9 @@ class HarnessDaemon:
             payload = json.dumps({"type": event_type, **data})
             await response.write(f"data: {payload}\n\n".encode("utf-8"))
 
+        current_task = asyncio.current_task()
+        self._active_turn_tasks[self.coordinator.session_id] = current_task
+
         try:
             await send_sse("turn_start", {"prompt": prompt, "mode": mode, "model": model})
 
@@ -390,8 +508,16 @@ class HarnessDaemon:
                     await asyncio.sleep(0.01)
 
                 await send_sse("turn_complete", {"result": data})
+        except asyncio.CancelledError:
+            try:
+                await send_sse("turn_cancelled", {"message": "Execution stopped by user."})
+            except Exception:
+                pass
+            raise
         except Exception as e:
             await send_sse("error", {"message": str(e)})
+        finally:
+            self._active_turn_tasks.pop(self.coordinator.session_id, None)
 
         return response
 

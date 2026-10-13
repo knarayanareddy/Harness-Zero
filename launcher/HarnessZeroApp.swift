@@ -2,7 +2,7 @@ import Cocoa
 import WebKit
 
 @main
-class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUIDelegate {
     static func main() {
         let app = NSApplication.shared
         let delegate = AppDelegate()
@@ -48,6 +48,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         webView = WKWebView(frame: window.contentView!.bounds, configuration: config)
         webView.autoresizingMask = [.width, .height]
         webView.setValue(false, forKey: "drawsBackground") // Prevents white flicker
+        webView.uiDelegate = self
         window.contentView?.addSubview(webView)
 
         // 3. Build native macOS menu bar
@@ -204,6 +205,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             print("[Harness-Zero Launcher] Terminating backend daemon...")
             proc.interrupt()
             proc.waitUntilExit()
+        }
+    }
+
+    // MARK: - WKUIDelegate (Native File Upload & Dialogs)
+    func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
+        let openPanel = NSOpenPanel()
+        openPanel.canChooseFiles = true
+        openPanel.canChooseDirectories = false
+        openPanel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        openPanel.title = "Select File or Image to Attach"
+        openPanel.prompt = "Attach"
+        openPanel.begin { response in
+            if response == .OK {
+                completionHandler(openPanel.urls)
+            } else {
+                completionHandler(nil)
+            }
         }
     }
 }

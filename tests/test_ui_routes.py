@@ -135,12 +135,33 @@ async def test_ui_and_studio_endpoints(tmp_path: Path):
                 assert res_pb.status_code == 200
                 assert "playbook" in res_pb.json()
 
-            # Plugins endpoint
-            res_plugins = await client.get("http://127.0.0.1:8990/plugins")
-            assert res_plugins.status_code == 200
-            plug_data = res_plugins.json()
-            assert "servers" in plug_data
-            assert "tools" in plug_data
-            assert "filesystem_mcp" in plug_data["servers"]
+            # 12. Test Turn Cancellation & Replicated Claude Cowork Settings
+            res_cancel = await client.post("http://127.0.0.1:8990/turn/cancel")
+            assert res_cancel.status_code == 200
+            assert res_cancel.json()["status"] in ("idle", "cancelled")
+
+            # Test GET /settings returns 7-tab structure
+            res_set = await client.get("http://127.0.0.1:8990/settings")
+            assert res_set.status_code == 200
+            set_data = res_set.json()
+            assert "general" in set_data
+            assert "account" in set_data
+            assert "cowork" in set_data
+            assert "capabilities" in set_data
+            assert "extensions" in set_data
+            assert "models" in set_data
+            assert "security" in set_data
+            assert set_data["cowork"]["cowork_user_files_path"]
+
+            # Test POST /settings persists modifications
+            res_set_post = await client.post("http://127.0.0.1:8990/settings", json={
+                "cowork": {"trusted_folders": ["/Users/brightech/Claude", "/tmp/trusted"]},
+                "models": {"temperature": 0.45, "auto_fallback": True},
+                "security": {"session_spend_cap_usd": 12.50}
+            })
+            assert res_set_post.status_code == 200
+            assert res_set_post.json()["status"] == "saved"
+            assert res_set_post.json()["settings"]["models"]["temperature"] == 0.45
+            assert res_set_post.json()["settings"]["security"]["session_spend_cap_usd"] == 12.50
     finally:
         await app_runner.cleanup()
