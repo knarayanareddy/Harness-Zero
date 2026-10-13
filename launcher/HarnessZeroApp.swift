@@ -3,6 +3,13 @@ import WebKit
 
 @main
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+    static func main() {
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        _ = NSApplicationMain(CommandLine.argc, CommandLine.unsafeArgv)
+    }
+
     var window: NSWindow!
     var webView: WKWebView!
     var backendProcess: Process?
@@ -118,17 +125,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func startBackendDaemon() {
         let bundle = Bundle.main
-        var engineExecutable = bundle.resourceURL?.appendingPathComponent("harness-engine").path
+        var candidates: [String] = []
+        if let resPath = bundle.resourcePath {
+            candidates.append((resPath as NSString).appendingPathComponent("harness-engine"))
+        }
+        candidates.append(bundle.bundleURL.appendingPathComponent("Contents/Resources/harness-engine").path)
+        candidates.append(bundle.bundleURL.appendingPathComponent("harness-engine").path)
+        candidates.append("/Applications/Harness-Zero.app/Contents/Resources/harness-engine")
 
-        // Fallback for development debugging
-        if engineExecutable == nil || !FileManager.default.fileExists(atPath: engineExecutable!) {
-            let devDistPath = NSString(string: "~/Library/HarnessZero/harness-engine").expandingTildeInPath
-            if FileManager.default.fileExists(atPath: devDistPath) {
-                engineExecutable = devDistPath
+        var engineExecutable: String? = nil
+        for c in candidates {
+            if FileManager.default.fileExists(atPath: c) {
+                engineExecutable = c
+                break
             }
         }
 
-        if let execPath = engineExecutable, FileManager.default.fileExists(atPath: execPath) {
+        if let execPath = engineExecutable {
             let proc = Process()
             proc.executableURL = URL(fileURLWithPath: execPath)
             proc.arguments = ["daemon", "--port", "\(targetPort)", "--sandbox-port", "\(sandboxPort)"]
@@ -139,27 +152,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             do {
                 try proc.run()
                 self.backendProcess = proc
-                print("[Harness-Zero Launcher] Started backend daemon process (PID: \(proc.processIdentifier))")
+                NSLog("[Harness-Zero Launcher] Successfully launched harness-engine at %@ (PID: %d)", execPath, proc.processIdentifier)
             } catch {
-                print("[Harness-Zero Launcher] Failed to launch daemon: \(error)")
+                NSLog("[Harness-Zero Launcher] Failed to launch daemon: %@", error.localizedDescription)
             }
         } else {
-            print("[Harness-Zero Launcher] Warning: Bundled engine not found at \(engineExecutable ?? "nil"). Connecting to existing localhost daemon...")
+            NSLog("[Harness-Zero Launcher] Warning: harness-engine executable not found. Connecting to existing daemon if active...")
         }
 
-        // Wait for health check then load URL
-        pollHealthAndLoadURL(attemptsRemaining: 40)
+        // Wait for health check then load URL (poll for up to 15 seconds)
+        pollHealthAndLoadURL(attemptsRemaining: 60)
     }
 
     func pollHealthAndLoadURL(attemptsRemaining: Int) {
-        guard attemptsRemaining > 0 else {
-            // Load direct anyway
-            if let url = URL(string: "http://127.0.0.1:\(targetPort)/") {
-                webView.load(URLRequest(url: url))
-            }
-            return
-        }
-
         let healthUrl = URL(string: "http://127.0.0.1:\(targetPort)/health")!
         let task = URLSession.shared.dataTask(with: healthUrl) { [weak self] (_, response, error) in
             guard let self = self else { return }
@@ -167,11 +172,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 DispatchQueue.main.async {
                     let studioUrl = URL(string: "http://127.0.0.1:\(self.targetPort)/")!
                     self.webView.load(URLRequest(url: studioUrl))
-                    print("[Harness-Zero Launcher] Daemon health confirmed. Studio loaded.")
+                    NSLog("[Harness-Zero Launcher] Daemon health confirmed. Studio loaded.")
                 }
-            } else {
+            } else if attemptsRemaining > 0 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                     self.pollHealthAndLoadURL(attemptsRemaining: attemptsRemaining - 1)
+                }
+            } else {
+                DispatchQueue.main.async {
+                    let studioUrl = URL(string: "http://127.0.0.1:\(self.targetPort)/")!
+                    self.webView.load(URLRequest(url: studioUrl))
                 }
             }
         }

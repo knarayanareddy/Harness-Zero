@@ -194,16 +194,17 @@ async def _run_interactive(workspace: Path, initial_provider: str, initial_model
 
 @main.command()
 @click.option("--workspace", "-w", default=".", help="Workspace path")
-@click.option("--port", "-p", default=8080, help="HTTP port")
+@click.option("--port", "-p", default=8000, help="HTTP port")
+@click.option("--sandbox-port", "-s", default=8001, help="Sandbox port")
 @click.option("--host", "-h", default="127.0.0.1", help="HTTP host")
-def daemon(workspace: str, port: int, host: str):
+def daemon(workspace: str, port: int, sandbox_port: int, host: str):
     """Run the background daemon IPC server."""
-    asyncio.run(_run_daemon(Path(workspace), host, port))
+    asyncio.run(_run_daemon(Path(workspace), host, port, sandbox_port))
 
 
-async def _run_daemon(workspace: Path, host: str, port: int):
+async def _run_daemon(workspace: Path, host: str, port: int, sandbox_port: int = 8001):
     coordinator = AgentCoordinator(workspace=workspace)
-    d = HarnessDaemon(coordinator=coordinator, host=host, port=port)
+    d = HarnessDaemon(coordinator=coordinator, host=host, port=port, sandbox_port=sandbox_port)
     console.print(f"[bold green]Starting Harness-Zero daemon on http://{host}:{port}...[/bold green]")
     api_runner, sandbox_runner = await d.start()
     try:
