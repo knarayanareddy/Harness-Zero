@@ -12,6 +12,8 @@ import json
 import logging
 import os
 import secrets
+import subprocess
+import uuid
 from collections import deque
 from collections.abc import Callable
 from pathlib import Path
@@ -169,6 +171,9 @@ class HarnessWebServer:
                 if fetch_site == "cross-site":
                     return web.json_response({"error": "Cross-Site requests forbidden"}, status=403)
 
+        if request.path == "/events":
+            return await handler(request)
+
         response = await handler(request)
 
         # Inject Security Headers for API responses (HTML/Assets)
@@ -179,7 +184,7 @@ class HarnessWebServer:
                 "default-src 'self'; "
                 "img-src 'self' data: blob:; "
                 "style-src 'self' 'unsafe-inline'; "
-                "script-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
                 f"frame-src {sb_origin_127} {sb_origin_local}; "
                 "frame-ancestors 'none'; "
                 "connect-src 'self' ws:;"
@@ -201,6 +206,7 @@ class HarnessWebServer:
                 "default-src 'none'; "
                 "style-src 'unsafe-inline'; "
                 "script-src 'none'; "
+                "img-src data: blob:; "
                 f"frame-ancestors {api_origin_127} {api_origin_local}; "
                 "connect-src 'none';"
             )
@@ -220,16 +226,46 @@ class HarnessWebServer:
         self.app.router.add_post("/commands/{name}", self._handle_command)
         self.app.router.add_post("/rpc", self._handle_rpc)
 
+        # Rich Studio API Endpoints
+        self.app.router.add_post("/turn/stream", self._handle_turn_stream)
+        self.app.router.add_post("/turn/cancel", self._handle_turn_cancel)
+        self.app.router.add_get("/files", self._handle_files)
+        self.app.router.add_get("/file/content", self._handle_file_content)
+        self.app.router.add_post("/file/save", self._handle_file_save)
+        self.app.router.add_get("/diffs", self._handle_diffs)
+        self.app.router.add_get("/artifacts", self._handle_artifacts_list)
+        self.app.router.add_get("/artifacts/{filename}", self._handle_get_artifact)
+        self.app.router.add_get("/sessions", self._handle_sessions_list)
+        self.app.router.add_get("/sessions/{session_id}", self._handle_session_get)
+        self.app.router.add_post("/sessions/new", self._handle_session_new)
+        self.app.router.add_post("/sessions/switch", self._handle_session_switch)
+        self.app.router.add_get("/economics", self._handle_economics)
+        self.app.router.add_get("/skills", self._handle_skills)
+        self.app.router.add_get("/skills/{name}", self._handle_skill_playbook)
+        self.app.router.add_get("/plugins", self._handle_plugins)
+        self.app.router.add_get("/settings", self._handle_settings_get)
+        self.app.router.add_post("/settings", self._handle_settings_post)
+        self.app.router.add_post("/search/code", self._handle_search_code)
+        self.app.router.add_post("/media/upload", self._handle_media_upload)
+        self.app.router.add_get("/media/{filename}", self._handle_media_serve)
+        self.app.router.add_get("/tasks", self._handle_tasks)
+        self.app.router.add_get("/spawn-tree", self._handle_spawn_tree)
+
         # Static assets
+        assets_dir = self.static_dir / "assets"
+        if assets_dir.exists():
+            self.app.router.add_static("/assets", str(assets_dir), name="assets")
         if self.static_dir.exists():
             self.app.router.add_static("/static/", path=str(self.static_dir), name="static")
 
     async def _handle_index(self, request: web.Request) -> web.Response:
-        """Serves the studio index.html or minimal bootstrap container with token bootstrap."""
+        """Serves the rich studio index.html with tokens injected."""
         index_file = self.static_dir / "index.html"
         token_script = f"<script>window.__HARNESS_TOKEN__ = {json.dumps(self.auth_token)};</script>"
         if index_file.exists():
             html = index_file.read_text(encoding="utf-8")
+            html = html.replace("__HARNESS_TOKEN__", self.auth_token)
+            html = html.replace("__SANDBOX_PORT__", str(self.sandbox_port))
             if "</head>" in html:
                 html = html.replace("</head>", f"  {token_script}\n</head>", 1)
             else:
@@ -420,6 +456,507 @@ class HarnessWebServer:
         finally:
             if self._replay_sub:
                 self.bus.unsubscribe(self._replay_sub)
+
+    # --------------------------------------------------------------------------
+    # Rich Studio Handlers
+    # --------------------------------------------------------------------------
+
+    async def _handle_turn_stream(self, request: web.Request) -> web.StreamResponse:
+        """SSE streaming endpoint for live agent character output, thinking, and tools."""
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        prompt = body.get("prompt", "")
+        model = body.get("model")
+        mode = body.get("mode", "autonomous")
+
+        response = web.StreamResponse(
+            status=200,
+            headers={
+                "Content-Type": "text/event-stream",
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            },
+        )
+        await response.prepare(request)
+
+        async def send_sse(event_type: str, data: dict):
+            payload = json.dumps({"type": event_type, **data})
+            await response.write(f"data: {payload}\n\n".encode())
+
+        subscriber = self.bus.subscribe(interactive=True)
+
+        async def relay_bus_events():
+            try:
+                while True:
+                    evt = await subscriber.get()
+                    if evt.type == "model.delta":
+                        await send_sse("text_delta", {"delta": evt.data.get("delta", "")})
+                    elif evt.type == "model.thinking.delta":
+                        await send_sse("thinking_delta", {"delta": evt.data.get("delta", "")})
+                    elif evt.type == "tool.call":
+                        await send_sse("tool_call", {"call": evt.data})
+                    elif evt.type == "tool.result":
+                        await send_sse("tool_result", {"result": evt.data})
+                    elif evt.type == "turn.completed":
+                        break
+            except asyncio.CancelledError:
+                pass
+            finally:
+                self.bus.unsubscribe(subscriber)
+
+        relay_task = asyncio.create_task(relay_bus_events())
+
+        try:
+            await send_sse("turn_start", {"prompt": prompt, "mode": mode, "model": model})
+            session = self.commands.session_manager.active_session
+            session_id = session.session_id if session else None
+
+            result = await self.commands.submit_turn(
+                prompt=prompt,
+                session_id=session_id,
+                model=model,
+            )
+
+            await send_sse("turn_complete", {
+                "result": {
+                    "output": result.output if hasattr(result, "output") else str(result),
+                    "thinking": getattr(result, "thinking", ""),
+                    "tool_calls": getattr(result, "tool_calls", []),
+                }
+            })
+        except Exception as e:
+            await send_sse("turn_error", {"error": str(e)})
+        finally:
+            relay_task.cancel()
+            try:
+                await relay_task
+            except asyncio.CancelledError:
+                pass
+            await response.write_eof()
+
+        return response
+
+    async def _handle_turn_cancel(self, request: web.Request) -> web.Response:
+        """Cancels the active turn."""
+        try:
+            await self.commands.cancel_turn()
+            return web.json_response({"status": "cancelled"})
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
+    async def _handle_files(self, request: web.Request) -> web.Response:
+        """Returns workspace files tree for the Explorer view."""
+        files = []
+        for p in self.workspace.rglob("*"):
+            if any(part.startswith(".") for part in p.parts):
+                continue
+            if "__pycache__" in p.parts or "node_modules" in p.parts or "dist" in p.parts:
+                continue
+            if p.is_file():
+                try:
+                    rel = p.relative_to(self.workspace)
+                    files.append({
+                        "path": str(rel),
+                        "name": p.name,
+                        "size": p.stat().st_size,
+                        "ext": p.suffix,
+                    })
+                except (OSError, ValueError):
+                    continue
+        return web.json_response({"files": files[:150]})
+
+    async def _handle_file_content(self, request: web.Request) -> web.Response:
+        """Reads file content safely from workspace."""
+        rel_path = request.query.get("path", "").strip()
+        if not rel_path:
+            return web.json_response({"error": "Missing path parameter"}, status=400)
+
+        target = (self.workspace / rel_path).resolve()
+        ws_resolved = self.workspace.resolve()
+        try:
+            target.relative_to(ws_resolved)
+        except ValueError:
+            return web.json_response({"error": "Access denied: Path outside workspace"}, status=403)
+
+        if not target.exists() or not target.is_file():
+            return web.json_response({"error": f"File '{rel_path}' not found"}, status=404)
+
+        try:
+            content = target.read_text(encoding="utf-8", errors="replace")
+            lines = content.splitlines()
+            return web.json_response({
+                "path": rel_path,
+                "name": target.name,
+                "ext": target.suffix,
+                "lines_count": len(lines),
+                "size": target.stat().st_size,
+                "content": content,
+            })
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
+    async def _handle_file_save(self, request: web.Request) -> web.Response:
+        """Saves file content to workspace atomically."""
+        try:
+            body = await request.json()
+            rel_path = body.get("path", "").strip()
+            content = body.get("content", "")
+            if not rel_path:
+                return web.json_response({"error": "Missing path parameter"}, status=400)
+
+            target = (self.workspace / rel_path).resolve()
+            ws_resolved = self.workspace.resolve()
+            try:
+                target.relative_to(ws_resolved)
+            except ValueError:
+                return web.json_response({"error": "Access denied: Path outside workspace"}, status=403)
+
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+            return web.json_response({"status": "saved", "path": rel_path, "size": len(content)})
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
+    async def _handle_diffs(self, request: web.Request) -> web.Response:
+        """Returns workspace git diff for the Diff Studio view."""
+        try:
+            res = subprocess.run(
+                ["git", "diff", "HEAD"],
+                cwd=str(self.workspace),
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            raw_diff = res.stdout
+            if not raw_diff:
+                res_unstaged = subprocess.run(
+                    ["git", "diff"],
+                    cwd=str(self.workspace),
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                raw_diff = res_unstaged.stdout
+
+            lines = raw_diff.splitlines()
+            files_changed = []
+            for line in lines:
+                if line.startswith("diff --git a/"):
+                    parts = line.split()
+                    if len(parts) >= 4:
+                        files_changed.append(parts[2][2:])
+            return web.json_response({
+                "diff": raw_diff,
+                "modified_files": list(dict.fromkeys(files_changed)),
+                "has_diff": bool(raw_diff.strip()),
+            })
+        except Exception as e:
+            return web.json_response({"diff": "", "modified_files": [], "has_diff": False, "error": str(e)})
+
+    async def _handle_artifacts_list(self, request: web.Request) -> web.Response:
+        """Returns artifacts manifest."""
+        manifest: dict[str, Any] = {}
+        artifacts_dir = self.workspace / "artifacts"
+        if not artifacts_dir.exists():
+            artifacts_dir = self.workspace / ".harness" / "artifacts"
+        if artifacts_dir.exists():
+            for f in artifacts_dir.glob("*"):
+                if f.is_file() and not f.name.startswith("."):
+                    manifest[f.name] = {
+                        "name": f.name,
+                        "size": f.stat().st_size,
+                        "path": str(f),
+                        "ext": f.suffix,
+                    }
+        return web.json_response({"manifest": manifest})
+
+    async def _handle_get_artifact(self, request: web.Request) -> web.Response:
+        filename = request.match_info.get("filename", "")
+        artifacts_dir = self.workspace / "artifacts"
+        if not (artifacts_dir / filename).exists():
+            artifacts_dir = self.workspace / ".harness" / "artifacts"
+        target = artifacts_dir / filename
+        if not target.exists() or not target.is_file():
+            return web.Response(text="Artifact not found", status=404)
+        return web.FileResponse(target)
+
+    async def _handle_sessions_list(self, request: web.Request) -> web.Response:
+        sessions = self.commands.session_manager.list_sessions()
+        active = self.commands.session_manager.active_session
+        return web.json_response({
+            "active_session_id": active.session_id if active else None,
+            "sessions": [s.info.to_dict() for s in sessions],
+        })
+
+    async def _handle_session_get(self, request: web.Request) -> web.Response:
+        session_id = request.match_info.get("session_id", "")
+        session = self.commands.session_manager.get_session(session_id)
+        if not session:
+            return web.json_response({"error": "Session not found"}, status=404)
+        history = session.get_history()
+        return web.json_response({
+            "session_id": session_id,
+            "is_current": session == self.commands.session_manager.active_session,
+            "history": history,
+        })
+
+    async def _handle_session_new(self, request: web.Request) -> web.Response:
+        session = self.commands.session_manager.create_session()
+        return web.json_response({"status": "created", "session_id": session.session_id})
+
+    async def _handle_session_switch(self, request: web.Request) -> web.Response:
+        try:
+            body = await request.json()
+            sid = body.get("session_id")
+            if not sid:
+                return web.json_response({"error": "Missing session_id"}, status=400)
+            self.commands.session_manager.switch_session(sid)
+            return web.json_response({"status": "switched", "session_id": sid})
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=400)
+
+    async def _handle_economics(self, request: web.Request) -> web.Response:
+        session = self.commands.session_manager.active_session
+        spend_info = await self.commands.economics(session_id=session.session_id if session else None)
+        return web.json_response(spend_info)
+
+    async def _handle_skills(self, request: web.Request) -> web.Response:
+        skills = []
+        skills_dir = Path(__file__).resolve().parents[3] / "builtin" / "skills"
+        if skills_dir.exists():
+            for s in skills_dir.iterdir():
+                if s.is_dir():
+                    skill_md = s / "SKILL.md"
+                    desc = ""
+                    if skill_md.exists():
+                        lines = skill_md.read_text(encoding="utf-8", errors="replace").splitlines()
+                        for line in lines:
+                            if line.startswith("description:"):
+                                desc = line.split(":", 1)[1].strip().strip('"').strip("'")
+                                break
+                    skills.append({
+                        "name": s.name,
+                        "tier": "builtin",
+                        "description": desc or f"Skill: {s.name}",
+                        "path": str(s),
+                    })
+        return web.json_response({"skills": skills})
+
+    async def _handle_skill_playbook(self, request: web.Request) -> web.Response:
+        name = request.match_info.get("name", "")
+        skills_dir = Path(__file__).resolve().parents[3] / "builtin" / "skills"
+        skill_file = skills_dir / name / "SKILL.md"
+        if not skill_file.exists():
+            return web.Response(text="Skill not found", status=404)
+        return web.Response(text=skill_file.read_text(encoding="utf-8"), content_type="text/plain")
+
+    async def _handle_plugins(self, request: web.Request) -> web.Response:
+        plugins = []
+        for p in self.commands.registry.list_plugins():
+            plugins.append({
+                "name": p.name,
+                "version": p.version,
+                "description": p.description,
+                "enabled": p.enabled,
+                "kinds": p.provides_kinds,
+                "capabilities": p.capabilities,
+            })
+        return web.json_response({"plugins": plugins, "servers": {}, "tools": []})
+
+    def _settings_file(self) -> Path:
+        harness_dir = self.workspace / ".harness"
+        harness_dir.mkdir(parents=True, exist_ok=True)
+        return harness_dir / "settings.json"
+
+    def _get_cowork_settings(self) -> dict[str, Any]:
+        sf = self._settings_file()
+        stored = {}
+        if sf.exists():
+            try:
+                stored = json.loads(sf.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
+        defaults = {
+            "general": {
+                "theme": "dark",
+                "locale": "en-US",
+                "launch_at_login": False,
+                "keep_in_background": True,
+                "telemetry_enabled": False,
+            },
+            "account": {
+                "account_id": "00000000-0000-0000-0000-000000000000",
+                "email": "user@local.device",
+                "organization_id": "00000000-0000-0000-0000-000000000000",
+                "is_signed_in": True,
+                "keyring_status": "unlocked",
+            },
+            "cowork": {
+                "remote_control_enabled": True,
+                "cowork_user_files_path": str(self.workspace),
+                "trusted_folders": [str(self.workspace)],
+                "bypass_permissions_gate": False,
+                "ble_maker_enabled": False,
+            },
+            "capabilities": {
+                "web_search_enabled": True,
+                "browser_tools_enabled": True,
+                "preferred_browser": "built_in",
+                "allowed_sites": [
+                    f"127.0.0.1:{self.port}",
+                    f"127.0.0.1:{self.sandbox_port}",
+                ],
+                "network_sandbox_mode": "restricted",
+                "shell_execution_mode": "workspace_only",
+                "file_system_guard": "jail_active",
+            },
+            "memory": {
+                "vector_memory_enabled": True,
+                "sqlite_fts5_enabled": True,
+                "session_retention_days": 30,
+                "auto_summarize_threshold": 80,
+                "cross_session_context": True,
+            },
+            "reflect": {
+                "architect_evaluator_enabled": True,
+                "self_correction_passes": 2,
+                "lint_feedback_loop": True,
+                "git_commit_verification": True,
+                "failover_circuit_breaker": True,
+            },
+            "time_focus": {
+                "pomodoro_timer_minutes": 25,
+                "break_timer_minutes": 5,
+                "session_spend_cap_usd": 5.0,
+                "max_tool_iterations_per_turn": 30,
+                "turn_timeout_seconds": 180,
+            },
+            "claude_code": {
+                "auto_compact_context": True,
+                "prefix_invariance_caching": True,
+                "prompt_cache_ttl_minutes": 5,
+                "repomap_page_rank": True,
+                "token_budget_strategy": "adaptive",
+            },
+            "models": {
+                "default_provider": self.commands.settings.get("kernel.provider", "mock"),
+                "default_model": self.commands.settings.get("kernel.model", "mock-default"),
+                "temperature": 0.2,
+                "max_tokens": 4096,
+            },
+        }
+
+        for k, v in stored.items():
+            if isinstance(v, dict) and k in defaults and isinstance(defaults[k], dict):
+                defaults[k].update(v)
+            else:
+                defaults[k] = v
+        return defaults
+
+    async def _handle_settings_get(self, request: web.Request) -> web.Response:
+        settings = self._get_cowork_settings()
+        return web.json_response(settings)
+
+    async def _handle_settings_post(self, request: web.Request) -> web.Response:
+        try:
+            body = await request.json()
+            cur = self._get_cowork_settings()
+            for section in ("general", "account", "privacy", "billing", "capabilities",
+                            "memory", "reflect", "time_focus", "claude_code", "system",
+                            "extensions", "developer", "skills", "connectors", "plugins",
+                            "models", "security", "cowork"):
+                if section in body and isinstance(body[section], dict):
+                    if section not in cur:
+                        cur[section] = {}
+                    cur[section].update(body[section])
+
+            keys = body.get("api_keys")
+            if isinstance(keys, dict):
+                cur.setdefault("api_keys", {}).update({k: v for k, v in keys.items() if v})
+            provider = body.get("default_provider")
+            model = body.get("default_model")
+            if provider:
+                self.commands.settings.set("kernel.provider", provider)
+            if model:
+                self.commands.settings.set("kernel.model", model)
+
+            sf = self._settings_file()
+            sf.write_text(json.dumps(cur, indent=2), encoding="utf-8")
+            return web.json_response({"status": "saved", "settings": cur, "active_provider": provider})
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=400)
+
+    async def _handle_search_code(self, request: web.Request) -> web.Response:
+        try:
+            body = await request.json()
+            query = body.get("query", "").strip()
+            if not query:
+                return web.json_response({"results": [], "query": ""})
+            res = subprocess.run(
+                ["grep", "-rnI", "--exclude-dir=.git", "--exclude-dir=__pycache__", "--exclude-dir=.venv", "-m", "50", query, "."],
+                cwd=str(self.workspace),
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            results = []
+            for line in res.stdout.splitlines()[:50]:
+                parts = line.split(":", 2)
+                if len(parts) >= 3:
+                    results.append({
+                        "file": parts[0].removeprefix("./"),
+                        "line": int(parts[1]) if parts[1].isdigit() else 1,
+                        "text": parts[2].strip(),
+                    })
+            return web.json_response({"results": results, "query": query})
+        except Exception as e:
+            return web.json_response({"results": [], "error": str(e)})
+
+    async def _handle_media_upload(self, request: web.Request) -> web.Response:
+        """Uploads media (images, files) into active session media store."""
+        media_dir = self.workspace / ".harness" / "media"
+        media_dir.mkdir(parents=True, exist_ok=True)
+        uploaded = []
+        if request.content_type.startswith("multipart/"):
+            reader = await request.multipart()
+            while True:
+                field = await reader.next()
+                if field is None:
+                    break
+                if field.filename:
+                    safe_name = f"{uuid.uuid4().hex[:6]}_{Path(field.filename).name.replace(' ', '_')}"
+                    dest = media_dir / safe_name
+                    size = 0
+                    with open(dest, "wb") as f:
+                        while True:
+                            chunk = await field.read_chunk()
+                            if not chunk:
+                                break
+                            size += len(chunk)
+                            f.write(chunk)
+                    uploaded.append({
+                        "filename": safe_name,
+                        "url": f"/media/{safe_name}",
+                        "mime_type": field.headers.get("Content-Type", "application/octet-stream"),
+                        "size": size,
+                    })
+        return web.json_response({"uploaded": uploaded, "status": "ok"})
+
+    async def _handle_media_serve(self, request: web.Request) -> web.Response:
+        filename = request.match_info.get("filename", "")
+        target = self.workspace / ".harness" / "media" / filename
+        if not target.exists() or not target.is_file():
+            return web.Response(text="Media not found", status=404)
+        return web.FileResponse(target)
+
+    async def _handle_spawn_tree(self, request: web.Request) -> web.Response:
+        return web.json_response({"tree": []})
+
+    async def _handle_tasks(self, request: web.Request) -> web.Response:
+        return web.json_response({"tasks": []})
 
     # --------------------------------------------------------------------------
     # Lifecycle & daemon.json Management
