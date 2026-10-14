@@ -1,6 +1,6 @@
 """
 Interactive CLI and TUI for Harness-Zero.
-Supports interactive pair programming, one-shot turns, slash commands, and daemon mode.
+Supports interactive pair programming, one-shot turns, slash commands, and plugin management.
 """
 from __future__ import annotations
 
@@ -18,11 +18,8 @@ from rich.panel import Panel
 from rich.table import Table
 
 from harness import __version__
-from harness.core.coordinator import AgentCoordinator
-from harness.core.daemon import HarnessDaemon
 from harness.frontends.cli import CliApp
 from harness.kernel.bootstrap import bootstrap_kernel
-from harness.models.router import ModelRouter
 
 console = Console()
 
@@ -41,7 +38,7 @@ def main(ctx: click.Context):
 @click.option("--workspace", "-w", default=".", help="Workspace path")
 @click.option("--provider", "-p", default=None, help="Model provider (openai, anthropic, gemini, local, mock)")
 @click.option("--model", "-m", default=None, help="Model name")
-@click.option("--kernel", is_flag=True, default=False, help="Use modular kernel runtime")
+@click.option("--kernel", is_flag=True, default=True, help="Use modular kernel runtime (default: True)")
 @click.option("--verbose", "-v", is_flag=True, default=False, help="Verbose logging")
 @click.option("--log-file", default=None, help="Log file path")
 def run(
@@ -53,11 +50,8 @@ def run(
     verbose: bool,
     log_file: str | None,
 ):
-    """Execute a single autonomous turn."""
-    if kernel:
-        asyncio.run(_run_kernel_turn(prompt, Path(workspace), provider, model, verbose, log_file))
-    else:
-        asyncio.run(_run_single_turn(prompt, Path(workspace), provider, model))
+    """Execute a single autonomous turn via modular kernel."""
+    asyncio.run(_run_kernel_turn(prompt, Path(workspace), provider, model, verbose, log_file))
 
 
 async def _run_kernel_turn(
@@ -88,34 +82,11 @@ async def _run_kernel_turn(
         console.print(f"[bold red]Kernel execution error: {e}[/bold red]")
 
 
-async def _run_single_turn(prompt: str, workspace: Path, provider: str | None, model: str | None):
-    kwargs = {}
-    if provider is not None:
-        kwargs["default_provider"] = provider
-    if model is not None:
-        kwargs["default_model"] = model
-    router = ModelRouter(**kwargs)
-    coordinator = AgentCoordinator(workspace=workspace, router=router)
-
-    console.print(
-        Panel(
-            f"[bold cyan]User Prompt:[/bold cyan] {prompt}",
-            title="[bold green]Harness-Zero[/bold green]",
-            border_style="cyan",
-        )
-    )
-
-    with console.status("[bold green]Agent executing turn...[/bold green]", spinner="dots"):
-        result = await coordinator.execute_turn(prompt, provider=provider, model=model)
-
-    console.print(Panel(Markdown(result.output), title="[bold magenta]Agent Response[/bold magenta]", border_style="green"))
-
-
 @main.command()
 @click.option("--workspace", "-w", default=".", help="Workspace path")
 @click.option("--provider", "-p", default=None, help="Model provider")
 @click.option("--model", "-m", default=None, help="Model name")
-@click.option("--kernel", is_flag=True, default=False, help="Use modular kernel runtime")
+@click.option("--kernel", is_flag=True, default=True, help="Use modular kernel runtime (default: True)")
 @click.option("--verbose", "-v", is_flag=True, default=False, help="Verbose logging")
 @click.option("--log-file", default=None, help="Log file path")
 def interactive(
@@ -127,10 +98,7 @@ def interactive(
     log_file: str | None,
 ):
     """Start an interactive pair-programming session with slash commands."""
-    if kernel:
-        asyncio.run(_run_kernel_interactive(Path(workspace), provider, model, verbose, log_file))
-    else:
-        asyncio.run(_run_interactive(Path(workspace), provider, model))
+    asyncio.run(_run_kernel_interactive(Path(workspace), provider, model, verbose, log_file))
 
 
 async def _run_kernel_interactive(
@@ -157,134 +125,6 @@ async def _run_kernel_interactive(
         console.print(f"[bold red]Kernel interactive session error: {e}[/bold red]")
 
 
-async def _run_interactive(workspace: Path, initial_provider: str | None, initial_model: str | None):
-    kwargs = {}
-    if initial_provider is not None:
-        kwargs["default_provider"] = initial_provider
-    if initial_model is not None:
-        kwargs["default_model"] = initial_model
-    router = ModelRouter(**kwargs)
-    current_provider = router.default_provider
-    current_model = router.default_model
-    coordinator = AgentCoordinator(workspace=workspace, router=router)
-
-    console.print(
-        Panel(
-            f"[bold cyan]Harness-Zero v{__version__}[/bold cyan]\n"
-            f"Workspace: [yellow]{coordinator.workspace}[/yellow]\n"
-            f"Active Provider: [green]{current_provider}[/green] | Model: [green]{current_model}[/green]\n"
-            f"Installed Skills: [magenta]{len(coordinator.skills.skills)}[/magenta]\n\n"
-            f"Type [bold]/help[/bold] for commands or enter your prompt below.",
-            title="[bold green]Sovereign Agent Engine[/bold green]",
-            border_style="bright_blue",
-        )
-    )
-
-    while True:
-        try:
-            user_input = console.input("[bold blue]harness>[/bold blue] ").strip()
-        except (KeyboardInterrupt, EOFError):
-            console.print("\n[yellow]Exiting Harness-Zero session.[/yellow]")
-            break
-
-        if not user_input:
-            continue
-
-        if user_input in ("/exit", "/quit"):
-            console.print("[yellow]Exiting Harness-Zero session.[/yellow]")
-            break
-
-        elif user_input == "/help":
-            table = Table(title="Available Slash Commands")
-            table.add_column("Command", style="cyan")
-            table.add_column("Description", style="white")
-            table.add_row("/skills", "List progressively discovered skills")
-            table.add_row("/model <prov> <mdl>", "Switch active model and provider")
-            table.add_row("/search <query>", "Instant search past turns with SQLite FTS5")
-            table.add_row("/tasks", "List background tasks")
-            table.add_row("/status", "Display session stats and transcript paths")
-            table.add_row("/help", "Display this help menu")
-            table.add_row("/exit", "Exit session")
-            console.print(table)
-            continue
-
-        elif user_input == "/skills":
-            table = Table(title="Installed Progressive Skills")
-            table.add_column("Name", style="cyan")
-            table.add_column("Tier", style="green")
-            table.add_column("Description", style="white")
-            for s in coordinator.skills.list_skills():
-                table.add_row(s.name, s.tier, s.description)
-            console.print(table)
-            continue
-
-        elif user_input.startswith("/model"):
-            parts = user_input.split()
-            if len(parts) >= 3:
-                current_provider = parts[1]
-                current_model = parts[2]
-                console.print(f"[green]Switched model to provider '{current_provider}' and model '{current_model}'[/green]")
-            else:
-                console.print(f"[yellow]Current model: {current_provider}:{current_model}. Usage: /model <provider> <model>[/yellow]")
-            continue
-
-        elif user_input.startswith("/search"):
-            query = user_input[7:].strip()
-            results = coordinator.memory.search(query)
-            if not results:
-                console.print("[yellow]No memory matches found.[/yellow]")
-            else:
-                table = Table(title=f"Memory Search Results for '{query}'")
-                table.add_column("Step", style="cyan")
-                table.add_column("Snippet", style="white")
-                table.add_column("Rank", style="green")
-                for r in results:
-                    table.add_row(str(r.step_index), r.snippet, f"{r.rank:.2f}")
-                console.print(table)
-            continue
-
-        elif user_input == "/tasks":
-            tasks = coordinator.executor.list_tasks()
-            if not tasks:
-                console.print("[yellow]No background tasks currently tracked.[/yellow]")
-            else:
-                table = Table(title="Background Tasks")
-                table.add_column("Task ID", style="cyan")
-                table.add_column("Status", style="green")
-                table.add_column("Command", style="white")
-                for t in tasks:
-                    table.add_row(t["task_id"], t["status"], t["command"])
-                console.print(table)
-            continue
-
-        elif user_input == "/status":
-            console.print(
-                Panel(
-                    f"Session ID: {coordinator.session_id}\n"
-                    f"Session Dir: {coordinator.session_dir}\n"
-                    f"Step Count: {coordinator.transcripts.step_counter}\n"
-                    f"Full Log: {coordinator.transcripts.full_file}\n"
-                    f"Compact Log: {coordinator.transcripts.compact_file}\n"
-                    f"Memory DB: {coordinator.memory.db_path}",
-                    title="Session Status",
-                    border_style="magenta",
-                )
-            )
-            continue
-
-        # Standard Agent Turn
-        with console.status("[bold green]Agent thinking and executing tools...[/bold green]", spinner="dots"):
-            try:
-                response = await coordinator.execute_turn(
-                    user_input,
-                    provider=current_provider,
-                    model=current_model,
-                )
-                console.print(Panel(Markdown(response.output), title="[bold magenta]Agent Response[/bold magenta]", border_style="green"))
-            except Exception as e:
-                console.print(f"[bold red]Error executing turn: {e}[/bold red]")
-
-
 @main.command()
 @click.option("--workspace", "-w", default=".", help="Workspace path")
 @click.option("--port", "-p", default=8000, help="HTTP port")
@@ -293,34 +133,13 @@ async def _run_interactive(workspace: Path, initial_provider: str | None, initia
 @click.option("--allow-host", "-a", multiple=True, help="Allowed Host header hostnames (repeatable)")
 def daemon(workspace: str, port: int, sandbox_port: int, host: str, allow_host: tuple[str, ...]):
     """Run the background daemon IPC server."""
-    asyncio.run(_run_daemon(Path(workspace), host, port, sandbox_port, list(allow_host)))
-
-
-async def _run_daemon(
-    workspace: Path,
-    host: str,
-    port: int,
-    sandbox_port: int = 8001,
-    allowed_hosts: list[str] | None = None,
-):
-    coordinator = AgentCoordinator(workspace=workspace)
-    d = HarnessDaemon(
-        coordinator=coordinator,
-        host=host,
-        port=port,
-        sandbox_port=sandbox_port,
-        allowed_hosts=allowed_hosts,
-    )
-    api_runner, sandbox_runner = await d.start()
-    console.print(f"[bold green]Starting Harness-Zero daemon on http://{host}:{d.port}...[/bold green]")
-    try:
-        while True:
-            await asyncio.sleep(3600)
-    except (KeyboardInterrupt, asyncio.CancelledError):
-        console.print("[yellow]Stopping daemon...[/yellow]")
-        d.cleanup_daemon_json()
-        await api_runner.cleanup()
-        await sandbox_runner.cleanup()
+    console.print(Panel(
+        "[yellow]Harness-Zero daemon server is unavailable during modular kernel cutover.\n"
+        "Web and daemon frontends are being rebuilt in Phase 4 (WEB-01).\n"
+        "Please use [bold]harness interactive[/bold] or [bold]harness run[/bold].[/yellow]",
+        title="[bold yellow]Migration Notice[/bold yellow]",
+        border_style="yellow",
+    ))
 
 
 @main.command()
@@ -360,46 +179,14 @@ def url(workspace: str):
 @click.option("--allow-host", "-a", multiple=True, help="Allowed Host header hostnames (repeatable)")
 @click.option("--no-open", is_flag=True, help="Don't open browser automatically")
 def ui(workspace: str, port: int, sandbox_port: int, host: str, allow_host: tuple[str, ...], no_open: bool):
-    """Launch the full-featured Sovereign Agent Studio Web UI."""
-    asyncio.run(_run_ui(Path(workspace), host, port, sandbox_port, list(allow_host), not no_open))
-
-
-async def _run_ui(
-    workspace: Path,
-    host: str,
-    port: int,
-    sandbox_port: int,
-    allowed_hosts: list[str] | None,
-    open_browser: bool,
-):
-    import webbrowser
-    coordinator = AgentCoordinator(workspace=workspace)
-    d = HarnessDaemon(
-        coordinator=coordinator,
-        host=host,
-        port=port,
-        sandbox_port=sandbox_port,
-        allowed_hosts=allowed_hosts,
-    )
-    api_runner, sandbox_runner = await d.start()
+    """Launch the Sovereign Agent Studio Web UI."""
     console.print(Panel(
-        f"[bold green]Harness-Zero Sovereign Agent Studio[/bold green]\n\n"
-        f"• Core UI & API: [bold cyan]http://{host}:{d.port}/[/bold cyan]\n"
-        f"• SOP Preview Sandbox: [bold magenta]http://{host}:{d.sandbox_port}/[/bold magenta]\n"
-        f"• Workspace: [yellow]{coordinator.workspace}[/yellow]\n",
-        title="[bold green]UI Online[/bold green]",
-        border_style="green",
+        "[yellow]Harness-Zero Sovereign Agent Studio is unavailable during modular kernel cutover.\n"
+        "Web and daemon frontends are being rebuilt in Phase 4 (WEB-01).\n"
+        "Please use [bold]harness interactive[/bold] or [bold]harness run[/bold].[/yellow]",
+        title="[bold yellow]Migration Notice[/bold yellow]",
+        border_style="yellow",
     ))
-    if open_browser:
-        webbrowser.open(f"http://{host}:{d.port}/")
-    try:
-        while True:
-            await asyncio.sleep(3600)
-    except (KeyboardInterrupt, asyncio.CancelledError):
-        console.print("[yellow]Stopping UI Studio...[/yellow]")
-        d.cleanup_daemon_json()
-        await api_runner.cleanup()
-        await sandbox_runner.cleanup()
 
 
 @main.group()

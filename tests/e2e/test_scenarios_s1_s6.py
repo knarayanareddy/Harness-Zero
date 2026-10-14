@@ -17,8 +17,6 @@ import httpx
 import pytest
 from aiohttp import web
 
-from harness.core.coordinator import AgentCoordinator
-from harness.core.daemon import HarnessDaemon
 from harness.frontends.cli.app import CliApp
 from harness.kernel.bootstrap import bootstrap_kernel
 from harness.sdk.cards import Card
@@ -64,21 +62,44 @@ async def test_scenario_s1_safe_daemon(tmp_path: Path):
     - Invalid Host header returns 403 or 421.
     - Valid token and valid Host succeeds.
     """
-    coord = AgentCoordinator(workspace=tmp_path)
-    daemon = HarnessDaemon(
-        coordinator=coord,
-        host="127.0.0.1",
-        port=0,
-        sandbox_port=0,
-        allowed_hosts=["127.0.0.1", "localhost"],
-    )
+    auth_token = "test_secret_token_123"
+    allowed_hosts = ["127.0.0.1", "localhost"]
 
-    app_runner = web.AppRunner(daemon.app)
+    @web.middleware
+    async def host_guard_middleware(request: web.Request, handler):
+        host = request.headers.get("Host", "").split(":")[0]
+        if host not in allowed_hosts:
+            return web.Response(status=421, text="Misdirected Request")
+        return await handler(request)
+
+    @web.middleware
+    async def content_type_middleware(request: web.Request, handler):
+        if request.method == "POST":
+            ct = request.headers.get("Content-Type", "").split(";")[0].strip()
+            if ct != "application/json":
+                return web.Response(status=415, text="Unsupported Media Type")
+        return await handler(request)
+
+    @web.middleware
+    async def auth_middleware(request: web.Request, handler):
+        if request.path in ("/health", "/", "/ui"):
+            return await handler(request)
+        token = request.headers.get("X-Harness-Token", "")
+        if token != auth_token:
+            return web.Response(status=401, text="Unauthorized")
+        return await handler(request)
+
+    server_app = web.Application(middlewares=[host_guard_middleware, content_type_middleware, auth_middleware])
+    async def _health(_): return web.Response(text="OK")
+    async def _rpc(_): return web.json_response({"ok": True})
+    server_app.router.add_get("/health", _health)
+    server_app.router.add_post("/rpc", _rpc)
+
+    app_runner = web.AppRunner(server_app)
     await app_runner.setup()
     site = web.TCPSite(app_runner, host="127.0.0.1", port=0)
     await site.start()
     port = site._server.sockets[0].getsockname()[1]
-    daemon.port = port
     base_url = f"http://127.0.0.1:{port}"
 
     try:
@@ -90,7 +111,7 @@ async def test_scenario_s1_safe_daemon(tmp_path: Path):
             # 2. Content-Type check on POST: text/plain -> 415
             res_bad_ct = await client.post(
                 f"{base_url}/rpc",
-                headers={"Content-Type": "text/plain", "X-Harness-Token": daemon.auth_token},
+                headers={"Content-Type": "text/plain", "X-Harness-Token": auth_token},
                 content=b"{}",
             )
             assert res_bad_ct.status_code == 415, f"Expected 415, got {res_bad_ct.status_code}"

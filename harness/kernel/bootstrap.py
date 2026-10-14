@@ -4,6 +4,7 @@ Kernel Bootstrap: wires together the modular kernel runtime and returns Commands
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -48,7 +49,9 @@ async def bootstrap_kernel(
     PolicyGate -> SessionManager -> ContextAssembler -> Compactor -> TurnRunner -> Commands.
     """
     ws = Path(workspace).resolve()
-    conf = Path(config_dir).resolve() if config_dir else (Path.home() / ".harness")
+    env_cfg = os.environ.get("HARNESS_CONFIG_DIR")
+    default_cfg = Path(env_cfg) if env_cfg else (Path.home() / ".harness")
+    conf = Path(config_dir).resolve() if config_dir else default_cfg.resolve()
     conf.mkdir(parents=True, exist_ok=True)
 
     if log_file:

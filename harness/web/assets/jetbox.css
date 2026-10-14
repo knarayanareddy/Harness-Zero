@@ -953,10 +953,10 @@
      COORDINATOR TOKENS
      ============================================ */
 
-  --sdk-coordinator-breakpoint-hide-panels: 800;
-  --sdk-coordinator-breakpoint-hide-comments: 600;
-  --sdk-coordinator-viewport-min-width: 420;
-  --sdk-coordinator-scrollbar-width: 48;
+  --sdk-panel_layout-breakpoint-hide-panels: 800;
+  --sdk-panel_layout-breakpoint-hide-comments: 600;
+  --sdk-panel_layout-viewport-min-width: 420;
+  --sdk-panel_layout-scrollbar-width: 48;
 
   /* ============================================
      RESPONSIVE TOKENS VIA CONTAINER QUERIES
@@ -974,7 +974,7 @@
       --sdk-thumbnail-gap: 8px;
       --sdk-scrollbar-width: 48px;
       --sdk-scrollbar-track-width: 28px;
-      --sdk-coordinator-scrollbar-width: 48;
+      --sdk-panel_layout-scrollbar-width: 48;
     }
   }
 
@@ -991,7 +991,7 @@
       --sdk-thumbnail-gap: 8px;
       --sdk-scrollbar-width: 48px;
       --sdk-scrollbar-track-width: 28px;
-      --sdk-coordinator-scrollbar-width: 48;
+      --sdk-panel_layout-scrollbar-width: 48;
     }
   }
 
@@ -1008,7 +1008,7 @@
       --sdk-thumbnail-gap: 10px;
       --sdk-scrollbar-width: 52px;
       --sdk-scrollbar-track-width: 30px;
-      --sdk-coordinator-scrollbar-width: 52;
+      --sdk-panel_layout-scrollbar-width: 52;
     }
   }
 
@@ -1028,7 +1028,7 @@
       --sdk-scrollbar-track-width: 32px;
       --sdk-scrollbar-btn-height: 28px;
       --sdk-scrollbar-btn-icon-size: 16px;
-      --sdk-coordinator-scrollbar-width: 56;
+      --sdk-panel_layout-scrollbar-width: 56;
     }
   }
 
@@ -1045,7 +1045,7 @@
       --sdk-thumbnail-gap: 12px;
       --sdk-scrollbar-width: 60px;
       --sdk-scrollbar-track-width: 34px;
-      --sdk-coordinator-scrollbar-width: 60;
+      --sdk-panel_layout-scrollbar-width: 60;
     }
   }
 }
@@ -2706,7 +2706,7 @@ canvas.hiddenCanvasElement {
 /**
  * Document Comments Panel Styles
  *
- * Width uses clamp() matching JS coordinator formula:
+ * Width uses clamp() matching JS panel_layout formula:
  *   calcPanelWidth(containerWidth, { percentage:22, min:150, max:300 })
  *   clamp(150px, 22cqi, 300px) produces same result.
  *
