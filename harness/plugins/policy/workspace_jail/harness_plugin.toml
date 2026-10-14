@@ -1,0 +1,8 @@
+[plugin]
+name = "policy-workspace-jail"
+version = "1.0.0"
+api_version = "1"
+summary = "Workspace jail policy denying path traversal outside the active workspace"
+provides = ["policy"]
+capabilities = ["fs:read"]
+entry = "harness.plugins.policy.workspace_jail.plugin:WorkspaceJailPlugin"

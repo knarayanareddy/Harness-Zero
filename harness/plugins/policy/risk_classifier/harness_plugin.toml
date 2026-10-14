@@ -1,0 +1,8 @@
+[plugin]
+name = "policy-risk-classifier"
+version = "1.0.0"
+api_version = "1"
+summary = "Risk classifier policy raising risk level for dangerous and destructive commands"
+provides = ["policy"]
+capabilities = []
+entry = "harness.plugins.policy.risk_classifier.plugin:RiskClassifierPlugin"

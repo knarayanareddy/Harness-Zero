@@ -1,0 +1,8 @@
+[plugin]
+name = "policy-permission-modes"
+version = "1.0.0"
+api_version = "1"
+summary = "Permission modes policy implementing plan, ask, allow, and bypass modes"
+provides = ["policy"]
+capabilities = []
+entry = "harness.plugins.policy.permission_modes.plugin:PermissionModesPlugin"
