@@ -1,0 +1,8 @@
+[plugin]
+name = "store-fs-artifacts"
+version = "1.0.0"
+api_version = "1"
+summary = "Filesystem-backed artifact storage with traversal protection and manifest tracking"
+provides = ["store"]
+capabilities = []
+entry = "harness.plugins.stores.fs_artifacts.plugin:FsArtifactsPlugin"

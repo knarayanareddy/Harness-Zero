@@ -1,0 +1,8 @@
+[plugin]
+name = "tool-artifacts"
+version = "1.0.0"
+api_version = "1"
+summary = "Tools for creating markdown and HTML artifacts with manifest tracking and card generation"
+provides = ["tool"]
+capabilities = ["fs:write"]
+entry = "harness.plugins.tools.artifacts.plugin:ArtifactsToolPlugin"

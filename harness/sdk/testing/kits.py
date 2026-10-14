@@ -14,6 +14,7 @@ from typing import Any
 
 from harness.sdk.cards import Card
 from harness.sdk.contracts import (
+    ArtifactStore,
     ContextSource,
     Executor,
     Hook,
@@ -256,6 +257,27 @@ class StoreKit:
 
         records = await store.read(since_step=idx)
         assert any(r.get("content") == "Conformance store test prompt" for r in records)
+
+    async def test_artifact_store_round_trip(self, store: ArtifactStore) -> None:
+        """ArtifactStore must write, read, and list artifacts accurately."""
+        meta = await store.write(
+            "test_doc.md",
+            "# Hello Artifact",
+            media_type="text/markdown",
+            meta={"summary": "Demo", "user_facing": True, "request_feedback": False},
+        )
+        assert meta["name"] == "test_doc.md"
+        assert meta["media_type"] == "text/markdown"
+        assert meta["summary"] == "Demo"
+        assert meta["user_facing"] is True
+        assert meta["bytes"] == len(b"# Hello Artifact")
+
+        content, read_meta = await store.read("test_doc.md")
+        assert content == b"# Hello Artifact"
+        assert read_meta["name"] == "test_doc.md"
+
+        items = await store.list()
+        assert any(item["name"] == "test_doc.md" for item in items)
 
 
 class StrategyKit:
