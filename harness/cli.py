@@ -259,6 +259,123 @@ def plugin_new(name: str, kind: str, target_dir: str | None, summary: str):
         sys.exit(1)
 
 
+@plugin.command(name="test")
+@click.argument("target", required=False, default=None)
+@click.option("--all", "all_plugins", is_flag=True, help="Test all builtin plugins")
+@click.option("--live", is_flag=True, help="Run live model tests (opt-in)")
+def plugin_test(target: str | None, all_plugins: bool, live: bool):
+    """Run conformance tests for a plugin or all plugins."""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    env = os.environ.copy()
+    if live:
+        env["HARNESS_LIVE"] = "1"
+    else:
+        env["HARNESS_LIVE"] = "0"
+
+    test_paths: list[str] = []
+
+    if all_plugins:
+        test_paths.append("tests/plugins")
+    elif target:
+        tp = Path(target).resolve()
+        if tp.is_dir():
+            if (tp / "tests").exists():
+                test_paths.append(str(tp / "tests"))
+            else:
+                test_paths.append(str(tp))
+        elif tp.is_file():
+            test_paths.append(str(tp))
+        else:
+            # Maybe a plugin name, e.g. "fs" or "anthropic"
+            matched = list(Path("tests/plugins").glob(f"*{target}*.py"))
+            if matched:
+                test_paths.extend(str(m) for m in matched)
+            else:
+                console.print(f"[bold red]Target '{target}' not found as file, directory, or test suite.[/bold red]")
+                sys.exit(1)
+    else:
+        if Path("tests").exists():
+            test_paths.append("tests")
+        else:
+            test_paths.append("tests/plugins")
+
+    console.print(f"[bold cyan]Running plugin conformance tests for:[/bold cyan] {', '.join(test_paths)}")
+    cmd = [sys.executable, "-m", "pytest", "-q"] + test_paths
+    res = subprocess.run(cmd, env=env)
+    if res.returncode == 0:
+        console.print("[bold green]✓ All plugin conformance tests passed.[/bold green]")
+    else:
+        console.print("[bold red]✗ Conformance tests failed.[/bold red]")
+        sys.exit(res.returncode)
+
+
+@plugin.command(name="doctor")
+@click.argument("target", required=False, default=None)
+@click.option("--all", "all_plugins", is_flag=True, help="Diagnose all discovered plugins")
+@click.option("--workspace", "-w", default=".", help="Workspace path")
+def plugin_doctor(target: str | None, all_plugins: bool, workspace: str):
+    """Diagnose plugin manifests, import boundaries, capabilities, and schemas."""
+    import sys
+    from pathlib import Path
+
+    from harness.sdk.doctor import diagnose_plugin
+
+    plugins_to_check: list[Path] = []
+
+    if all_plugins:
+        builtin_root = Path(__file__).resolve().parent / "plugins"
+        if builtin_root.exists():
+            for mf in sorted(builtin_root.rglob("harness_plugin.toml")):
+                plugins_to_check.append(mf.parent)
+    elif target:
+        tp = Path(target).resolve()
+        if tp.exists():
+            plugins_to_check.append(tp if tp.is_dir() else tp.parent)
+        else:
+            builtin_root = Path(__file__).resolve().parent / "plugins"
+            matched = [mf.parent for mf in sorted(builtin_root.rglob("harness_plugin.toml")) if target in mf.parent.name]
+            if matched:
+                plugins_to_check.extend(matched)
+            else:
+                console.print(f"[bold red]Plugin target '{target}' not found.[/bold red]")
+                sys.exit(1)
+    else:
+        plugins_to_check.append(Path.cwd())
+
+    has_errors = False
+    for p_dir in plugins_to_check:
+        report = diagnose_plugin(p_dir)
+        status_color = "green" if report.passed else "red"
+        status_icon = "✓" if report.passed else "✗"
+        console.print(f"\n[bold {status_color}]{status_icon} Diagnostic Report for {report.plugin_name}[/bold {status_color}] ([dim]{report.plugin_path}[/dim])")
+
+        table = Table(box=None, padding=(0, 2))
+        table.add_column("Category", style="cyan")
+        table.add_column("Status", style="bold")
+        table.add_column("Message")
+
+        for check in report.checks:
+            icon = "✓" if check.status == "OK" else ("⚠" if check.status == "WARN" else "✗")
+            color = "green" if check.status == "OK" else ("yellow" if check.status == "WARN" else "red")
+            table.add_row(check.category, f"[{color}]{icon} {check.status}[/{color}]", check.message)
+            if check.details:
+                table.add_row("", "", f"[dim]{check.details}[/dim]")
+
+        console.print(table)
+        if not report.passed:
+            has_errors = True
+
+    if has_errors:
+        console.print("\n[bold red]Plugin doctor detected errors that must be resolved.[/bold red]")
+        sys.exit(1)
+    else:
+        console.print("\n[bold green]✓ Plugin doctor checks passed cleanly.[/bold green]")
+
+
 @plugin.command(name="list")
 @click.option("--workspace", "-w", default=".", help="Workspace path")
 def plugin_list(workspace: str):

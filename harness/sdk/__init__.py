@@ -30,6 +30,7 @@ from harness.sdk.contracts import (
     ToolHandler,
     TranscriptStore,
 )
+from harness.sdk.doctor import DiagnosticCheck, DoctorReport, diagnose_plugin
 from harness.sdk.errors import (
     ApprovalDenied,
     CapabilityDenied,
@@ -182,4 +183,7 @@ __all__ = [
     "events_schema",
     # Tooling
     "scaffold_plugin",
+    "diagnose_plugin",
+    "DoctorReport",
+    "DiagnosticCheck",
 ]
