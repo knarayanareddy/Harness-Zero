@@ -1,0 +1,8 @@
+[plugin]
+name = "fs-tools"
+version = "1.0.0"
+api_version = "1"
+summary = "Filesystem inspection, write, and surgical search/replace editing tools"
+provides = ["tool"]
+capabilities = ["fs:read", "fs:write"]
+entry = "harness.plugins.tools.fs.plugin:FsToolsPlugin"
