@@ -325,6 +325,19 @@ def mcp(workspace: str):
     asyncio.run(_run())
 
 
+@main.command()
+@click.option("--workspace", "-w", default=".", help="Workspace path")
+def acp(workspace: str):
+    """Run Harness as an Agent Client Protocol stdio server for IDE editors."""
+    from harness.plugins.bridges.acp.server import run_acp_server_from_stdio
+
+    async def _run():
+        runtime = await bootstrap_kernel(workspace=workspace)
+        await run_acp_server_from_stdio(commands=runtime.commands, bus=runtime.bus)
+
+    asyncio.run(_run())
+
+
 if __name__ == "__main__":
     main()
 

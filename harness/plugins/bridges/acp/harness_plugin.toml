@@ -1,0 +1,8 @@
+[plugin]
+name = "bridge-acp"
+version = "1.0.0"
+api_version = "1"
+summary = "Agent Client Protocol frontend bridge over stdio for IDE and editor integrations"
+provides = ["bridge"]
+capabilities = ["exec"]
+entry = "harness.plugins.bridges.acp.plugin:ACPBridgePlugin"
