@@ -20,6 +20,7 @@ from harness.sdk.types import (
     ImageBlock,
     Message,
     ModelRequest,
+    Role,
     TextBlock,
     ThinkingBlock,
     ToolResultBlock,
@@ -194,3 +195,50 @@ class Compactor:
             )
 
         return summary
+
+    async def maybe_compact(
+        self,
+        session_id: str,
+        blocks: list[Any],
+        records: list[Any] | None = None,
+        provider: Any = None,
+        model: str = "",
+        bus: EventBus | None = None,
+    ) -> bool:
+        """
+        Checks if estimated tokens exceed threshold and performs compaction if needed.
+        Returns True if compaction was performed, False otherwise.
+        """
+        budget = self.settings.get("kernel.context.budget_tokens", 60000)
+        threshold = budget * 0.8
+        tokens = estimate_tokens(blocks)
+        if tokens <= threshold:
+            return False
+
+        if not provider:
+            return False
+
+        async def _summarize(system_prompt: str, user_prompt: str) -> str:
+            from harness.sdk.types import ModelRequest, Role, TextBlock, TextDelta
+            mreq = ModelRequest(
+                model=model,
+                system=[TextBlock(text=system_prompt)],
+                messages=[Message(role=Role.USER, content=[TextBlock(text=user_prompt)])],
+                tools=[],
+            )
+            chunks = []
+            async for ev in provider.generate(mreq):
+                if isinstance(ev, TextDelta):
+                    chunks.append(ev.text)
+            return "".join(chunks)
+
+        msgs: list[Message] = []
+        for b in blocks:
+            if isinstance(b, Message):
+                msgs.append(b)
+            elif isinstance(b, TextBlock):
+                msgs.append(Message(role=Role.USER, content=[b]))
+
+        await self.compact(session_id, msgs, _summarize)
+        return True
+

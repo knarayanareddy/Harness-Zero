@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 
+from harness.sdk.cards import Card
 from harness.sdk.context import KernelServices, TurnContext
 from harness.sdk.types import (
     Message,
@@ -40,6 +41,7 @@ class SingleLoopStrategy:
         max_iterations = turn.options.get("max_iterations", 20)
         total_usage = Usage()
         total_tool_calls = 0
+        total_cards: list[Card] = []
         final_output = ""
         final_thinking = ""
         stop_reason = "end_turn"
@@ -118,6 +120,11 @@ class SingleLoopStrategy:
             ]
             results = await k.execute_tools(tool_calls)
 
+            # Accumulate UI cards from tool results
+            for res in results:
+                if res.cards:
+                    total_cards.extend(res.cards)
+
             # 6. Record tool results into transcript
             tool_result_blocks = [
                 ToolResultBlock(
@@ -140,4 +147,5 @@ class SingleLoopStrategy:
             usage=total_usage,
             tool_calls=total_tool_calls,
             stop_reason=stop_reason,
+            cards=total_cards,
         )

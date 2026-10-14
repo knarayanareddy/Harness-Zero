@@ -103,6 +103,7 @@ async def bootstrap_kernel(
         bus=bus,
     )
     assembler = ContextAssembler(registry=registry, settings=settings)
+    cost_ledger = registry.stores.get("cost")[0] if "cost" in registry.stores else None
     compactor = Compactor(settings=settings, bus=bus, registry=registry)
     runner = TurnRunner(
         registry=registry,
@@ -112,6 +113,7 @@ async def bootstrap_kernel(
         assembler=assembler,
         compactor=compactor,
         inbox=inbox,
+        cost_ledger=cost_ledger,
     )
     commands = Commands(
         workspace=ws,

@@ -627,9 +627,19 @@ class PolicyGate:
             content=sanitized_content,
             is_error=result.is_error,
             metadata=final_metadata,
+            cards=list(result.cards) if result.cards else [],
         )
 
         if self.bus:
+            if result.cards:
+                for card in result.cards:
+                    self.bus.publish(
+                        Event(
+                            type="ui.card",
+                            session_id=session_id,
+                            data={"card": card.to_dict() if hasattr(card, "to_dict") else card},
+                        )
+                    )
             self.bus.publish(
                 Event(
                     type="tool.result",
