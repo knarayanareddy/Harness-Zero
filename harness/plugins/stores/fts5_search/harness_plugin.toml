@@ -1,0 +1,8 @@
+[plugin]
+name = "store-fts5-search"
+version = "1.0.0"
+api_version = "1"
+summary = "SQLite FTS5 full-text search index and persistent memory store"
+provides = ["store"]
+capabilities = []
+entry = "harness.plugins.stores.fts5_search.plugin:Fts5SearchPlugin"

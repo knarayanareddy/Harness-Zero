@@ -1,0 +1,8 @@
+[plugin]
+name = "context-memories"
+version = "1.0.0"
+api_version = "1"
+summary = "Context source injecting remembered facts and architectural decisions into session prompt"
+provides = ["context"]
+capabilities = []
+entry = "harness.plugins.context.memories.plugin:MemoriesContextPlugin"

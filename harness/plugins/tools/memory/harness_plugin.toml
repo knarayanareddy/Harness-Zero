@@ -1,0 +1,8 @@
+[plugin]
+name = "tool-memory"
+version = "1.0.0"
+api_version = "1"
+summary = "Memory tools for cross-session recall and explicit facts storage"
+provides = ["tool"]
+capabilities = []
+entry = "harness.plugins.tools.memory.plugin:MemoryToolsPlugin"
