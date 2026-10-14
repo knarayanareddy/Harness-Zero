@@ -13,6 +13,7 @@ from harness.kernel.commands import Commands
 from harness.kernel.compaction import Compactor
 from harness.kernel.context import ContextAssembler
 from harness.kernel.gate import PolicyGate
+from harness.kernel.inbox import BackgroundInbox
 from harness.kernel.jail import WorkspaceJail
 from harness.kernel.registry import PluginRegistry
 from harness.kernel.runner import TurnRunner
@@ -85,6 +86,7 @@ async def bootstrap_kernel(
     await registry.load_all()
 
     approvals = ApprovalBroker(bus=bus)
+    inbox = BackgroundInbox(bus=bus)
     gate = PolicyGate(
         registry=registry,
         jail=jail,
@@ -92,6 +94,7 @@ async def bootstrap_kernel(
         secrets=secrets,
         approvals=approvals,
         bus=bus,
+        inbox=inbox,
     )
     session_manager = SessionManager(
         workspace=ws,
@@ -108,6 +111,7 @@ async def bootstrap_kernel(
         settings=settings,
         assembler=assembler,
         compactor=compactor,
+        inbox=inbox,
     )
     commands = Commands(
         workspace=ws,

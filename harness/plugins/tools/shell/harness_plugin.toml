@@ -1,0 +1,8 @@
+[plugin]
+name = "shell-tools"
+version = "1.0.0"
+api_version = "1"
+summary = "Shell command execution and background task management tools"
+provides = ["tool"]
+capabilities = ["exec"]
+entry = "harness.plugins.tools.shell.plugin:ShellToolsPlugin"

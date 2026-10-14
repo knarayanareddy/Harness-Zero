@@ -15,6 +15,7 @@ from harness.sdk.contracts import (
     Executor,
     Hook,
     Policy,
+    Process,
     Provider,
     Strategy,
     ToolHandler,
@@ -102,6 +103,30 @@ class ToolContext(Protocol):
 
     def emit_output_delta(self, stream: Literal["stdout", "stderr"], text: str) -> None:
         """Streams output delta chunks during execution."""
+        ...
+
+    def background(self, proc: Process, label: str = "") -> str:
+        """Registers a running process as a background task and returns task_id."""
+        ...
+
+    def get_task(self, task_id: str) -> dict[str, Any] | None:
+        """Gets status dictionary for a registered task."""
+        ...
+
+    def list_tasks(self) -> list[dict[str, Any]]:
+        """Lists all registered tasks."""
+        ...
+
+    async def kill_task(self, task_id: str) -> bool:
+        """Terminates a registered task."""
+        ...
+
+    async def send_task_input(self, task_id: str, text: str) -> bool:
+        """Sends stdin input to a registered task."""
+        ...
+
+    async def wait_task(self, task_id: str, timeout_s: float | None = None) -> Any:
+        """Waits for task completion and returns exit code."""
         ...
 
 

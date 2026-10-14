@@ -20,7 +20,7 @@ from harness.kernel.sanitizer import sanitize_output
 from harness.kernel.secrets import Secrets
 from harness.kernel.settings import SettingsStore, validate_schema_value
 from harness.sdk.context import PolicyContext, ToolContext
-from harness.sdk.contracts import Executor, Policy
+from harness.sdk.contracts import Executor, Policy, Process
 from harness.sdk.errors import CapabilityDenied, SettingsValidationError
 from harness.sdk.events import Event
 from harness.sdk.types import (
@@ -174,6 +174,7 @@ class ToolContextImpl(ToolContext):
         bus: EventBus | None = None,
         session_id: str = "",
         plugin_name: str = "",
+        inbox: Any = None,
     ):
         self.call_id = call_id
         self.workspace = workspace
@@ -183,6 +184,7 @@ class ToolContextImpl(ToolContext):
         self._bus = bus
         self._session_id = session_id
         self._plugin_name = plugin_name
+        self._inbox = inbox
 
     @property
     def executor(self) -> Executor:
@@ -209,6 +211,44 @@ class ToolContextImpl(ToolContext):
             )
             self._bus.publish(evt)
 
+    def background(self, proc: Process, label: str = "") -> str:
+        """Registers a process with background inbox and returns task_id."""
+        import uuid
+        task_id = f"task_{uuid.uuid4().hex[:8]}"
+        if self._inbox is not None:
+            self._inbox.register_task(task_id, proc, label=label)
+        return task_id
+
+    def get_task(self, task_id: str) -> dict[str, Any] | None:
+        """Gets status dictionary for a registered background task."""
+        if self._inbox is not None:
+            return self._inbox.get_status(task_id)
+        return None
+
+    def list_tasks(self) -> list[dict[str, Any]]:
+        """Lists all registered background tasks."""
+        if self._inbox is not None:
+            return self._inbox.list_tasks()
+        return []
+
+    async def kill_task(self, task_id: str) -> bool:
+        """Terminates a running background task."""
+        if self._inbox is not None:
+            return await self._inbox.kill(task_id)
+        return False
+
+    async def send_task_input(self, task_id: str, text: str) -> bool:
+        """Sends input text to a running background task."""
+        if self._inbox is not None:
+            return await self._inbox.send_input(task_id, text)
+        return False
+
+    async def wait_task(self, task_id: str, timeout_s: float | None = None) -> Any:
+        """Waits for background task to complete and returns exit code."""
+        if self._inbox is not None:
+            return await self._inbox.wait_task(task_id, timeout_s=timeout_s)
+        return None
+
 
 class PolicyGate:
     """
@@ -224,6 +264,7 @@ class PolicyGate:
         secrets: Secrets,
         approvals: ApprovalBroker,
         bus: EventBus | None = None,
+        inbox: Any = None,
     ):
         self.registry = registry
         self.jail = jail
@@ -231,6 +272,7 @@ class PolicyGate:
         self.secrets = secrets
         self.approvals = approvals
         self.bus = bus
+        self.inbox = inbox
 
         # Built-in kernel policies
         self.jail_policy = WorkspaceJailPolicy(jail)
@@ -482,11 +524,14 @@ class PolicyGate:
         )
         effective_caps = frozenset(spec.capabilities) & plugin_caps
 
-        executor = (
-            self.registry.executors.get("default", (None, ""))[0]
-            if self.registry.executors
-            else None
-        )
+        executor = None
+        if self.registry.executors:
+            if "default" in self.registry.executors:
+                executor = self.registry.executors["default"][0]
+            elif "local" in self.registry.executors:
+                executor = self.registry.executors["local"][0]
+            else:
+                executor = next(iter(self.registry.executors.values()))[0]
         tool_ctx = ToolContextImpl(
             call_id=call_id,
             workspace=self.registry.workspace,
@@ -496,6 +541,7 @@ class PolicyGate:
             bus=self.bus,
             session_id=session_id,
             plugin_name=plugin_name,
+            inbox=self.inbox,
         )
 
         # ---------------------------------------------------------

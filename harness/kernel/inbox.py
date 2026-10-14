@@ -144,6 +144,46 @@ class BackgroundInbox:
             "tail": "\n".join(bt.output_lines[-10:]),
         }
 
+    def list_tasks(self) -> list[dict[str, Any]]:
+        """Returns summary list of all registered tasks."""
+        return [
+            {
+                "task_id": bt.id,
+                "label": bt.label,
+                "completed": bt.completed,
+                "exit_code": bt.exit_code,
+                "running": not bt.completed,
+            }
+            for bt in self._tasks.values()
+        ]
+
+    async def send_input(self, task_id: str, text: str) -> bool:
+        """Sends input text to running background task."""
+        bt = self._tasks.get(task_id)
+        if not bt or bt.completed:
+            return False
+        if hasattr(bt.process, "send_input"):
+            res = bt.process.send_input(text)
+            if asyncio.iscoroutine(res):
+                await res
+            return True
+        return False
+
+    async def wait_task(self, task_id: str, timeout_s: float | None = None) -> Any:
+        """Waits for background task to complete and returns exit code."""
+        bt = self._tasks.get(task_id)
+        if not bt:
+            return None
+        if bt.completed:
+            return bt.exit_code
+        if bt.monitor_task:
+            if timeout_s is not None and timeout_s > 0:
+                async with asyncio.timeout(timeout_s):
+                    await bt.monitor_task
+            else:
+                await bt.monitor_task
+        return bt.exit_code
+
     async def kill(self, task_id: str) -> bool:
         """Terminates a running background task."""
         bt = self._tasks.get(task_id)
