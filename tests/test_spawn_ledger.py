@@ -1,7 +1,10 @@
-import pytest
 import tempfile
 from pathlib import Path
-from harness.orchestration.spawn_ledger import SpawnLedger, SpawnRecord, SubagentStatus
+
+import pytest
+
+from harness.orchestration.spawn_ledger import SpawnLedger, SubagentStatus
+
 
 def test_spawn_ledger_hierarchy_and_limits():
     with tempfile.TemporaryDirectory() as tmpdir:

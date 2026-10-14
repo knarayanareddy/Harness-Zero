@@ -6,10 +6,11 @@ Qwen-Agent ChatML function calling, and ZAI / GLM-5.3 tool formats.
 """
 
 from __future__ import annotations
+
 import json
 import re
 from dataclasses import dataclass
-from typing import AsyncIterator, Iterator, List, Optional, Tuple, Dict, Any
+from typing import Any
 
 
 @dataclass
@@ -31,13 +32,13 @@ class ReasoningStreamParser:
         self.in_thought = False
         self.buffer = ""
 
-    def process_chunk(self, raw_chunk: str) -> List[StreamChunk]:
+    def process_chunk(self, raw_chunk: str) -> list[StreamChunk]:
         """
         Processes a single streaming text chunk, cleanly isolating thought
         tokens from user-facing answer tokens across arbitrary chunk splits.
         """
         self.buffer += raw_chunk
-        chunks: List[StreamChunk] = []
+        chunks: list[StreamChunk] = []
 
         while self.buffer:
             if not self.in_thought:
@@ -84,7 +85,7 @@ class ReasoningStreamParser:
 
         return chunks
 
-    def flush(self) -> List[StreamChunk]:
+    def flush(self) -> list[StreamChunk]:
         """Flushes any remaining text in buffer at end of stream."""
         if not self.buffer:
             return []
@@ -93,7 +94,7 @@ class ReasoningStreamParser:
         return [chunk]
 
     @staticmethod
-    def parse_full_text(text: str, open_tag: str = "<think>", close_tag: str = "</think>") -> Tuple[str, str]:
+    def parse_full_text(text: str, open_tag: str = "<think>", close_tag: str = "</think>") -> tuple[str, str]:
         """
         Separates completed static text into (thought, answer).
         """
@@ -126,7 +127,7 @@ class QwenToolAdapter:
     """
 
     @staticmethod
-    def encode_tools(tools_schema: List[Dict[str, Any]]) -> str:
+    def encode_tools(tools_schema: list[dict[str, Any]]) -> str:
         """Formats OpenAPI tools into Qwen ChatML system prompt instructions."""
         formatted = ["# Tools\n\nYou have access to the following tools:"]
         for tool in tools_schema:
@@ -135,7 +136,7 @@ class QwenToolAdapter:
         return "\n\n".join(formatted)
 
     @staticmethod
-    def parse_tool_calls(text: str) -> List[Dict[str, Any]]:
+    def parse_tool_calls(text: str) -> list[dict[str, Any]]:
         """Extracts JSON tool calls from Qwen-Agent markup."""
         calls = []
         pattern = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
@@ -160,7 +161,7 @@ class ZAIToolAdapter:
     """
 
     @staticmethod
-    def parse_zcode_calls(text: str) -> List[Dict[str, Any]]:
+    def parse_zcode_calls(text: str) -> list[dict[str, Any]]:
         calls = []
         # JSON block style
         json_pattern = re.compile(r"```tool_call\s*\n\s*({.*?})\s*```", re.DOTALL)

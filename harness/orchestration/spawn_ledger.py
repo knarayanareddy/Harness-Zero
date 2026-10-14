@@ -5,14 +5,14 @@ and persists state machine transitions to SQLite WAL and spawn-ledger.json.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
 import json
-from pathlib import Path
 import sqlite3
-from typing import Any, Dict, List, Optional
 import uuid
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from enum import Enum
+from pathlib import Path
+from typing import Any
 
 
 class SubagentStatus(str, Enum):
@@ -26,21 +26,21 @@ class SubagentStatus(str, Enum):
 @dataclass
 class SpawnRecord:
     task_id: str
-    parent_id: Optional[str]
+    parent_id: str | None
     agent_name: str
     role: str
     goal: str
     nesting_depth: int
     status: SubagentStatus = SubagentStatus.PENDING
-    worktree_path: Optional[str] = None
+    worktree_path: str | None = None
     created_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+        default_factory=lambda: datetime.now(UTC).isoformat()
     )
-    finished_at: Optional[str] = None
-    result_summary: Optional[str] = None
-    error_message: Optional[str] = None
+    finished_at: str | None = None
+    result_summary: str | None = None
+    error_message: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
             "parent_id": self.parent_id,
@@ -95,8 +95,8 @@ class SpawnLedger:
         agent_name: str,
         role: str,
         goal: str,
-        parent_id: Optional[str] = None,
-        worktree_path: Optional[str] = None,
+        parent_id: str | None = None,
+        worktree_path: str | None = None,
     ) -> SpawnRecord:
         parent_depth = 0
         if parent_id:
@@ -150,10 +150,10 @@ class SpawnLedger:
         self,
         task_id: str,
         status: SubagentStatus,
-        result_summary: Optional[str] = None,
-        error_message: Optional[str] = None,
+        result_summary: str | None = None,
+        error_message: str | None = None,
     ) -> None:
-        now_str = datetime.now(timezone.utc).isoformat()
+        now_str = datetime.now(UTC).isoformat()
         with self.conn:
             self.conn.execute(
                 """
@@ -167,7 +167,7 @@ class SpawnLedger:
 
     update_status = update_task_status
 
-    def get_task(self, task_id: str) -> Optional[SpawnRecord]:
+    def get_task(self, task_id: str) -> SpawnRecord | None:
         cursor = self.conn.execute(
             """
             SELECT task_id, parent_id, agent_name, role, goal,
@@ -195,7 +195,7 @@ class SpawnLedger:
             error_message=row[11],
         )
 
-    def list_children(self, parent_id: str) -> List[SpawnRecord]:
+    def list_children(self, parent_id: str) -> list[SpawnRecord]:
         cursor = self.conn.execute(
             "SELECT task_id FROM spawn_tree WHERE parent_id = ?;", (parent_id,)
         )
@@ -206,7 +206,7 @@ class SpawnLedger:
                 tasks.append(t)
         return tasks
 
-    def get_tree(self) -> List[Dict[str, Any]]:
+    def get_tree(self) -> list[dict[str, Any]]:
         cursor = self.conn.execute("SELECT task_id FROM spawn_tree WHERE parent_id IS NULL;")
         roots = []
         for row in cursor.fetchall():
@@ -217,7 +217,7 @@ class SpawnLedger:
                 roots.append(node)
         return roots
 
-    def _build_children_tree(self, parent_id: str) -> List[Dict[str, Any]]:
+    def _build_children_tree(self, parent_id: str) -> list[dict[str, Any]]:
         children = self.list_children(parent_id)
         subnodes = []
         for c in children:

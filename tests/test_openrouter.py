@@ -1,7 +1,9 @@
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
+
 from harness.models.router import ModelRouter
-from harness.core.types import ModelResponse, ToolCall
+
 
 @pytest.mark.asyncio
 async def test_openrouter_routing_and_payload():

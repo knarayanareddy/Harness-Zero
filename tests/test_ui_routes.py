@@ -1,11 +1,13 @@
-import pytest
 from pathlib import Path
-from aiohttp import web
-import httpx
 
+import httpx
+import pytest
+from aiohttp import web
+
+from harness.artifacts.manager import ArtifactMetadata
 from harness.core.coordinator import AgentCoordinator
 from harness.core.daemon import HarnessDaemon
-from harness.artifacts.manager import ArtifactMetadata
+
 
 @pytest.mark.asyncio
 async def test_ui_and_studio_endpoints(tmp_path: Path):

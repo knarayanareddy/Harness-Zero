@@ -5,11 +5,11 @@ Provides blast-radius command preview, secret leak scanning, and metadata/CIDR n
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 
 class SecurityVerdict(str, Enum):
@@ -20,7 +20,7 @@ class SecurityVerdict(str, Enum):
 
 @dataclass
 class BlastRadius:
-    affected_paths: List[str]
+    affected_paths: list[str]
     is_recursive: bool
     risk_score: int  # 0 to 100
     description: str
@@ -29,8 +29,8 @@ class BlastRadius:
 @dataclass
 class SecurityAuditResult:
     verdict: SecurityVerdict
-    reasons: List[str]
-    leaked_secrets: List[str]
+    reasons: list[str]
+    leaked_secrets: list[str]
     blast_radius: BlastRadius
 
 
@@ -54,7 +54,7 @@ class TirithSecurityCapsule:
     ]
 
     @classmethod
-    def scan_secrets(cls, text: str) -> List[str]:
+    def scan_secrets(cls, text: str) -> list[str]:
         leaks = []
         for pattern, name in cls.SECRET_PATTERNS:
             if re.search(pattern, text):
@@ -70,8 +70,8 @@ class TirithSecurityCapsule:
 
     @classmethod
     def audit_command(cls, command: str, cwd: Path) -> SecurityAuditResult:
-        reasons: List[str] = []
-        leaked_secrets: List[str] = []
+        reasons: list[str] = []
+        leaked_secrets: list[str] = []
         verdict = SecurityVerdict.ALLOW
 
         # 1. Scan for leaked credentials inside command string

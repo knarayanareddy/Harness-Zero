@@ -1,6 +1,8 @@
-from pathlib import Path
 import subprocess
+from pathlib import Path
+
 import pytest
+
 from harness.orchestration.battle_arena import AgentArena, CandidateResult
 from harness.sandboxing.worktree import WorktreeManager
 

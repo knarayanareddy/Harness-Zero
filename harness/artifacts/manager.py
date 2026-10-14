@@ -4,11 +4,11 @@ Manages markdown artifacts, persistent manifest, and sandboxed HTML webviews.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 import json
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -17,7 +17,7 @@ class ArtifactMetadata:
     user_facing: bool = True
     request_feedback: bool = False
     created_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+        default_factory=lambda: datetime.now(UTC).isoformat()
     )
 
 
@@ -52,7 +52,7 @@ class ArtifactManager:
         )
         return target_path
 
-    def load_manifest(self) -> Dict[str, Any]:
+    def load_manifest(self) -> dict[str, Any]:
         if self.manifest_file.exists():
             try:
                 return json.loads(self.manifest_file.read_text(encoding="utf-8"))
@@ -60,7 +60,7 @@ class ArtifactManager:
                 return {}
         return {}
 
-    def get_artifact(self, filename: str) -> Optional[str]:
+    def get_artifact(self, filename: str) -> str | None:
         target = self.artifacts_dir / filename
         if target.exists():
             return target.read_text(encoding="utf-8")

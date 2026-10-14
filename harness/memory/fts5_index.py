@@ -5,12 +5,12 @@ for O(1) recall, BM25 full-text search, and cross-session memory.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import json
-from pathlib import Path
 import sqlite3
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 
 @dataclass
@@ -21,7 +21,7 @@ class SearchResult:
     byte_offset: int
     snippet: str
     rank: float
-    full_content: Optional[str] = None
+    full_content: str | None = None
 
 
 class FTS5MemoryIndex:
@@ -72,7 +72,7 @@ class FTS5MemoryIndex:
         agent_name: str = "harness-zero",
         parent_id: str = "",
     ) -> None:
-        now_str = datetime.now(timezone.utc).isoformat()
+        now_str = datetime.now(UTC).isoformat()
         with self.conn:
             self.conn.execute(
                 """
@@ -125,7 +125,7 @@ class FTS5MemoryIndex:
                     last_modified_time = ?
                 WHERE conversation_id = ?;
                 """,
-                (step_index, datetime.now(timezone.utc).isoformat(), conversation_id),
+                (step_index, datetime.now(UTC).isoformat(), conversation_id),
             )
 
     def search(
@@ -133,8 +133,8 @@ class FTS5MemoryIndex:
         query: str,
         limit: int = 5,
         fetch_exact: bool = True,
-        conversation_id: Optional[str] = None,
-    ) -> List[SearchResult]:
+        conversation_id: str | None = None,
+    ) -> list[SearchResult]:
         """
         Runs BM25 FTS5 search. If fetch_exact=True, uses byte_offset to seek directly
         into transcript_full.jsonl and retrieve the raw JSON record in microseconds.
@@ -155,7 +155,7 @@ class FTS5MemoryIndex:
             FROM conversations_fts
             WHERE conversations_fts MATCH ?
         """
-        params: List[Any] = [match_expr]
+        params: list[Any] = [match_expr]
 
         if conversation_id:
             sql += " AND conversation_id = ?"
@@ -164,7 +164,7 @@ class FTS5MemoryIndex:
         sql += " ORDER BY rank LIMIT ?"
         params.append(limit)
 
-        results: List[SearchResult] = []
+        results: list[SearchResult] = []
         cursor = self.conn.execute(sql, params)
         for row in cursor.fetchall():
             conv_id, step_idx, fpath, byte_off, snip, rank = row

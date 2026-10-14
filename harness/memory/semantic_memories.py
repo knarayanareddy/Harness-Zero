@@ -5,11 +5,10 @@ Stores project rules, user preferences, and architectural invariants across sess
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 import json
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -18,12 +17,12 @@ class MemoryItem:
     category: str  # convention, preference, invariant, tool_note
     content: str
     created_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+        default_factory=lambda: datetime.now(UTC).isoformat()
     )
 
 
 class SemanticMemoryStore:
-    def __init__(self, memory_dir: Optional[Path] = None):
+    def __init__(self, memory_dir: Path | None = None):
         self.memory_dir = (
             Path(memory_dir)
             if memory_dir
@@ -31,7 +30,7 @@ class SemanticMemoryStore:
         )
         self.memory_dir.mkdir(parents=True, exist_ok=True)
         self.index_file = self.memory_dir / "memory_index.json"
-        self._memories: Dict[str, MemoryItem] = {}
+        self._memories: dict[str, MemoryItem] = {}
         self._load()
 
     def _load(self) -> None:
@@ -67,11 +66,11 @@ class SemanticMemoryStore:
         self._save()
         return item
 
-    def recall(self, key: str) -> Optional[str]:
+    def recall(self, key: str) -> str | None:
         item = self._memories.get(key)
         return item.content if item else None
 
-    def list_memories(self, category: Optional[str] = None) -> List[MemoryItem]:
+    def list_memories(self, category: str | None = None) -> list[MemoryItem]:
         if category:
             return [m for m in self._memories.values() if m.category == category]
         return list(self._memories.values())

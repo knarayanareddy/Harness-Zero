@@ -1,6 +1,7 @@
-import pytest
 from pathlib import Path
-from harness.sandboxing.tirith_security import TirithSecurityCapsule, SecurityVerdict
+
+from harness.sandboxing.tirith_security import SecurityVerdict, TirithSecurityCapsule
+
 
 def test_tirith_secret_detection():
     # AWS Key

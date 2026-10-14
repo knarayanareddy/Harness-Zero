@@ -4,9 +4,8 @@ Applies deterministic surgical edits without whole-file hallucinations.
 """
 from __future__ import annotations
 
-from pathlib import Path
 import re
-from typing import Tuple
+from pathlib import Path
 
 
 class DiffApplier:
@@ -15,7 +14,7 @@ class DiffApplier:
     )
 
     @classmethod
-    def apply_diff(cls, file_path: Path, diff_block: str) -> Tuple[bool, str]:
+    def apply_diff(cls, file_path: Path, diff_block: str) -> tuple[bool, str]:
         """
         Applies SEARCH/REPLACE blocks to file_path.
         Returns: (success: bool, message: str)
@@ -57,7 +56,7 @@ class DiffApplier:
         end_line: int,
         target_content: str,
         replacement_content: str,
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         file_path = Path(file_path)
         if not file_path.exists():
             return False, f"File not found: {file_path}"

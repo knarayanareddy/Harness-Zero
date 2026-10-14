@@ -5,12 +5,10 @@ Self-healing closed loop tests edits and feeds compiler errors back until green.
 """
 from __future__ import annotations
 
-import asyncio
-from dataclasses import dataclass, field
 import logging
-from pathlib import Path
 import subprocess
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from pathlib import Path
 
 from harness.models.router import ModelRouter
 from harness.sandboxing.diff_applier import DiffApplier
@@ -26,15 +24,15 @@ class EditIteration:
     applied: bool
     test_exit_code: int
     test_output: str
-    error_feedback: Optional[str] = None
+    error_feedback: str | None = None
 
 
 @dataclass
 class ArchitectEditorResult:
     success: bool
     plan: str
-    iterations: List[EditIteration]
-    commit_sha: Optional[str] = None
+    iterations: list[EditIteration]
+    commit_sha: str | None = None
     final_message: str = ""
 
 
@@ -59,8 +57,8 @@ class ArchitectEditorLoop:
     async def execute(
         self,
         task_prompt: str,
-        target_files: List[Path],
-        test_command: Optional[str] = None,
+        target_files: list[Path],
+        test_command: str | None = None,
         max_retries: int = 3,
         auto_commit: bool = True,
     ) -> ArchitectEditorResult:
@@ -96,7 +94,7 @@ Files to modify:
         plan = arch_resp.content
 
         # 2. Editor & Self-Healing Loop
-        iterations: List[EditIteration] = []
+        iterations: list[EditIteration] = []
         last_error = ""
 
         for attempt in range(1, max_retries + 1):
@@ -190,10 +188,10 @@ Files:
             final_message=f"Failed to pass tests after {max_retries} attempts.",
         )
 
-    def _git_commit(self, message: str) -> Optional[str]:
+    def _git_commit(self, message: str) -> str | None:
         try:
             subprocess.run(["git", "-C", str(self.workspace_root), "add", "-A"], capture_output=True, check=True)
-            res = subprocess.run(["git", "-C", str(self.workspace_root), "commit", "-m", message], capture_output=True, text=True, check=True)
+            subprocess.run(["git", "-C", str(self.workspace_root), "commit", "-m", message], capture_output=True, text=True, check=True)
             sha_res = subprocess.run(["git", "-C", str(self.workspace_root), "rev-parse", "HEAD"], capture_output=True, text=True, check=True)
             return sha_res.stdout.strip()
         except Exception:

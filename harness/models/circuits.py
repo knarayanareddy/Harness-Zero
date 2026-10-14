@@ -4,9 +4,8 @@ Enables self-healing model failovers and cost-effective tier selection.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import time
-from typing import Dict, List, Optional
+from dataclasses import dataclass
 
 from harness.core.types import CircuitState, ModelTier
 
@@ -45,7 +44,7 @@ class ProviderEndpoint:
 
 class IntelligentModelRouter:
     def __init__(self):
-        self.tiers: Dict[ModelTier, List[ProviderEndpoint]] = {
+        self.tiers: dict[ModelTier, list[ProviderEndpoint]] = {
             ModelTier.FAST: [
                 ProviderEndpoint("anthropic", "claude-3-5-haiku-latest"),
                 ProviderEndpoint("openai", "gpt-4o-mini"),
@@ -106,7 +105,7 @@ class IntelligentModelRouter:
     def select_active_endpoint(
         self,
         tier: ModelTier,
-        preferred_provider: Optional[str] = None,
+        preferred_provider: str | None = None,
     ) -> ProviderEndpoint:
         endpoints = self.tiers[tier]
 

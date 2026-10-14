@@ -5,10 +5,9 @@ High-speed regex codebase search matching ChatGPT's bundled rg binary.
 from __future__ import annotations
 
 import asyncio
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
-import shutil
-from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -26,10 +25,10 @@ class RipgrepSearcher:
     async def search(
         self,
         query: str,
-        glob_filter: Optional[str] = None,
+        glob_filter: str | None = None,
         case_sensitive: bool = False,
         max_results: int = 50,
-    ) -> List[RipgrepMatch]:
+    ) -> list[RipgrepMatch]:
         """Runs ripgrep if available, or Python fallback."""
         if self.rg_bin and Path(self.rg_bin).exists():
             return await self._search_rg(query, glob_filter, case_sensitive, max_results)
@@ -38,10 +37,10 @@ class RipgrepSearcher:
     async def _search_rg(
         self,
         query: str,
-        glob_filter: Optional[str],
+        glob_filter: str | None,
         case_sensitive: bool,
         max_results: int,
-    ) -> List[RipgrepMatch]:
+    ) -> list[RipgrepMatch]:
         cmd = [
             self.rg_bin,
             "--line-number",
@@ -84,10 +83,10 @@ class RipgrepSearcher:
     def _search_fallback(
         self,
         query: str,
-        glob_filter: Optional[str],
+        glob_filter: str | None,
         case_sensitive: bool,
         max_results: int,
-    ) -> List[RipgrepMatch]:
+    ) -> list[RipgrepMatch]:
         import re
 
         pattern = re.compile(
@@ -103,7 +102,7 @@ class RipgrepSearcher:
             if glob_filter and not p.match(glob_filter):
                 continue
             try:
-                with open(p, "r", encoding="utf-8", errors="ignore") as f:
+                with open(p, encoding="utf-8", errors="ignore") as f:
                     for i, line in enumerate(f, start=1):
                         if pattern.search(line):
                             rel_path = str(p.relative_to(self.workspace_root))

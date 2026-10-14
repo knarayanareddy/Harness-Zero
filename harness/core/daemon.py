@@ -9,9 +9,9 @@ import asyncio
 import base64
 import json
 import logging
-from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
 import uuid
+from pathlib import Path
+from typing import Any
 
 from aiohttp import web
 
@@ -27,7 +27,7 @@ class HarnessDaemon:
         host: str = "127.0.0.1",
         port: int = 8000,
         sandbox_port: int = 8001,
-        socket_path: Optional[Path] = None,
+        socket_path: Path | None = None,
     ):
         self.coordinator = coordinator
         self.host = host
@@ -35,8 +35,8 @@ class HarnessDaemon:
         self.sandbox_port = sandbox_port
         self.socket_path = socket_path
 
-        self._login_tokens: Dict[str, float] = {}
-        self._active_turn_tasks: Dict[str, asyncio.Task] = {}
+        self._login_tokens: dict[str, float] = {}
+        self._active_turn_tasks: dict[str, asyncio.Task] = {}
 
         # Dual-Port Isolation Applications
         self.app = web.Application()
@@ -167,7 +167,7 @@ class HarnessDaemon:
         p.parent.mkdir(parents=True, exist_ok=True)
         return p
 
-    def _get_cowork_settings(self) -> Dict[str, Any]:
+    def _get_cowork_settings(self) -> dict[str, Any]:
         sf = self._settings_file()
         stored = {}
         if sf.exists():
@@ -417,7 +417,7 @@ class HarnessDaemon:
             "session_id": self.coordinator.session_id,
             "step_count": self.coordinator.transcripts.step_counter,
         })
-        await response.write(f"data: {initial_event}\n\n".encode("utf-8"))
+        await response.write(f"data: {initial_event}\n\n".encode())
         return response
 
     async def _handle_file_content(self, request: web.Request) -> web.Response:
@@ -536,7 +536,7 @@ class HarnessDaemon:
 
         async def send_sse(event_type: str, data: dict):
             payload = json.dumps({"type": event_type, **data})
-            await response.write(f"data: {payload}\n\n".encode("utf-8"))
+            await response.write(f"data: {payload}\n\n".encode())
 
         current_task = asyncio.current_task()
         self._active_turn_tasks[self.coordinator.session_id] = current_task
@@ -566,7 +566,7 @@ class HarnessDaemon:
                 })
             else:
                 res = await self.coordinator.execute_turn(prompt, model=model, media=media)
-                data = res.to_dict() if hasattr(res, "to_dict") else (res if isinstance(res, dict) else {"output": str(res)})
+                data = res.to_dict()
 
                 # Stream thinking if present
                 thinking = data.get("thinking", "")
@@ -702,7 +702,7 @@ class HarnessDaemon:
             media = params.get("media")
             try:
                 res = await self.coordinator.execute_turn(prompt, provider=provider, model=model, media=media)
-                data = res.to_dict() if hasattr(res, "to_dict") else (res if isinstance(res, dict) else {"output": str(res)})
+                data = res.to_dict()
                 return web.json_response({"jsonrpc": "2.0", "result": data, "id": rpc_id})
             except Exception as e:
                 return web.json_response(
@@ -901,7 +901,7 @@ class HarnessDaemon:
             "tools": tools,
         })
 
-    async def start(self) -> Tuple[web.AppRunner, web.AppRunner]:
+    async def start(self) -> tuple[web.AppRunner, web.AppRunner]:
         """Starts both Port 8000 API server and Port 8001 SOP Sandbox preview server."""
         # 1. API Runner
         api_runner = web.AppRunner(self.app)

@@ -1,5 +1,5 @@
 from pathlib import Path
-import pytest
+
 from harness.memory.fts5_index import FTS5MemoryIndex
 
 

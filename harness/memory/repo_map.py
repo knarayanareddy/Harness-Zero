@@ -6,10 +6,9 @@ ranking them to fit within a compact token budget (Aider pattern).
 from __future__ import annotations
 
 import ast
+import re
 from dataclasses import dataclass
 from pathlib import Path
-import re
-from typing import Dict, List, Optional, Set
 
 
 @dataclass
@@ -43,7 +42,7 @@ class RepoMap:
         if not self.workspace_root.exists():
             return "(Empty workspace)"
 
-        symbols_by_file: Dict[str, List[str]] = {}
+        symbols_by_file: dict[str, list[str]] = {}
 
         for file_path in sorted(self.workspace_root.rglob("*")):
             if not file_path.is_file():
@@ -68,7 +67,7 @@ class RepoMap:
             return "(No source code symbols discovered)"
 
         # Pack into compact outline within token budget
-        output_lines: List[str] = ["## Codebase Map:"]
+        output_lines: list[str] = ["## Codebase Map:"]
         char_budget = self.max_tokens * 4  # ~4 chars per token heuristic
         total_chars = 0
 
@@ -91,8 +90,8 @@ class RepoMap:
 
         return "\n".join(output_lines)
 
-    def _extract_python_symbols(self, file_path: Path) -> List[str]:
-        symbols: List[str] = []
+    def _extract_python_symbols(self, file_path: Path) -> list[str]:
+        symbols: list[str] = []
         try:
             content = file_path.read_text(encoding="utf-8", errors="replace")
             tree = ast.parse(content, filename=str(file_path))
@@ -115,8 +114,8 @@ class RepoMap:
             pass
         return symbols
 
-    def _extract_generic_symbols(self, file_path: Path) -> List[str]:
-        symbols: List[str] = []
+    def _extract_generic_symbols(self, file_path: Path) -> list[str]:
+        symbols: list[str] = []
         try:
             content = file_path.read_text(encoding="utf-8", errors="replace")
             # Match function declarations, class definitions, structs

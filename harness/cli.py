@@ -6,8 +6,6 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-import sys
-from typing import Optional
 
 import click
 from rich.console import Console
@@ -57,7 +55,7 @@ async def _run_single_turn(prompt: str, workspace: Path, provider: str, model: s
     with console.status("[bold green]Agent executing turn...[/bold green]", spinner="dots"):
         result = await coordinator.execute_turn(prompt, provider=provider, model=model)
 
-    console.print(Panel(Markdown(result), title="[bold magenta]Agent Response[/bold magenta]", border_style="green"))
+    console.print(Panel(Markdown(result.output), title="[bold magenta]Agent Response[/bold magenta]", border_style="green"))
 
 
 @main.command()
@@ -187,7 +185,7 @@ async def _run_interactive(workspace: Path, initial_provider: str, initial_model
                     provider=current_provider,
                     model=current_model,
                 )
-                console.print(Panel(Markdown(response), title="[bold magenta]Agent Response[/bold magenta]", border_style="green"))
+                console.print(Panel(Markdown(response.output), title="[bold magenta]Agent Response[/bold magenta]", border_style="green"))
             except Exception as e:
                 console.print(f"[bold red]Error executing turn: {e}[/bold red]")
 

@@ -1,9 +1,12 @@
-import pytest
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
-from harness.orchestration.architect_editor import ArchitectEditorLoop, ArchitectEditorResult
+
+import pytest
+
 from harness.core.types import ModelResponse
+from harness.orchestration.architect_editor import ArchitectEditorLoop
+
 
 @pytest.mark.asyncio
 async def test_architect_editor_loop_self_healing():

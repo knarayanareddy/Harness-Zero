@@ -1,12 +1,12 @@
 from pathlib import Path
+
 import pytest
-from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
 from aiohttp import web
 
+from harness.artifacts.manager import ArtifactMetadata
 from harness.core.coordinator import AgentCoordinator
 from harness.core.daemon import HarnessDaemon
 from harness.core.types import ModelResponse
-from harness.artifacts.manager import ArtifactMetadata
 
 
 @pytest.mark.asyncio

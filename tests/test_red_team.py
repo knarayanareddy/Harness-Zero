@@ -3,12 +3,11 @@ Harness-Zero Red Teaming & Adversarial Penetration Test Suite.
 Simulates real-world attack vectors, permission escapes, shell injection,
 SSRF, memory floods, and credential extraction to verify embedded guardrails.
 """
-import asyncio
-from pathlib import Path
 import tempfile
 import time
+from pathlib import Path
+
 import pytest
-from aiohttp import web
 
 from harness.core.coordinator import AgentCoordinator
 from harness.core.daemon import HarnessDaemon
@@ -20,7 +19,6 @@ from harness.sandboxing.executor import CommandExecutor
 from harness.sandboxing.guardrails import RiskLevel, SecurityPolicy
 from harness.sandboxing.tirith_security import SecurityVerdict, TirithSecurityCapsule
 from harness.skills.registry import SkillRegistry
-
 
 # =============================================================================
 # 1. Directory Traversal & Credential Leakage Attacks
@@ -41,7 +39,6 @@ async def test_red_team_path_traversal_sibling_prefix():
         daemon = HarnessDaemon(coordinator=coord)
 
         # Attempt to read sibling directory via GET /file/content?path=../project-evil/passwords.txt
-        req = web.Request
         class DummyRequest:
             query = {"path": "../project-evil/passwords.txt"}
 

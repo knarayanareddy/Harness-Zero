@@ -1,6 +1,6 @@
-from pathlib import Path
 import subprocess
-import pytest
+from pathlib import Path
+
 from harness.sandboxing.worktree import WorktreeManager
 
 

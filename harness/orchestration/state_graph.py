@@ -6,24 +6,25 @@ from __future__ import annotations
 
 import asyncio
 import copy
-from dataclasses import dataclass, field
 import json
-from pathlib import Path
 import sqlite3
-from typing import Any, Callable, Dict, List, Optional, Union
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
 
 @dataclass
 class AgentState:
-    messages: List[Dict[str, Any]] = field(default_factory=list)
+    messages: list[dict[str, Any]] = field(default_factory=list)
     current_agent: str = "triage"
     iteration_count: int = 0
-    test_results: Dict[str, Any] = field(default_factory=dict)
-    artifacts: Dict[str, str] = field(default_factory=dict)
+    test_results: dict[str, Any] = field(default_factory=dict)
+    artifacts: dict[str, str] = field(default_factory=dict)
     is_complete: bool = False
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "messages": self.messages,
             "current_agent": self.current_agent,
@@ -35,7 +36,7 @@ class AgentState:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> AgentState:
+    def from_dict(cls, data: dict[str, Any]) -> AgentState:
         return cls(
             messages=data.get("messages", []),
             current_agent=data.get("current_agent", "triage"),
@@ -48,9 +49,9 @@ class AgentState:
 
 
 class StateGraphEngine:
-    def __init__(self, checkpointer_db: Union[str, Path] = ":memory:"):
-        self.nodes: Dict[str, Callable[[AgentState], Any]] = {}
-        self.conditional_edges: Dict[str, Callable[[AgentState], str]] = {}
+    def __init__(self, checkpointer_db: str | Path = ":memory:"):
+        self.nodes: dict[str, Callable[[AgentState], Any]] = {}
+        self.conditional_edges: dict[str, Callable[[AgentState], str]] = {}
         self.conn = sqlite3.connect(str(checkpointer_db), check_same_thread=False)
         self.conn.execute("PRAGMA journal_mode=WAL;")
         self._init_schema()
@@ -121,7 +122,7 @@ class StateGraphEngine:
 
         return state
 
-    def rollback_to_step(self, step: int) -> Optional[AgentState]:
+    def rollback_to_step(self, step: int) -> AgentState | None:
         """Time-Travel Debugging: restore agent state from historical step checkpoint."""
         cursor = self.conn.execute(
             "SELECT state_json FROM checkpoints WHERE step = ?", (step,)

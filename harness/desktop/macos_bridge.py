@@ -6,8 +6,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-import subprocess
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 
 class MacOSDesktopBridge:
@@ -28,7 +27,7 @@ class MacOSDesktopBridge:
         await proc.communicate()
         return target_path
 
-    async def run_applescript(self, script: str) -> Tuple[bool, str]:
+    async def run_applescript(self, script: str) -> tuple[bool, str]:
         """Runs AppleScript for macOS UI interaction."""
         proc = await asyncio.create_subprocess_exec(
             "osascript",
@@ -47,7 +46,7 @@ class MacOSDesktopBridge:
         ok, res = await self.run_applescript(script)
         return res if ok else "Unknown"
 
-    async def synthesize_keypress(self, key: str, modifiers: Optional[List[str]] = None) -> bool:
+    async def synthesize_keypress(self, key: str, modifiers: list[str] | None = None) -> bool:
         mod_str = ""
         if modifiers:
             mod_str = f" using {{{', '.join(f'{m} down' for m in modifiers)}}}"
@@ -57,7 +56,7 @@ class MacOSDesktopBridge:
 
     async def predict_visual_click(
         self, screenshot_path: Path, prompt: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         UI-TARS Fallback: When AXUIElement cannot resolve Canvas / WebGL coordinates.
         Returns predicted {x, y} coordinate center.

@@ -1,7 +1,6 @@
 """
 Harness-Zero Standalone Engine Entrypoint for Binary Packaging.
 """
-import os
 import sys
 from pathlib import Path
 

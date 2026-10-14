@@ -1,10 +1,5 @@
-import pytest
-from harness.models.reasoning_stream import (
-    ReasoningStreamParser,
-    StreamChunk,
-    QwenToolAdapter,
-    ZAIToolAdapter
-)
+from harness.models.reasoning_stream import QwenToolAdapter, ReasoningStreamParser, ZAIToolAdapter
+
 
 def test_deepseek_r1_reasoning_stream_chunking():
     parser = ReasoningStreamParser()

@@ -5,11 +5,10 @@ and provides progressive disclosure (catalog vs full playbook).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-import os
-from pathlib import Path
 import re
-from typing import Dict, List, Optional
+from dataclasses import dataclass, field
+from pathlib import Path
+
 import yaml
 
 
@@ -20,15 +19,15 @@ class Skill:
     path: Path
     tier: str  # "workspace", "user", or "builtin"
     content: str = ""
-    metadata: Dict[str, any] = field(default_factory=dict)
+    metadata: dict[str, any] = field(default_factory=dict)
 
 
 class SkillRegistry:
     def __init__(
         self,
-        workspace_root: Optional[Path] = None,
-        user_root: Optional[Path] = None,
-        builtin_root: Optional[Path] = None,
+        workspace_root: Path | None = None,
+        user_root: Path | None = None,
+        builtin_root: Path | None = None,
     ):
         self.workspace_root = Path(workspace_root) if workspace_root else None
         self.user_root = (
@@ -41,7 +40,7 @@ class SkillRegistry:
             if builtin_root
             else Path(__file__).resolve().parent.parent.parent / "builtin" / "skills"
         )
-        self.skills: Dict[str, Skill] = {}
+        self.skills: dict[str, Skill] = {}
         self.discover_all()
 
     def discover_all(self) -> None:
@@ -99,7 +98,7 @@ class SkillRegistry:
                         tier=tier,
                         content=raw_text.strip(),
                     )
-            except Exception as e:
+            except Exception:
                 # Keep scanning other skills gracefully
                 continue
 
@@ -117,10 +116,10 @@ class SkillRegistry:
             )
         return "\n".join(lines)
 
-    def get_skill(self, name: str) -> Optional[Skill]:
+    def get_skill(self, name: str) -> Skill | None:
         return self.skills.get(name)
 
-    def view_skill(self, name: str) -> Optional[str]:
+    def view_skill(self, name: str) -> str | None:
         """
         Tier 2: On-demand load of full playbook.
         """
@@ -132,5 +131,5 @@ class SkillRegistry:
         except Exception:
             return skill.content or f"Skill playbook '{name}' loaded from memory."
 
-    def list_skills(self) -> List[Skill]:
+    def list_skills(self) -> list[Skill]:
         return list(self.skills.values())

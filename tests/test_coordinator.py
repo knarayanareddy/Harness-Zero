@@ -1,5 +1,7 @@
 from pathlib import Path
+
 import pytest
+
 from harness.core.coordinator import AgentCoordinator
 from harness.core.types import ModelResponse, ToolCall
 from harness.models.router import ModelRouter
@@ -36,7 +38,7 @@ async def test_coordinator_tool_execution_loop(tmp_path: Path):
     coordinator = AgentCoordinator(workspace=workspace, router=router)
     result = await coordinator.execute_turn("Please create config.json")
 
-    assert "Config file created successfully." in result
+    assert "Config file created successfully." in result.output
     assert (workspace / "config.json").exists()
     assert '{"version": "1.0", "name": "test"}' in (workspace / "config.json").read_text()
 
@@ -82,4 +84,4 @@ async def test_coordinator_view_skill_and_command(tmp_path: Path):
     coordinator = AgentCoordinator(workspace=workspace, router=router)
     result = await coordinator.execute_turn("Review architect skill and test echo")
 
-    assert "All steps executed and verified." in result
+    assert "All steps executed and verified." in result.output

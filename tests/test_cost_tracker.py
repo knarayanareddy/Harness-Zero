@@ -1,5 +1,5 @@
-import pytest
-from harness.models.cost_tracker import TokenCostTracker, MODEL_PRICING_TABLE
+from harness.models.cost_tracker import TokenCostTracker
+
 
 def test_token_cost_tracker_economics():
     tracker = TokenCostTracker()

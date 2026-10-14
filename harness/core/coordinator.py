@@ -6,18 +6,18 @@ Progressive Skills, SQLite FTS5 Memory, Tool Execution, and Worktree Sandboxing.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
 import json
-import logging
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
 import uuid
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 from harness.artifacts.manager import ArtifactManager, ArtifactMetadata
+from harness.core.concurrency_gate import ConcurrencyGate
 from harness.core.transcript import TranscriptEngine
 from harness.core.types import (
     ModelResponse,
-    ModelTier,
     StepSource,
     StepType,
     ToolCall,
@@ -28,7 +28,6 @@ from harness.memory.fts5_index import FTS5MemoryIndex
 from harness.models.circuits import IntelligentModelRouter
 from harness.models.prefix_cache import PromptCacheBuilder, PromptTiers
 from harness.models.router import ModelRouter
-from harness.core.concurrency_gate import ConcurrencyGate
 from harness.sandboxing.diff_applier import DiffApplier
 from harness.sandboxing.executor import BackgroundTask, CommandExecutor
 from harness.sandboxing.guardrails import RiskLevel, SecurityPolicy
@@ -36,28 +35,25 @@ from harness.sandboxing.ripgrep import RipgrepSearcher
 from harness.sandboxing.worktree import WorktreeManager
 from harness.skills.registry import SkillRegistry
 
-class TurnResult(str):
-    """String subclass that preserves structured turn metadata for IDE frontends."""
-    def __new__(
-        cls,
-        output: str,
-        thinking: str = "",
-        tool_calls: Optional[List[Dict[str, Any]]] = None,
-        session_id: str = "",
-    ):
-        obj = str.__new__(cls, output)
-        obj.output = output
-        obj.thinking = thinking
-        obj.tool_calls = tool_calls or []
-        obj.session_id = session_id
-        return obj
 
-    def to_dict(self) -> Dict[str, Any]:
+@dataclass
+class TurnResult:
+    """Structured turn metadata returned by turn execution."""
+    output: str
+    thinking: str = ""
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    session_id: str = ""
+    usage: dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
         return {
             "output": self.output,
             "thinking": self.thinking,
             "tool_calls": self.tool_calls,
             "session_id": self.session_id,
+            "usage": self.usage,
+            "error": self.error,
         }
 
 
@@ -65,9 +61,9 @@ class AgentCoordinator:
     def __init__(
         self,
         workspace: Path,
-        session_id: Optional[str] = None,
-        session_dir: Optional[Path] = None,
-        router: Optional[ModelRouter] = None,
+        session_id: str | None = None,
+        session_dir: Path | None = None,
+        router: ModelRouter | None = None,
     ):
         self.workspace = Path(workspace).resolve()
         self.session_id = session_id or f"session_{uuid.uuid4().hex[:12]}"
@@ -97,9 +93,9 @@ class AgentCoordinator:
         self.concurrency = ConcurrencyGate(limit=64)
         self.ripgrep = RipgrepSearcher(workspace_root=self.workspace)
 
-        from harness.orchestration.spawn_ledger import SpawnLedger
-        from harness.models.cost_tracker import TokenCostTracker
         from harness.memory.semantic_memories import SemanticMemoryStore
+        from harness.models.cost_tracker import TokenCostTracker
+        from harness.orchestration.spawn_ledger import SpawnLedger
         from harness.sandboxing.tirith_security import TirithSecurityCapsule
         from harness.skills.mcp_bridge import MCPBridge
 
@@ -133,7 +129,7 @@ class AgentCoordinator:
         )
 
         # 2. Reactive Wakeup Inbox (0% Polling CPU)
-        self.inbox: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
+        self.inbox: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
 
         # Static System Identity
         self.system_identity = """You are Harness-Zero, a sovereign autonomous agent.
@@ -141,10 +137,10 @@ Operate with precision, inspect files before modifying them, use surgical search
 and verify your work with test runs.
 """.strip()
 
-    def list_sessions(self) -> List[Dict[str, Any]]:
+    def list_sessions(self) -> list[dict[str, Any]]:
         """Scans workspace sessions directory and returns historical sessions metadata."""
         sessions_root = self.workspace / ".harness" / "sessions"
-        sessions_list: List[Dict[str, Any]] = []
+        sessions_list: list[dict[str, Any]] = []
 
         if sessions_root.exists():
             for s_dir in sorted(sessions_root.iterdir(), key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True):
@@ -154,11 +150,11 @@ and verify your work with test runs.
                 t_compact = s_dir / "transcript.jsonl"
                 title = f"Session {sid[:8]}"
                 step_count = 0
-                created_at = datetime.fromtimestamp(s_dir.stat().st_mtime, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
+                created_at = datetime.fromtimestamp(s_dir.stat().st_mtime, tz=UTC).strftime("%Y-%m-%d %H:%M")
 
                 if t_compact.exists():
                     try:
-                        with open(t_compact, "r", encoding="utf-8") as f:
+                        with open(t_compact, encoding="utf-8") as f:
                             lines = [ln.strip() for ln in f if ln.strip()]
                             step_count = len(lines)
                             for ln in lines:
@@ -188,7 +184,7 @@ and verify your work with test runs.
                 "title": f"Session {self.session_id[:8]}",
                 "step_count": self.transcripts.step_counter,
                 "is_current": True,
-                "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
+                "updated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M"),
             })
 
         return sessions_list
@@ -211,13 +207,13 @@ and verify your work with test runs.
         from harness.orchestration.spawn_ledger import SpawnLedger
         self.spawn_ledger = SpawnLedger(session_dir=self.session_dir)
 
-    def new_session(self, session_id: Optional[str] = None) -> str:
+    def new_session(self, session_id: str | None = None) -> str:
         """Initializes and activates a new session."""
         new_sid = session_id or f"session_{uuid.uuid4().hex[:12]}"
         self.switch_session(new_sid)
         return new_sid
 
-    def get_tool_schemas(self) -> List[Dict[str, Any]]:
+    def get_tool_schemas(self) -> list[dict[str, Any]]:
         """Returns deterministic, alphabetically-sorted tool definitions."""
         return [
             {
@@ -354,9 +350,9 @@ and verify your work with test runs.
         self,
         user_prompt: str,
         max_tool_iterations: int = 10,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
-        media: Optional[List[Dict[str, Any]]] = None,
+        provider: str | None = None,
+        model: str | None = None,
+        media: list[dict[str, Any]] | None = None,
     ) -> TurnResult:
         """Executes a reactive agent turn with multi-step tool calls."""
         # 1. Log and index user input
@@ -378,8 +374,8 @@ and verify your work with test runs.
 
         iteration = 0
         final_text = ""
-        accumulated_thinking: List[str] = []
-        executed_tool_calls: List[Dict[str, Any]] = []
+        accumulated_thinking: list[str] = []
+        executed_tool_calls: list[dict[str, Any]] = []
 
         while iteration < max_tool_iterations:
             iteration += 1
@@ -651,11 +647,11 @@ and verify your work with test runs.
         }
         await self.inbox.put(event)
 
-    async def wait_for_wakeup(self, timeout: Optional[float] = None) -> Optional[Dict[str, Any]]:
+    async def wait_for_wakeup(self, timeout: float | None = None) -> dict[str, Any] | None:
         """Zero-polling reactive wait on inbox."""
         try:
             if timeout:
                 return await asyncio.wait_for(self.inbox.get(), timeout=timeout)
             return await self.inbox.get()
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return None

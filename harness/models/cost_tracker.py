@@ -4,8 +4,8 @@ Calculates exact dollar expenditures, prompt cache savings, and usage metrics pe
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -16,7 +16,7 @@ class ModelPricing:
 
 
 # Industry standard pricing as of current models ($ per 1M tokens)
-MODEL_PRICING_TABLE: Dict[str, ModelPricing] = {
+MODEL_PRICING_TABLE: dict[str, ModelPricing] = {
     "claude-3-5-sonnet-latest": ModelPricing(3.0, 0.30, 15.0),
     "claude-3-7-sonnet": ModelPricing(3.0, 0.30, 15.0),
     "claude-3-5-haiku-latest": ModelPricing(0.80, 0.08, 4.0),
@@ -50,7 +50,7 @@ class TokenCostTracker:
         self.total_output_tokens: int = 0
         self.total_cost_usd: float = 0.0
         self.total_saved_usd: float = 0.0
-        self.history: List[Dict[str, Any]] = []
+        self.history: list[dict[str, Any]] = []
 
     def record_turn(
         self,
@@ -87,7 +87,7 @@ class TokenCostTracker:
         self.history.append({"model": model, "snapshot": snapshot.__dict__})
         return snapshot
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         return {
             "turns_count": len(self.history),
             "total_input_tokens": self.total_input_tokens,

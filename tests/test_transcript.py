@@ -1,5 +1,5 @@
 from pathlib import Path
-import pytest
+
 from harness.core.transcript import TranscriptEngine
 from harness.core.types import StepSource, StepType
 

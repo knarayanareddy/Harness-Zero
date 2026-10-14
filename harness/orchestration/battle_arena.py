@@ -6,13 +6,14 @@ evaluates solutions concurrently, and merges the winning branch into main.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
 import logging
-from pathlib import Path
 import subprocess
 import time
-from typing import Any, Callable, Dict, List, Optional
 import uuid
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 from harness.sandboxing.worktree import WorktreeManager
 
@@ -28,7 +29,7 @@ class CandidateResult:
     test_output: str
     benchmark_score: float
     diff_summary: str = ""
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
 
 @dataclass
@@ -36,21 +37,21 @@ class BattleRecord:
     battle_id: str
     prompt: str
     winning_agent_id: str
-    candidates: List[CandidateResult]
+    candidates: list[CandidateResult]
     duration_seconds: float
 
 
 class AgentArena:
     def __init__(self, worktree_manager: WorktreeManager):
         self.wt = worktree_manager
-        self.history: List[BattleRecord] = []
+        self.history: list[BattleRecord] = []
 
     async def run_battle(
         self,
         prompt: str,
-        candidates: List[Dict[str, Any]],
-        worker_fn: Optional[Callable[[str, Path, str, str], Any]] = None,
-        evaluator_fn: Optional[Callable[[List[CandidateResult]], CandidateResult]] = None,
+        candidates: list[dict[str, Any]],
+        worker_fn: Callable[[str, Path, str, str], Any] | None = None,
+        evaluator_fn: Callable[[list[CandidateResult]], CandidateResult] | None = None,
     ) -> BattleRecord:
         """
         Runs parallel competitive solutions in isolated Git worktrees.
@@ -70,7 +71,7 @@ class AgentArena:
                 self._run_candidate_worker(agent_id, wt_path, prompt, strategy, worker_fn)
             )
 
-        results: List[CandidateResult] = await asyncio.gather(*tasks)
+        results: list[CandidateResult] = await asyncio.gather(*tasks)
 
         # Evaluate winner
         if evaluator_fn:
@@ -109,7 +110,7 @@ class AgentArena:
         wt_path: Path,
         prompt: str,
         strategy: str,
-        worker_fn: Optional[Callable[[str, Path, str, str], Any]],
+        worker_fn: Callable[[str, Path, str, str], Any] | None,
     ) -> CandidateResult:
         if worker_fn:
             try:
@@ -142,7 +143,7 @@ class AgentArena:
         )
 
     def _default_evaluate_winner(
-        self, results: List[CandidateResult]
+        self, results: list[CandidateResult]
     ) -> CandidateResult:
         passing = [r for r in results if r.test_exit_code == 0]
         if not passing:

@@ -5,11 +5,10 @@ down to interactive indices ([#1] Button, [#2] Input), and provides Stagehand pr
 """
 from __future__ import annotations
 
-import asyncio
-from dataclasses import dataclass, field
-import json
 import logging
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any
+
 import httpx
 
 logger = logging.getLogger("harness.browser")
@@ -21,7 +20,7 @@ class InteractiveElement:
     tag: str
     role: str
     text: str
-    bounds: Dict[str, float]
+    bounds: dict[str, float]
 
     def to_summary(self) -> str:
         role_or_tag = self.role if self.role else self.tag.lower()
@@ -33,20 +32,20 @@ class BrowserCDPEngine:
     def __init__(
         self,
         cdp_http_url: str = "http://127.0.0.1:9222",
-        ws_url: Optional[str] = None,
+        ws_url: str | None = None,
     ):
         self.cdp_http_url = cdp_http_url.rstrip("/")
         self.ws_url = ws_url
         self.is_connected = False
         self._mock_mode = False
         self._current_url = "about:blank"
-        self._mock_elements: List[InteractiveElement] = [
+        self._mock_elements: list[InteractiveElement] = [
             InteractiveElement(1, "BUTTON", "button", "Submit", {"x": 200, "y": 150, "w": 80, "h": 32}),
             InteractiveElement(2, "INPUT", "textbox", "Email Address", {"x": 200, "y": 100, "w": 240, "h": 36}),
             InteractiveElement(3, "A", "link", "Forgot Password?", {"x": 200, "y": 200, "w": 120, "h": 20}),
         ]
 
-    def enable_mock_mode(self, elements: Optional[List[InteractiveElement]] = None) -> None:
+    def enable_mock_mode(self, elements: list[InteractiveElement] | None = None) -> None:
         """Enables deterministic offline testing without requiring a live Chrome instance."""
         self._mock_mode = True
         self.is_connected = True
@@ -77,13 +76,13 @@ class BrowserCDPEngine:
         self.enable_mock_mode()
         return True
 
-    async def navigate(self, url: str) -> Dict[str, Any]:
+    async def navigate(self, url: str) -> dict[str, Any]:
         self._current_url = url
         if self._mock_mode:
             return {"status": "navigated", "url": url}
         return {"status": "navigated", "url": url}
 
-    async def observe(self, instruction: str = "") -> List[InteractiveElement]:
+    async def observe(self, instruction: str = "") -> list[InteractiveElement]:
         """Discovers and prunes actionable elements into compact indices."""
         if self._mock_mode:
             if instruction:
@@ -96,7 +95,7 @@ class BrowserCDPEngine:
             return self._mock_elements
         return self._mock_elements
 
-    def render_pruned_tree(self, elements: List[InteractiveElement]) -> str:
+    def render_pruned_tree(self, elements: list[InteractiveElement]) -> str:
         """Renders compact token-efficient accessibility tree."""
         if not elements:
             return "(No interactive elements found on page)"
@@ -105,7 +104,7 @@ class BrowserCDPEngine:
             lines.append(f"  {el.to_summary()}")
         return "\n".join(lines)
 
-    async def act(self, instruction: str, target_index: Optional[int] = None) -> Dict[str, Any]:
+    async def act(self, instruction: str, target_index: int | None = None) -> dict[str, Any]:
         """Executes semantic action (e.g. click, type)."""
         elements = await self.observe(instruction)
         target = None
@@ -129,9 +128,9 @@ class BrowserCDPEngine:
 
     async def extract(
         self,
-        schema: Dict[str, Any],
+        schema: dict[str, Any],
         instruction: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Extracts schema-validated structured data from current page."""
         return {
             "status": "extracted",

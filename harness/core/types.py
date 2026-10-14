@@ -4,10 +4,9 @@ Core data types and schemas for Harness-Zero.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 
 class StepType(str, Enum):
@@ -43,9 +42,9 @@ class CircuitState(str, Enum):
 class ToolCall:
     id: str
     name: str
-    arguments: Dict[str, Any]
+    arguments: dict[str, Any]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
@@ -59,10 +58,10 @@ class ToolResult:
     name: str
     output: str
     is_error: bool = False
-    task_id: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    task_id: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         data = {
             "call_id": self.call_id,
             "name": self.name,
@@ -81,7 +80,7 @@ class MediaRef:
     mime_type: str
     uri: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "mime_type": self.mime_type,
             "uri": self.uri,
@@ -95,16 +94,16 @@ class TranscriptRecord:
     type: str
     content: str = ""
     thinking: str = ""
-    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
-    media: List[Dict[str, Any]] = field(default_factory=list)
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    media: list[dict[str, Any]] = field(default_factory=list)
     status: str = "DONE"
     created_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+        default_factory=lambda: datetime.now(UTC).isoformat()
     )
-    truncated_fields: List[str] = field(default_factory=list)
+    truncated_fields: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
-        data: Dict[str, Any] = {
+    def to_dict(self) -> dict[str, Any]:
+        data: dict[str, Any] = {
             "step_index": self.step_index,
             "source": self.source,
             "type": self.type,
@@ -127,6 +126,6 @@ class TranscriptRecord:
 class ModelResponse:
     content: str
     thinking: str = ""
-    tool_calls: List[ToolCall] = field(default_factory=list)
-    raw_response: Optional[Dict[str, Any]] = None
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    raw_response: dict[str, Any] | None = None
     finish_reason: str = "stop"

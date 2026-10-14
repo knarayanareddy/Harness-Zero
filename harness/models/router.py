@@ -7,10 +7,10 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import re
-from typing import Any, AsyncGenerator, Dict, List, Optional
 import uuid
+from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -19,9 +19,9 @@ from harness.core.types import ModelResponse, ToolCall
 
 class ModelRouter:
     @staticmethod
-    def _load_hermes_env() -> Dict[str, str]:
+    def _load_hermes_env() -> dict[str, str]:
         hermes_env = Path.home() / ".hermes" / ".env"
-        keys: Dict[str, str] = {}
+        keys: dict[str, str] = {}
         if hermes_env.exists():
             try:
                 for line in hermes_env.read_text(encoding="utf-8").splitlines():
@@ -49,9 +49,9 @@ class ModelRouter:
         self,
         default_provider: str = "mock",
         default_model: str = "mock-model",
-        api_keys: Optional[Dict[str, str]] = None,
+        api_keys: dict[str, str] | None = None,
         local_base_url: str = "http://localhost:11434/v1",
-        config_dir: Optional[Path] = None,
+        config_dir: Path | None = None,
     ):
         self.config_dir = Path(config_dir) if config_dir else Path(os.environ.get("HARNESS_CONFIG_DIR", Path.home() / ".harness"))
         config = self._load_config()
@@ -94,12 +94,12 @@ class ModelRouter:
             self.default_model = default_model
 
         self.local_base_url = config.get("local_base_url") or local_base_url
-        self._mock_responses: List[ModelResponse] = []
+        self._mock_responses: list[ModelResponse] = []
 
     def _config_path(self) -> Path:
         return self.config_dir / "config.json"
 
-    def _load_config(self) -> Dict[str, Any]:
+    def _load_config(self) -> dict[str, Any]:
         p = self._config_path()
         if p.exists():
             try:
@@ -110,9 +110,9 @@ class ModelRouter:
 
     def save_config(
         self,
-        keys: Optional[Dict[str, str]] = None,
-        default_provider: Optional[str] = None,
-        default_model: Optional[str] = None,
+        keys: dict[str, str] | None = None,
+        default_provider: str | None = None,
+        default_model: str | None = None,
     ):
         self.config_dir.mkdir(parents=True, exist_ok=True)
         try:
@@ -139,16 +139,16 @@ class ModelRouter:
         with open(fd, "wb") as f:
             f.write(content)
 
-    def set_mock_responses(self, responses: List[ModelResponse]) -> None:
+    def set_mock_responses(self, responses: list[ModelResponse]) -> None:
         """Injects responses for deterministic offline testing."""
         self._mock_responses = list(responses)
 
     async def generate(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        provider: str | None = None,
+        model: str | None = None,
         temperature: float = 0.2,
     ) -> ModelResponse:
         prov = provider or self.default_provider
@@ -200,7 +200,7 @@ class ModelRouter:
 
         raise ValueError(f"Unsupported model provider: {prov}")
 
-    def _mock_agent_turn(self, messages: List[Dict[str, Any]], tools: List[Dict[str, Any]]) -> ModelResponse:
+    def _mock_agent_turn(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> ModelResponse:
         user_text = ""
         is_tool_followup = False
         recent_tool_res = ""
@@ -233,7 +233,7 @@ class ModelRouter:
         if recent_tool_res:
             if "Exit Code:" in recent_tool_res or "passed" in recent_tool_res:
                 lines = recent_tool_res.splitlines()
-                summary_line = next((l for l in reversed(lines) if "passed" in l or "failed" in l or "Exit Code" in l), "Execution completed.")
+                summary_line = next((ln for ln in reversed(lines) if "passed" in ln or "failed" in ln or "Exit Code" in ln), "Execution completed.")
                 return ModelResponse(
                     content=f"""### Execution Completed ✓
 
@@ -416,15 +416,14 @@ Proceeding with the plan. You can review the active artifact in the right studio
     async def _call_local(
         self,
         model: str,
-        messages: List[Dict[str, Any]],
-        tools: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
         temperature: float,
     ) -> ModelResponse:
         """Employs Qwen XML adapter for robust tool calling on local models."""
         async with httpx.AsyncClient(timeout=120.0) as client:
             formatted_messages = list(messages)
             if tools:
-                tools_doc = json.dumps(tools, indent=2)
                 instructions = (
                     "\n\n# Tool Calling Format:\n"
                     "If you need to execute a tool, write:\n"
@@ -449,7 +448,7 @@ Proceeding with the plan. You can review the active artifact in the right studio
             raw_content = data["choices"][0]["message"]["content"]
 
             # Parse XML tool call
-            tool_calls: List[ToolCall] = []
+            tool_calls: list[ToolCall] = []
             clean_content = raw_content
 
             tool_match = re.search(r"<tool_call>\s*(.*?)\s*</tool_call>", raw_content, re.DOTALL)
@@ -473,8 +472,8 @@ Proceeding with the plan. You can review the active artifact in the right studio
         self,
         provider: str,
         model: str,
-        messages: List[Dict[str, Any]],
-        tools: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
         temperature: float,
     ) -> ModelResponse:
         base_urls = {
@@ -494,7 +493,7 @@ Proceeding with the plan. You can review the active artifact in the right studio
             headers["HTTP-Referer"] = "https://github.com/knarayanareddy/Harness-Zero"
             headers["X-Title"] = "Harness-Zero Sovereign Agent"
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
             "temperature": temperature,
@@ -533,7 +532,7 @@ Proceeding with the plan. You can review the active artifact in the right studio
                     if not content and thinking and not choice.get("tool_calls"):
                         content = thinking
 
-                    parsed_tools: List[ToolCall] = []
+                    parsed_tools: list[ToolCall] = []
                     if "tool_calls" in choice and choice["tool_calls"]:
                         for tc in choice["tool_calls"]:
                             fn = tc.get("function", {})
@@ -580,8 +579,8 @@ Proceeding with the plan. You can review the active artifact in the right studio
     async def _call_anthropic(
         self,
         model: str,
-        messages: List[Dict[str, Any]],
-        tools: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
         temperature: float,
     ) -> ModelResponse:
         api_key = self.api_keys.get("anthropic") or os.environ.get("ANTHROPIC_API_KEY", "")
@@ -601,7 +600,7 @@ Proceeding with the plan. You can review the active artifact in the right studio
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
         }
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": model,
             "messages": user_assistant_messages,
             "max_tokens": 4096,
@@ -626,7 +625,7 @@ Proceeding with the plan. You can review the active artifact in the right studio
             data = resp.json()
 
             text_blocks = []
-            parsed_tools: List[ToolCall] = []
+            parsed_tools: list[ToolCall] = []
             for block in data.get("content", []):
                 if block.get("type") == "text":
                     text_blocks.append(block.get("text", ""))
@@ -648,8 +647,8 @@ Proceeding with the plan. You can review the active artifact in the right studio
     async def _call_gemini(
         self,
         model: str,
-        messages: List[Dict[str, Any]],
-        tools: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
         temperature: float,
     ) -> ModelResponse:
         api_key = self.api_keys.get("gemini") or os.environ.get("GEMINI_API_KEY", "")

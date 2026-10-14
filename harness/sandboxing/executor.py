@@ -6,13 +6,14 @@ via WaitMsBeforeAsync, and manages task lifecycle (kill, status, send_input).
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 import os
-from pathlib import Path
 import signal
-from typing import Any, Callable, Dict, List, Optional
 import uuid
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 
 @dataclass
@@ -22,12 +23,12 @@ class BackgroundTask:
     cwd: Path
     process: asyncio.subprocess.Process
     start_time: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+        default_factory=lambda: datetime.now(UTC).isoformat()
     )
     status: str = "running"
-    exit_code: Optional[int] = None
-    stdout_chunks: List[str] = field(default_factory=list)
-    stderr_chunks: List[str] = field(default_factory=list)
+    exit_code: int | None = None
+    stdout_chunks: list[str] = field(default_factory=list)
+    stderr_chunks: list[str] = field(default_factory=list)
 
     @property
     def stdout(self) -> str:
@@ -39,8 +40,8 @@ class BackgroundTask:
 
 
 class CommandExecutor:
-    def __init__(self, on_task_completed: Optional[Callable[[BackgroundTask], Any]] = None):
-        self.tasks: Dict[str, BackgroundTask] = {}
+    def __init__(self, on_task_completed: Callable[[BackgroundTask], Any] | None = None):
+        self.tasks: dict[str, BackgroundTask] = {}
         self.on_task_completed = on_task_completed
 
     async def run(
@@ -49,7 +50,7 @@ class CommandExecutor:
         cwd: Path,
         wait_ms_before_async: int = 5000,
         is_daemon: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Executes a command. If it finishes within wait_ms_before_async, returns
         synchronously with stdout and exit_code. If it continues running, transitions
@@ -101,7 +102,7 @@ class CommandExecutor:
                 "stderr": bg_task.stderr,
                 "is_background": False,
             }
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # Command still running -> transition to background task
             asyncio.create_task(
                 self._monitor_background_task(bg_task, stdout_task, stderr_task)
@@ -114,7 +115,7 @@ class CommandExecutor:
             }
 
     async def _read_stream(
-        self, stream: Optional[asyncio.StreamReader], chunks: List[str], max_chunks: int = 10000
+        self, stream: asyncio.StreamReader | None, chunks: list[str], max_chunks: int = 10000
     ) -> None:
         if not stream:
             return
@@ -149,10 +150,10 @@ class CommandExecutor:
             except Exception:
                 pass
 
-    def get_task(self, task_id: str) -> Optional[BackgroundTask]:
+    def get_task(self, task_id: str) -> BackgroundTask | None:
         return self.tasks.get(task_id)
 
-    def list_tasks(self) -> List[Dict[str, Any]]:
+    def list_tasks(self) -> list[dict[str, Any]]:
         return [
             {
                 "task_id": t.task_id,

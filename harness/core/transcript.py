@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 from harness.core.types import MediaRef, StepSource, StepType, ToolCall, TranscriptRecord
 
@@ -19,7 +19,7 @@ class TranscriptEngine:
         self.full_file = self.session_dir / "transcript_full.jsonl"
         self.truncation_threshold = truncation_threshold
         self.step_counter = 0
-        self._full_offsets: List[int] = []
+        self._full_offsets: list[int] = []
 
         # Initialize existing step count and byte offsets if files exist
         self._index_existing_logs()
@@ -36,7 +36,7 @@ class TranscriptEngine:
                     line = f.readline()
             self.step_counter = len(self._full_offsets)
         elif self.compact_file.exists():
-            with open(self.compact_file, "r", encoding="utf-8") as f:
+            with open(self.compact_file, encoding="utf-8") as f:
                 lines = f.readlines()
                 self.step_counter = len(lines)
 
@@ -46,10 +46,10 @@ class TranscriptEngine:
         step_type: str | StepType,
         content: str = "",
         thinking: str = "",
-        tool_calls: Optional[List[Dict[str, Any] | ToolCall]] = None,
-        media: Optional[List[Dict[str, Any] | MediaRef]] = None,
+        tool_calls: list[dict[str, Any] | ToolCall] | None = None,
+        media: list[dict[str, Any] | MediaRef] | None = None,
         status: str = "DONE",
-    ) -> Tuple[int, int]:
+    ) -> tuple[int, int]:
         """
         Appends a step to both full and compact logs.
         Returns: (step_index, byte_offset_in_full_file)
@@ -96,7 +96,7 @@ class TranscriptEngine:
 
         # 2. Write compact record with pointer truncation
         compact_data = record.to_dict()
-        truncated_fields: List[str] = []
+        truncated_fields: list[str] = []
 
         if len(compact_data.get("content", "")) > self.truncation_threshold:
             compact_data["content"] = (
@@ -128,7 +128,7 @@ class TranscriptEngine:
 
         return self.step_counter, offset
 
-    def get_step(self, step_index: int, full: bool = True) -> Optional[Dict[str, Any]]:
+    def get_step(self, step_index: int, full: bool = True) -> dict[str, Any] | None:
         """
         O(1) seek directly to step_index in transcript_full.jsonl using cached byte offsets.
         """
@@ -151,7 +151,7 @@ class TranscriptEngine:
 
         # Fallback linear scan
         try:
-            with open(target_file, "r", encoding="utf-8", errors="replace") as f:
+            with open(target_file, encoding="utf-8", errors="replace") as f:
                 for line in f:
                     try:
                         rec = json.loads(line)
@@ -163,12 +163,12 @@ class TranscriptEngine:
             pass
         return None
 
-    def read_compact_history(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    def read_compact_history(self, limit: int | None = None) -> list[dict[str, Any]]:
         """Reads compact transcript lines for prompt assembly."""
         if not self.compact_file.exists():
             return []
         records = []
-        with open(self.compact_file, "r", encoding="utf-8") as f:
+        with open(self.compact_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -180,9 +180,9 @@ class TranscriptEngine:
     def compact_trajectory(
         self,
         task_overview: str,
-        completed_steps: List[str],
-        active_context: List[str],
-        open_commitments: List[str],
+        completed_steps: list[str],
+        active_context: list[str],
+        open_commitments: list[str],
     ) -> str:
         """
         Builds a structured markdown trajectory summary and appends it to the log.

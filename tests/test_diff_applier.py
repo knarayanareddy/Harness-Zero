@@ -1,5 +1,5 @@
 from pathlib import Path
-import pytest
+
 from harness.sandboxing.diff_applier import DiffApplier
 
 

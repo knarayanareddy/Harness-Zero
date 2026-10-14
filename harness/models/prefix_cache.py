@@ -5,25 +5,25 @@ across Anthropic, Gemini, OpenAI, and local models.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import json
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any
 
 
 @dataclass
 class PromptTiers:
     static_system_identity: str
-    tool_schemas: List[Dict[str, Any]]
+    tool_schemas: list[dict[str, Any]]
     skills_catalog: str
-    conversation_history: List[Dict[str, Any]]
+    conversation_history: list[dict[str, Any]]
     current_user_prompt: str
-    additional_metadata: Optional[str] = None
+    additional_metadata: str | None = None
 
 
 class PromptCacheBuilder:
     @staticmethod
-    def build_cached_prompt(tiers: PromptTiers) -> List[Dict[str, Any]]:
+    def build_cached_prompt(tiers: PromptTiers) -> list[dict[str, Any]]:
         """
         Builds messages list strictly adhering to:
         Tier 1: Static System Identity (0-2k tokens)
@@ -32,7 +32,7 @@ class PromptCacheBuilder:
         Tier 4: Append-Only Conversation History
         Tier 5: Dynamic Turn Tail (user input + timestamp only here)
         """
-        messages: List[Dict[str, Any]] = []
+        messages: list[dict[str, Any]] = []
 
         # Tier 1 + 2 + 3: Deterministic invariant system block
         # Sort tool schemas alphabetically by name to ensure stable prefix
@@ -58,7 +58,7 @@ class PromptCacheBuilder:
             messages.append(turn)
 
         # Tier 5: Dynamic Tail (Timestamps and real-time metadata placed only here)
-        now_str = datetime.now(timezone.utc).isoformat()
+        now_str = datetime.now(UTC).isoformat()
         tail_parts = [
             f"<USER_REQUEST>\n{tiers.current_user_prompt}\n</USER_REQUEST>",
             f"<CONTEXT_TIMESTAMP>\nCurrent local time: {now_str}\n</CONTEXT_TIMESTAMP>",

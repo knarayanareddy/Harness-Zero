@@ -1,7 +1,8 @@
-import pytest
 import tempfile
 from pathlib import Path
-from harness.memory.semantic_memories import SemanticMemoryStore, MemoryItem
+
+from harness.memory.semantic_memories import SemanticMemoryStore
+
 
 def test_semantic_memory_store_cross_session():
     with tempfile.TemporaryDirectory() as tmpdir:

@@ -12,17 +12,14 @@ Validates:
 from __future__ import annotations
 
 import asyncio
-import json
-import os
-from pathlib import Path
 import shutil
 import tempfile
 import time
-from typing import Any, Dict, List
+from pathlib import Path
 
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
+from rich.table import Table
 
 console = Console()
 
@@ -42,9 +39,9 @@ async def run_all_verifications():
 
     # 1a. Architect/Editor Loop with Self-Healing
     try:
-        from harness.orchestration.architect_editor import ArchitectEditorLoop, EditIteration
-        from harness.models.router import ModelRouter
         from harness.core.types import ModelResponse
+        from harness.models.router import ModelRouter
+        from harness.orchestration.architect_editor import ArchitectEditorLoop
 
         temp_dir = Path(tempfile.mkdtemp(prefix="harness_ae_test_"))
         test_file = temp_dir / "calculator.py"
@@ -69,7 +66,7 @@ async def run_all_verifications():
         res = await loop.execute(
             task_prompt="Fix subtraction bug in add function",
             target_files=[test_file],
-            test_command=f"python3 -c 'import sys; from calculator import add; sys.exit(0 if add(2, 3) == 5 else 1)'",
+            test_command="python3 -c 'import sys; from calculator import add; sys.exit(0 if add(2, 3) == 5 else 1)'",
             max_retries=3,
             auto_commit=False,
         )
@@ -103,7 +100,7 @@ async def run_all_verifications():
         )
         assert record.winning_agent_id == "cand_beta"
         results.append(("Battle Arena Parallel Forks", True, f"Evaluated 2 candidates in isolated worktrees, winner: {record.winning_agent_id}"))
-        console.print(f"  [green]✓[/green] Battle Arena: Forked isolated worktrees & scored candidates successfully.")
+        console.print("  [green]✓[/green] Battle Arena: Forked isolated worktrees & scored candidates successfully.")
     except Exception as e:
         results.append(("Battle Arena Parallel Forks", False, str(e)))
         console.print(f"  [red]✗[/red] Battle Arena Failed: {e}")
@@ -150,7 +147,7 @@ async def run_all_verifications():
 
     # 1d. StateGraph Engine
     try:
-        from harness.orchestration.state_graph import StateGraphEngine, AgentState
+        from harness.orchestration.state_graph import AgentState, StateGraphEngine
 
         engine = StateGraphEngine()
 
@@ -185,8 +182,8 @@ async def run_all_verifications():
 
     # 2a. Circuit Breakers & Pre-Flight Complexity Classifier
     try:
-        from harness.models.circuits import IntelligentModelRouter, ProviderEndpoint, CircuitState
         from harness.core.types import ModelTier
+        from harness.models.circuits import CircuitState, IntelligentModelRouter, ProviderEndpoint
 
         imr = IntelligentModelRouter()
         
@@ -231,11 +228,7 @@ async def run_all_verifications():
 
     # 2c. DeepSeek Reasoning Stream & Adapters (Qwen & ZAI)
     try:
-        from harness.models.reasoning_stream import (
-            ReasoningStreamParser,
-            QwenToolAdapter,
-            ZAIToolAdapter
-        )
+        from harness.models.reasoning_stream import QwenToolAdapter, ReasoningStreamParser
 
         parser = ReasoningStreamParser()
         chunks = ["Hello, <think>", "Let me analyze", " the data.</think>", "The answer is 42."]
@@ -301,7 +294,7 @@ async def run_all_verifications():
 
     # 3b. Stagehand CDP Browser Engine
     try:
-        from harness.browser.stagehand_engine import BrowserCDPEngine, InteractiveElement
+        from harness.browser.stagehand_engine import BrowserCDPEngine
 
         browser = BrowserCDPEngine()
         await browser.connect()
@@ -326,8 +319,8 @@ async def run_all_verifications():
 
     # 4a. WorktreeManager & DiffApplier
     try:
-        from harness.sandboxing.worktree import WorktreeManager
         from harness.sandboxing.diff_applier import DiffApplier
+        from harness.sandboxing.worktree import WorktreeManager
 
         repo_root = Path.cwd()
         wt = WorktreeManager(repo_root=repo_root)
@@ -350,7 +343,7 @@ async def run_all_verifications():
         wt.remove_worktree(test_worker_id, delete_branch=True)
         assert not wt_path.exists()
 
-        results.append(("Git Worktree Isolation & Diff Applier", True, f"Created isolated worktree, applied surgical diff, cleaned branch cleanly"))
+        results.append(("Git Worktree Isolation & Diff Applier", True, "Created isolated worktree, applied surgical diff, cleaned branch cleanly"))
         console.print("  [green]✓[/green] Git Worktree: Isolated worktree creation, diffing, and branch cleanup verified.")
     except Exception as e:
         results.append(("Git Worktree Isolation & Diff Applier", False, str(e)))
@@ -434,7 +427,7 @@ async def run_all_verifications():
 
     # 6a. Secret Leak Scanning
     try:
-        from harness.sandboxing.tirith_security import TirithSecurityCapsule, SecurityVerdict
+        from harness.sandboxing.tirith_security import SecurityVerdict, TirithSecurityCapsule
 
         secrets_test_str = "Deploy with key: ghp_1234567890abcdef1234567890abcdef1234 and AKIA1234567890ABCDEF"
         leaks = TirithSecurityCapsule.scan_secrets(secrets_test_str)
@@ -450,7 +443,7 @@ async def run_all_verifications():
         assert audit.blast_radius.risk_score >= 80
 
         results.append(("Tirith Security Capsule (Secrets, SSRF, Blast Radius)", True, f"Scanned {len(leaks)} secrets, blocked cloud SSRF metadata & destructive commands"))
-        console.print(f"  [green]✓[/green] Tirith Security: Secret leak scrubbing, cloud metadata SSRF block, and blast radius limiter verified.")
+        console.print("  [green]✓[/green] Tirith Security: Secret leak scrubbing, cloud metadata SSRF block, and blast radius limiter verified.")
     except Exception as e:
         results.append(("Tirith Security Capsule (Secrets, SSRF, Blast Radius)", False, str(e)))
         console.print(f"  [red]✗[/red] Tirith Security Failed: {e}")
@@ -530,7 +523,8 @@ async def run_all_verifications():
     all_passed = True
     for name, passed, details in results:
         status_str = "[bold green]PASS[/bold green]" if passed else "[bold red]FAIL[/bold red]"
-        if not passed: all_passed = False
+        if not passed:
+            all_passed = False
         table.add_row(name, status_str, details)
 
     console.print(table)

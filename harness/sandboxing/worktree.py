@@ -4,15 +4,13 @@ Provisions isolated worktrees to prevent parallel agent file editing collisions.
 """
 from __future__ import annotations
 
-import asyncio
-from pathlib import Path
 import shutil
 import subprocess
-from typing import Dict, Optional
+from pathlib import Path
 
 
 class WorktreeManager:
-    def __init__(self, repo_root: Path, worktree_base_dir: Optional[Path] = None):
+    def __init__(self, repo_root: Path, worktree_base_dir: Path | None = None):
         self.repo_root = Path(repo_root)
         self.worktree_base = (
             Path(worktree_base_dir)
@@ -20,7 +18,7 @@ class WorktreeManager:
             else self.repo_root / ".harness" / "worktrees"
         )
         self.worktree_base.mkdir(parents=True, exist_ok=True)
-        self._active_worktrees: Dict[str, Path] = {}
+        self._active_worktrees: dict[str, Path] = {}
 
     def create_worktree(self, subagent_id: str, base_branch: str = "HEAD") -> Path:
         target_dir = self.worktree_base / f"worker_{subagent_id}"

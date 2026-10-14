@@ -5,10 +5,11 @@ Prevents LLM rate-limit thrashing and thread exhaustion during wide subagent fan
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
 import logging
 import time
-from typing import Callable, Dict, List, Optional
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Any
 
 logger = logging.getLogger("harness.concurrency")
 
@@ -22,7 +23,7 @@ class QueuedRequest:
 
 class InFlightQueue:
     def __init__(self):
-        self._queue: List[QueuedRequest] = []
+        self._queue: list[QueuedRequest] = []
         self._last_acquire_wait_ms: float = 0.0
         self._aborted_count: int = 0
 
@@ -43,7 +44,7 @@ class InFlightQueue:
         self._queue.append(req)
         return fut
 
-    def take(self) -> Optional[QueuedRequest]:
+    def take(self) -> QueuedRequest | None:
         if not self._queue:
             return None
         req = self._queue.pop(0)
@@ -137,7 +138,7 @@ class ConcurrencyGate:
         if not req.future.done():
             req.future.set_result(True)
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         return {
             "limit": self.limit,
             "active": self._active,
