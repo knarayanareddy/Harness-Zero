@@ -39,7 +39,7 @@ class ScriptedProvider:
     ) -> None:
         self.responses: list[list[ModelEvent] | Exception] = list(responses or [])
         self.requests: list[ModelRequest] = []
-        self._models = models or [
+        self._models = list(models) if models is not None else [
             ModelInfo(
                 id="scripted-v1",
                 display_name="Scripted V1",
@@ -76,3 +76,29 @@ class ScriptedProvider:
 
     async def aclose(self) -> None:
         pass
+
+    def assert_requested(
+        self,
+        count: int | None = None,
+        model: str | None = None,
+        contains_text: str | None = None,
+    ) -> None:
+        """Asserts conditions on recorded requests."""
+        if count is not None:
+            assert len(self.requests) == count, f"Expected {count} requests, got {len(self.requests)}"
+        if model is not None:
+            assert any(r.model == model for r in self.requests), f"No request found for model '{model}'"
+        if contains_text is not None:
+            found = False
+            for r in self.requests:
+                for m in r.messages:
+                    if contains_text in m.text():
+                        found = True
+                        break
+            assert found, f"Expected text {contains_text!r} not found in received requests"
+
+    def reset(self) -> None:
+        """Resets replay state and recorded requests."""
+        self.requests.clear()
+        self._index = 0
+

@@ -30,6 +30,10 @@ package = [
 harness = "harness.cli:main"
 harness-zero = "harness.cli:main"
 
+[project.entry-points.pytest11]
+harness = "harness.sdk.testing"
+
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
