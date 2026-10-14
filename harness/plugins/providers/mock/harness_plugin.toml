@@ -1,0 +1,8 @@
+[plugin]
+name = "provider-mock"
+version = "1.0.0"
+api_version = "1"
+summary = "Deterministic ScriptedProvider for hermetic tests and offline execution"
+provides = ["provider"]
+capabilities = []
+entry = "harness.plugins.providers.mock.plugin:MockProviderPlugin"

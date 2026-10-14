@@ -38,6 +38,7 @@ def main(ctx: click.Context):
 @click.option("--workspace", "-w", default=".", help="Workspace path")
 @click.option("--provider", "-p", default=None, help="Model provider (openai, anthropic, gemini, local, mock)")
 @click.option("--model", "-m", default=None, help="Model name")
+@click.option("--mock-script", default=None, help="Path to mock script JSON file for --provider mock")
 @click.option("--kernel", is_flag=True, default=True, help="Use modular kernel runtime (default: True)")
 @click.option("--verbose", "-v", is_flag=True, default=False, help="Verbose logging")
 @click.option("--log-file", default=None, help="Log file path")
@@ -46,12 +47,13 @@ def run(
     workspace: str,
     provider: str | None,
     model: str | None,
+    mock_script: str | None,
     kernel: bool,
     verbose: bool,
     log_file: str | None,
 ):
     """Execute a single autonomous turn via modular kernel."""
-    asyncio.run(_run_kernel_turn(prompt, Path(workspace), provider, model, verbose, log_file))
+    asyncio.run(_run_kernel_turn(prompt, Path(workspace), provider, model, mock_script, verbose, log_file))
 
 
 async def _run_kernel_turn(
@@ -59,6 +61,7 @@ async def _run_kernel_turn(
     workspace: Path,
     provider: str | None,
     model: str | None,
+    mock_script: str | None,
     verbose: bool,
     log_file: str | None,
 ):
@@ -68,6 +71,11 @@ async def _run_kernel_turn(
             log_file=Path(log_file) if log_file else None,
             verbose=verbose,
         )
+        if mock_script:
+            runtime.settings.set("providers.mock.script_file", mock_script)
+            if not provider:
+                provider = "mock"
+
         app = CliApp(commands=runtime.commands, bus=runtime.bus, interactive=False)
         options: dict[str, Any] = {}
         if provider:
@@ -86,6 +94,7 @@ async def _run_kernel_turn(
 @click.option("--workspace", "-w", default=".", help="Workspace path")
 @click.option("--provider", "-p", default=None, help="Model provider")
 @click.option("--model", "-m", default=None, help="Model name")
+@click.option("--mock-script", default=None, help="Path to mock script JSON file for --provider mock")
 @click.option("--kernel", is_flag=True, default=True, help="Use modular kernel runtime (default: True)")
 @click.option("--verbose", "-v", is_flag=True, default=False, help="Verbose logging")
 @click.option("--log-file", default=None, help="Log file path")
@@ -93,18 +102,20 @@ def interactive(
     workspace: str,
     provider: str | None,
     model: str | None,
+    mock_script: str | None,
     kernel: bool,
     verbose: bool,
     log_file: str | None,
 ):
     """Start an interactive pair-programming session with slash commands."""
-    asyncio.run(_run_kernel_interactive(Path(workspace), provider, model, verbose, log_file))
+    asyncio.run(_run_kernel_interactive(Path(workspace), provider, model, mock_script, verbose, log_file))
 
 
 async def _run_kernel_interactive(
     workspace: Path,
     provider: str | None,
     model: str | None,
+    mock_script: str | None,
     verbose: bool,
     log_file: str | None,
 ):
@@ -114,6 +125,11 @@ async def _run_kernel_interactive(
             log_file=Path(log_file) if log_file else None,
             verbose=verbose,
         )
+        if mock_script:
+            runtime.settings.set("providers.mock.script_file", mock_script)
+            if not provider:
+                provider = "mock"
+
         if provider:
             runtime.settings.set("kernel.provider", provider)
         if model:
