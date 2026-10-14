@@ -1,0 +1,511 @@
+/**
+ * Harness-Zero Studio Main Entrypoint (ES Module).
+ * Coordinates timeline, SSE event streaming, approvals, and commands API (§11).
+ */
+
+import { api } from './api.js';
+import { HarnessEventStream } from './events.js';
+import { cardRenderer, escapeHtml } from './cards.js';
+import { SettingsPanel } from './settings.js';
+
+export class HarnessStudioApp {
+  constructor() {
+    this.api = api;
+    this.events = new HarnessEventStream(this.api);
+    this.activeSessionId = null;
+    this.isBusy = false;
+    this.settingsPanel = null;
+    this.sandboxOrigin = '';
+
+    // Active streaming elements
+    this.currentAssistantBlock = null;
+    this.currentTextElement = null;
+    this.currentThinkingBlock = null;
+    this.currentThinkingElement = null;
+  }
+
+  async init() {
+    // 1. Initial health and environment check
+    try {
+      const health = await this.api.health();
+      this.sandboxOrigin = health.sandbox_origin || '';
+      cardRenderer.sandboxOrigin = this.sandboxOrigin;
+
+      if (health.active_session) {
+        this.activeSessionId = health.active_session.session_id;
+      }
+      this.updateEconomics(health.spend);
+    } catch (err) {
+      console.warn('[HarnessStudio] Initial health check failed:', err);
+    }
+
+    // 2. Setup Settings Panel
+    const settingsContainer = document.getElementById('settings-content');
+    if (settingsContainer) {
+      this.settingsPanel = new SettingsPanel(this.api, settingsContainer);
+    }
+
+    // 3. Setup Models & Strategy Pickers
+    await this.populateModels();
+
+    // 4. Load Sessions
+    await this.loadSessions();
+
+    // 5. Connect SSE Event Stream
+    this.setupEventHandlers();
+    this.events.connect();
+
+    // 6. Bind DOM UI listeners
+    this.bindControls();
+  }
+
+  setupEventHandlers() {
+    // Connection status indicators
+    this.events.on('$connected', () => {
+      this.setStatusIndicator('online', 'Connected');
+    });
+
+    this.events.on('$reconnecting', ({ attempt }) => {
+      this.setStatusIndicator('reconnecting', `Reconnecting (${attempt})...`);
+    });
+
+    this.events.on('$disconnected', () => {
+      this.setStatusIndicator('offline', 'Disconnected');
+    });
+
+    // Lifecycle events
+    this.events.on('turn.started', (data) => {
+      this.setBusy(true);
+      this.appendTurnBlock('assistant');
+    });
+
+    this.events.on('turn.completed', () => {
+      this.setBusy(false);
+      this.finalizeStreamingBlock();
+    });
+
+    this.events.on('turn.cancelled', () => {
+      this.setBusy(false);
+      this.finalizeStreamingBlock();
+      this.appendNotice('Turn cancelled by user.', 'warning');
+    });
+
+    this.events.on('turn.error', (data) => {
+      this.setBusy(false);
+      this.finalizeStreamingBlock();
+      this.appendNotice(data.error || 'Turn execution error', 'error');
+    });
+
+    // Streaming Deltas
+    this.events.on('model.text.delta', (data) => {
+      if (!this.currentAssistantBlock) {
+        this.appendTurnBlock('assistant');
+      }
+      if (data.text) {
+        this.streamAssistantText(data.text);
+      }
+    });
+
+    this.events.on('model.thinking.delta', (data) => {
+      if (!this.currentAssistantBlock) {
+        this.appendTurnBlock('assistant');
+      }
+      if (data.text) {
+        this.streamThinkingText(data.text);
+      }
+    });
+
+    this.events.on('tool.output.delta', (data) => {
+      if (data.text) {
+        this.appendTerminalOutput(data.text);
+      }
+    });
+
+    // Tool execution & cards
+    this.events.on('tool.call', (data) => {
+      this.appendToolCall(data);
+    });
+
+    this.events.on('ui.card', (data) => {
+      const card = data.card || data;
+      this.appendCard(card);
+    });
+
+    // Approvals
+    this.events.on('approval.required', (data) => {
+      this.showApproval(data);
+    });
+
+    this.events.on('approval.resolved', (data) => {
+      this.resolveApprovalUI(data);
+    });
+
+    // Economics
+    this.events.on('cost.updated', (data) => {
+      this.updateEconomics(data);
+    });
+
+    // Session Switch
+    this.events.on('session.switched', (data) => {
+      this.activeSessionId = data.session_id;
+      this.loadSessions();
+      this.reloadTranscript();
+    });
+  }
+
+  bindControls() {
+    // Send form
+    const form = document.getElementById('composer-form');
+    const input = document.getElementById('composer-input');
+    const stopBtn = document.getElementById('btn-stop');
+
+    if (form && input) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const text = input.value.trim();
+        if (!text || this.isBusy) return;
+        input.value = '';
+        input.style.height = 'auto';
+
+        // Add user block to timeline immediately
+        this.appendUserTurn(text);
+
+        // Submit to API
+        try {
+          const model = document.getElementById('model-select')?.value;
+          await this.api.submitTurn(text, {
+            session_id: this.activeSessionId,
+            model: model || undefined,
+          });
+        } catch (err) {
+          this.appendNotice(`Submit failed: ${err.message}`, 'error');
+          this.setBusy(false);
+        }
+      });
+
+      // Shift+Enter newline vs Enter to submit
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          form.dispatchEvent(new Event('submit', { cancelable: true }));
+        }
+      });
+    }
+
+    if (stopBtn) {
+      stopBtn.addEventListener('click', async () => {
+        try {
+          await this.api.cancelTurn(this.activeSessionId);
+        } catch (err) {
+          console.error('Failed to cancel turn:', err);
+        }
+      });
+    }
+  }
+
+  appendUserTurn(text) {
+    const timeline = document.getElementById('timeline');
+    if (!timeline) return;
+
+    const block = document.createElement('div');
+    block.className = 'turn-block turn-user';
+    block.innerHTML = `
+      <div class="message-bubble whitespace-pre-wrap">${escapeHtml(text)}</div>
+    `;
+    timeline.appendChild(block);
+    timeline.scrollTop = timeline.scrollHeight;
+  }
+
+  appendTurnBlock(role = 'assistant') {
+    const timeline = document.getElementById('timeline');
+    if (!timeline) return;
+
+    const block = document.createElement('div');
+    block.className = `turn-block turn-${role}`;
+    block.innerHTML = `
+      <div class="message-bubble">
+        <div class="thinking-container"></div>
+        <div class="content-body markdown-body"></div>
+      </div>
+    `;
+    timeline.appendChild(block);
+    timeline.scrollTop = timeline.scrollHeight;
+
+    this.currentAssistantBlock = block;
+    this.currentTextElement = block.querySelector('.content-body');
+    this.currentThinkingBlock = block.querySelector('.thinking-container');
+    this.currentThinkingElement = null;
+  }
+
+  streamAssistantText(chunk) {
+    if (!this.currentTextElement) return;
+    this.currentTextElement.textContent += chunk;
+    const timeline = document.getElementById('timeline');
+    if (timeline) timeline.scrollTop = timeline.scrollHeight;
+  }
+
+  streamThinkingText(chunk) {
+    if (!this.currentThinkingBlock) return;
+    if (!this.currentThinkingElement) {
+      const details = document.createElement('details');
+      details.className = 'thinking-block';
+      details.open = true;
+      details.innerHTML = `
+        <summary>Reasoning Process</summary>
+        <div class="thinking-content whitespace-pre-wrap mt-2 font-mono text-xs"></div>
+      `;
+      this.currentThinkingBlock.appendChild(details);
+      this.currentThinkingElement = details.querySelector('.thinking-content');
+    }
+    this.currentThinkingElement.textContent += chunk;
+  }
+
+  finalizeStreamingBlock() {
+    if (this.currentTextElement && window.marked && window.DOMPurify) {
+      try {
+        const rawText = this.currentTextElement.textContent || '';
+        this.currentTextElement.innerHTML = window.DOMPurify.sanitize(window.marked.parse(rawText));
+      } catch (err) {
+        console.warn('Failed to parse markdown on finalize:', err);
+      }
+    }
+    this.currentAssistantBlock = null;
+    this.currentTextElement = null;
+    this.currentThinkingBlock = null;
+    this.currentThinkingElement = null;
+  }
+
+  appendToolCall(data) {
+    const timeline = document.getElementById('timeline');
+    if (!timeline) return;
+
+    const card = document.createElement('div');
+    card.className = 'harness-card harness-card-tool border border-blue-900/40 bg-blue-950/20 p-2.5 rounded my-1 text-xs';
+    card.innerHTML = `
+      <div class="flex items-center gap-2">
+        <span class="text-blue-400">⚡</span>
+        <span class="font-mono font-semibold text-blue-200">${escapeHtml(data.tool || 'Tool Call')}</span>
+        <span class="text-gray-400">(${escapeHtml(data.call_id || '')})</span>
+      </div>
+    `;
+    timeline.appendChild(card);
+    timeline.scrollTop = timeline.scrollHeight;
+  }
+
+  appendCard(card) {
+    const timeline = document.getElementById('timeline');
+    if (!timeline) return;
+
+    const cardHtml = cardRenderer.render(card);
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = cardHtml;
+    timeline.appendChild(wrapper.firstElementChild);
+    timeline.scrollTop = timeline.scrollHeight;
+  }
+
+  appendNotice(msg, level = 'info') {
+    const card = { kind: 'notice', payload: { message: msg, level } };
+    this.appendCard(card);
+  }
+
+  appendTerminalOutput(text) {
+    const term = document.getElementById('terminal-body');
+    if (term) {
+      term.textContent += text;
+      term.scrollTop = term.scrollHeight;
+    }
+  }
+
+  showApproval(data) {
+    // 1. Append approval card to timeline
+    const card = { kind: 'approval', payload: data };
+    this.appendCard(card);
+
+    // 2. Show top banner for high visibility
+    const banner = document.getElementById('approval-banner');
+    if (banner) {
+      banner.classList.remove('hidden');
+      banner.setAttribute('data-request-id', data.request_id || '');
+    }
+  }
+
+  resolveApprovalUI(data) {
+    const reqId = data.request_id;
+    // Hide top banner if matches
+    const banner = document.getElementById('approval-banner');
+    if (banner && banner.getAttribute('data-request-id') === reqId) {
+      banner.classList.add('hidden');
+    }
+
+    // Update approval card status in timeline
+    const card = document.querySelector(`.harness-card-approval[data-request-id="${reqId}"]`);
+    if (card) {
+      card.classList.remove('border-amber-500/70', 'bg-amber-950/30');
+      card.classList.add('border-gray-700', 'bg-gray-800/40', 'opacity-70');
+      const actions = card.querySelector('.flex.justify-end');
+      if (actions) {
+        actions.innerHTML = `<span class="text-xs font-semibold uppercase text-gray-400">Resolved: ${escapeHtml(data.decision || 'done')}</span>`;
+      }
+    }
+  }
+
+  async resolveApproval(requestId, decision, feedback = '') {
+    try {
+      await this.api.resolveApproval(requestId, decision, feedback);
+    } catch (err) {
+      alert(`Failed to resolve approval: ${err.message}`);
+    }
+  }
+
+  async submitCardForm(formId, formElem) {
+    const formData = new FormData(formElem);
+    const data = Object.fromEntries(formData.entries());
+    try {
+      await this.api.command('form.submit', { form_id: formId, data });
+      this.appendNotice(`Form submitted successfully.`, 'success');
+      formElem.querySelector('button[type="submit"]')?.setAttribute('disabled', 'true');
+    } catch (err) {
+      this.appendNotice(`Form submission failed: ${err.message}`, 'error');
+    }
+  }
+
+  setBusy(busy) {
+    this.isBusy = busy;
+    const sendBtn = document.getElementById('btn-send');
+    const stopBtn = document.getElementById('btn-stop');
+    if (busy) {
+      sendBtn?.classList.add('hidden');
+      stopBtn?.classList.remove('hidden');
+    } else {
+      sendBtn?.classList.remove('hidden');
+      stopBtn?.classList.add('hidden');
+    }
+  }
+
+  setStatusIndicator(state, text) {
+    const dot = document.getElementById('status-dot');
+    const label = document.getElementById('status-text');
+    if (label) label.textContent = text;
+    if (dot) {
+      dot.className = 'w-2 h-2 rounded-full ' + (
+        state === 'online' ? 'bg-emerald-400' :
+        state === 'reconnecting' ? 'bg-amber-400 animate-pulse' :
+        'bg-red-500'
+      );
+    }
+  }
+
+  updateEconomics(spendData) {
+    const elem = document.getElementById('economics-indicator');
+    if (!elem || !spendData) return;
+    const cap = spendData.spend_cap_usd !== undefined ? `$${spendData.spend_cap_usd.toFixed(2)}` : '$5.00';
+    const total = spendData.totals?.total_cost_usd !== undefined ? `$${spendData.totals.total_cost_usd.toFixed(4)}` : '$0.00';
+    elem.textContent = `${total} / ${cap}`;
+  }
+
+  async populateModels() {
+    const select = document.getElementById('model-select');
+    if (!select) return;
+    try {
+      const models = await this.api.listModels();
+      if (models && models.length > 0) {
+        select.innerHTML = '';
+        for (const m of models) {
+          const opt = document.createElement('option');
+          opt.value = m.id || m.model_name || m.name;
+          opt.textContent = `${m.provider ? m.provider + ': ' : ''}${m.id || m.name}`;
+          select.appendChild(opt);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to populate models:', err);
+    }
+  }
+
+  async loadSessions() {
+    const list = document.getElementById('session-list');
+    if (!list) return;
+    try {
+      const sessions = await this.api.getSessions();
+      list.innerHTML = '';
+      for (const s of (sessions || [])) {
+        const item = document.createElement('div');
+        const isActive = s.session_id === this.activeSessionId;
+        item.className = `session-item ${isActive ? 'active' : ''}`;
+        item.innerHTML = `
+          <span class="truncate">${escapeHtml(s.session_id)}</span>
+          <span class="text-xs opacity-60">${s.busy ? '⏳' : ''}</span>
+        `;
+        item.addEventListener('click', () => this.switchSession(s.session_id));
+        list.appendChild(item);
+      }
+    } catch (err) {
+      console.warn('Failed to load sessions:', err);
+    }
+  }
+
+  async switchSession(sessionId) {
+    if (sessionId === this.activeSessionId) return;
+    try {
+      await this.api.switchSession(sessionId);
+      this.activeSessionId = sessionId;
+      await this.loadSessions();
+      await this.reloadTranscript();
+    } catch (err) {
+      alert(`Failed to switch session: ${err.message}`);
+    }
+  }
+
+  async createNewSession() {
+    try {
+      const s = await this.api.createSession();
+      this.activeSessionId = s.session_id;
+      await this.loadSessions();
+      await this.reloadTranscript();
+    } catch (err) {
+      alert(`Failed to create session: ${err.message}`);
+    }
+  }
+
+  async reloadTranscript() {
+    const timeline = document.getElementById('timeline');
+    if (!timeline) return;
+    timeline.innerHTML = '';
+    if (!this.activeSessionId) return;
+
+    try {
+      const sData = await this.api.command('sessions.get', { session_id: this.activeSessionId });
+      for (const rec of (sData.records || [])) {
+        if (rec.type === 'USER_INPUT') {
+          this.appendUserTurn(rec.content || '');
+        } else if (rec.type === 'PLANNER_RESPONSE' || rec.type === 'MODEL') {
+          this.appendTurnBlock('assistant');
+          this.streamAssistantText(rec.content || '');
+          this.finalizeStreamingBlock();
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to reload transcript:', err);
+    }
+  }
+
+  openSettings() {
+    const modal = document.getElementById('settings-modal');
+    if (modal) {
+      modal.classList.remove('hidden');
+      this.settingsPanel?.load();
+    }
+  }
+
+  closeSettings() {
+    const modal = document.getElementById('settings-modal');
+    if (modal) modal.classList.add('hidden');
+  }
+}
+
+// Global bootstrap
+document.addEventListener('DOMContentLoaded', () => {
+  const app = new HarnessStudioApp();
+  window.HarnessApp = app;
+  app.init();
+});

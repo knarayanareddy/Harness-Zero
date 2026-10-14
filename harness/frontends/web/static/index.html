@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Harness-Zero Studio</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/vendor/purify.min.js"></script>
+  <script src="/static/vendor/marked.min.js"></script>
+  <script src="/static/vendor/prism_bundle.js"></script>
+  <script type="module" src="/static/app.js"></script>
+</head>
+<body>
+  <!-- Top Approval Banner -->
+  <div id="approval-banner" class="hidden bg-amber-500/90 text-black px-4 py-2 flex items-center justify-between text-sm font-semibold z-40 shadow-lg">
+    <div class="flex items-center gap-2">
+      <span>⚠️ High-Risk Action Approval Requested</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <button type="button" onclick="const id = this.closest('#approval-banner').getAttribute('data-request-id'); window.HarnessApp?.resolveApproval(id, 'denied');" class="px-2.5 py-1 bg-black/20 hover:bg-black/30 text-black rounded text-xs">Deny</button>
+      <button type="button" onclick="const id = this.closest('#approval-banner').getAttribute('data-request-id'); window.HarnessApp?.resolveApproval(id, 'approved');" class="px-3 py-1 bg-black text-amber-300 hover:bg-black/80 rounded text-xs font-bold">Approve</button>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="brand">
+      <span>⚡</span>
+      <span>Harness-Zero</span>
+      <span class="brand-badge">Studio</span>
+    </div>
+
+    <div class="header-controls">
+      <!-- Connection Status -->
+      <div class="flex items-center gap-2 text-xs text-gray-400">
+        <span id="status-dot" class="w-2 h-2 rounded-full bg-gray-500"></span>
+        <span id="status-text">Connecting...</span>
+      </div>
+
+      <!-- Economics Tracker -->
+      <div class="text-xs font-mono text-gray-300 bg-gray-800/80 px-2.5 py-1 rounded border border-gray-700">
+        <span class="text-gray-400">Spend:</span> <span id="economics-indicator">$0.00 / $5.00</span>
+      </div>
+
+      <!-- Model Picker -->
+      <select id="model-select" class="bg-gray-800 text-xs text-white border border-gray-700 rounded px-2 py-1">
+        <option value="">Default Model</option>
+      </select>
+
+      <!-- Settings Button -->
+      <button type="button" onclick="window.HarnessApp?.openSettings()" class="p-1.5 rounded hover:bg-gray-700 text-gray-300" title="Settings">
+        ⚙️
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <div class="app-main">
+    <!-- Sidebar -->
+    <aside class="app-sidebar">
+      <div class="flex items-center justify-between mb-2">
+        <span class="sidebar-title">Sessions</span>
+        <button type="button" onclick="window.HarnessApp?.createNewSession()" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded font-medium">
+          + New
+        </button>
+      </div>
+      <div id="session-list" class="session-list"></div>
+    </aside>
+
+    <!-- Main Content & Timeline -->
+    <main class="app-content">
+      <div id="timeline" class="timeline-container">
+        <!-- Live turn bubbles & cards appear here -->
+        <div class="turn-block turn-assistant">
+          <div class="message-bubble">
+            <div class="content-body">
+              <strong>Welcome to Harness-Zero Studio.</strong><br>
+              Ready to execute turns across your workspace jail with full auditability and dual-origin sandbox defense.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Terminal Drawer -->
+      <div id="terminal-drawer" class="terminal-drawer">
+        <div class="terminal-header">
+          <span>Terminal & Tool Output Stream</span>
+          <button type="button" onclick="document.getElementById('terminal-body').textContent='';" class="text-xs text-gray-400 hover:text-white">Clear</button>
+        </div>
+        <div id="terminal-body" class="terminal-body"></div>
+      </div>
+
+      <!-- Input Composer -->
+      <div class="composer-area">
+        <form id="composer-form" class="composer-form">
+          <textarea id="composer-input" class="composer-input" placeholder="Type instructions for the agent... (Enter to send, Shift+Enter for newline)" rows="1"></textarea>
+          <button type="submit" id="btn-send" class="btn-send">
+            <span>Send</span>
+            <span>↵</span>
+          </button>
+          <button type="button" id="btn-stop" class="btn-stop hidden">
+            <span>Stop</span>
+            <span>⏹</span>
+          </button>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal-overlay hidden">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="text-sm font-bold text-white">Kernel & Studio Settings</h3>
+        <button type="button" onclick="window.HarnessApp?.closeSettings()" class="text-gray-400 hover:text-white text-lg leading-none">&times;</button>
+      </div>
+      <div class="modal-body" id="settings-content">
+        <!-- Populated dynamically by SettingsPanel -->
+      </div>
+    </div>
+  </div>
+</body>
+</html>

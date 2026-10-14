@@ -308,3 +308,52 @@ async def test_sandbox_origin_csp_and_artifact_serving(
             assert res_trav.status_code in (403, 404)
     finally:
         await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_static_assets_serving(commands: Commands, event_bus: EventBus, workspace_dir: Path):
+    server = HarnessWebServer(
+        commands=commands,
+        bus=event_bus,
+        host="127.0.0.1",
+        port=0,
+        sandbox_port=0,
+        workspace=workspace_dir,
+    )
+    await server.start()
+    base_url = f"http://127.0.0.1:{server.port}"
+
+    try:
+        async with httpx.AsyncClient() as client:
+            # 1. Index.html served at root
+            res_root = await client.get(f"{base_url}/")
+            assert res_root.status_code == 200
+            assert '<script type="module" src="/static/app.js"></script>' in res_root.text
+            assert "Content-Security-Policy" in res_root.headers
+            assert "script-src 'self'" in res_root.headers["Content-Security-Policy"]
+
+            # 2. ES modules served via /static/
+            res_app = await client.get(f"{base_url}/static/app.js")
+            assert res_app.status_code == 200
+            assert "HarnessStudioApp" in res_app.text
+
+            res_api = await client.get(f"{base_url}/static/api.js")
+            assert res_api.status_code == 200
+            assert "HarnessAPI" in res_api.text
+
+            res_events = await client.get(f"{base_url}/static/events.js")
+            assert res_events.status_code == 200
+            assert "HarnessEventStream" in res_events.text
+
+            res_cards = await client.get(f"{base_url}/static/cards.js")
+            assert res_cards.status_code == 200
+            assert "CardRenderer" in res_cards.text
+
+            res_css = await client.get(f"{base_url}/static/styles.css")
+            assert res_css.status_code == 200
+
+            res_vendor = await client.get(f"{base_url}/static/vendor/purify.min.js")
+            assert res_vendor.status_code == 200
+    finally:
+        await server.stop()
+

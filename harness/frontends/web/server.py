@@ -133,6 +133,8 @@ class HarnessWebServer:
                 auth_header = request.headers.get("Authorization", "")
                 if auth_header.startswith("Bearer "):
                     token = auth_header[7:].strip()
+            if not token and "token" in request.query:
+                token = request.query.get("token")
 
             if not token or not hmac.compare_digest(token, self.auth_token):
                 return web.json_response({"error": "unauthorized"}, status=401)
@@ -170,7 +172,7 @@ class HarnessWebServer:
         response = await handler(request)
 
         # Inject Security Headers for API responses (HTML/Assets)
-        if isinstance(response, web.Response):
+        if isinstance(response, web.StreamResponse):
             sb_origin_127 = f"http://127.0.0.1:{self.sandbox_port}" if self.sandbox_port else "http://127.0.0.1"
             sb_origin_local = f"http://localhost:{self.sandbox_port}" if self.sandbox_port else "http://localhost"
             csp = (
@@ -192,7 +194,7 @@ class HarnessWebServer:
     async def _sandbox_csp_middleware(self, request: web.Request, handler: Callable) -> web.Response:
         """Enforces strictly isolated Content-Security-Policy on the Sandbox origin."""
         response = await handler(request)
-        if isinstance(response, web.Response):
+        if isinstance(response, web.StreamResponse):
             api_origin_127 = f"http://127.0.0.1:{self.port}" if self.port else "http://127.0.0.1"
             api_origin_local = f"http://localhost:{self.port}" if self.port else "http://localhost"
             sandbox_csp = (
