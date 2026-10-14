@@ -31,7 +31,6 @@ fi
     --clean \
     --noconfirm \
     --add-data "harness/frontends/web/static:harness/frontends/web/static" \
-    --add-data "harness/web:harness/web" \
     --add-data "builtin:builtin" \
     harness/engine_main.py
 
@@ -83,7 +82,7 @@ cat << 'EOF' > "$APP_BUNDLE/Contents/Info.plist"
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>0.2.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
