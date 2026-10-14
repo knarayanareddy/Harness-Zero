@@ -1,0 +1,8 @@
+[plugin]
+name = "context-repo-map"
+version = "1.0.0"
+api_version = "1"
+summary = "Whole-codebase AST symbol mapping and dense architectural context"
+provides = ["context"]
+capabilities = ["fs:read"]
+entry = "harness.plugins.context.repo_map.plugin:RepoMapContextPlugin"
