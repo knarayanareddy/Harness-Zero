@@ -515,7 +515,10 @@ class PluginRegistry:
                             "name": name,
                             "version": dp.manifest.version,
                             "provides": [p.value if hasattr(p, "value") else str(p) for p in dp.manifest.provides],
-                            "capabilities": [c.value for c in effective_caps],
+                            "capabilities": [
+                                c.value if hasattr(c, "value") else str(c)
+                                for c in effective_caps
+                            ],
                             "trust": dp.tier.value,
                         },
                     )

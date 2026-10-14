@@ -4,13 +4,21 @@ Foundation primitives for sovereignty, sandboxing, policy enforcement, settings,
 """
 from __future__ import annotations
 
+from harness.kernel.approvals import ApprovalBroker, ApprovalRequest
 from harness.kernel.bus import EventBus
+from harness.kernel.gate import (
+    PermissionModesPolicy,
+    PolicyGate,
+    ToolContextImpl,
+    WorkspaceJailPolicy,
+)
 from harness.kernel.jail import WorkspaceJail
 from harness.kernel.registry import (
     PluginRegistry,
     TrustTier,
     clamp_capabilities,
 )
+from harness.kernel.sanitizer import sanitize_output
 from harness.kernel.secrets import PluginSecretsView, Secrets, migrate_legacy_config
 from harness.kernel.settings import (
     CURRENT_SCHEMA_VERSION,
@@ -37,4 +45,11 @@ __all__ = [
     "PluginRegistry",
     "TrustTier",
     "clamp_capabilities",
+    "ApprovalBroker",
+    "ApprovalRequest",
+    "PolicyGate",
+    "WorkspaceJailPolicy",
+    "PermissionModesPolicy",
+    "ToolContextImpl",
+    "sanitize_output",
 ]

@@ -331,6 +331,14 @@ class ToolResult:
         )
 
     @classmethod
+    def success(cls, s: str, **metadata: Any) -> ToolResult:
+        return cls(
+            content=[TextBlock(text=s)],
+            is_error=False,
+            metadata=metadata,
+        )
+
+    @classmethod
     def error(cls, s: str, **metadata: Any) -> ToolResult:
         return cls(
             content=[TextBlock(text=s)],

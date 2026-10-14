@@ -8,10 +8,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-
-class PathOutsideWorkspace(PermissionError):
-    """Raised when an operation attempts to access or modify a path outside workspace boundaries."""
-    pass
+from harness.sdk.errors import PathOutsideWorkspace
 
 
 class WorkspaceJail:

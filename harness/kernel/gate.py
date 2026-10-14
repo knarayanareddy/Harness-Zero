@@ -1,0 +1,604 @@
+"""
+PolicyGate: the unified choke point for tool execution, sandboxing,
+policy evaluation, approvals, timeouts, and output sanitization.
+Fulfills KRN-06 and absorbs TOOL-01, TOOL-02, TOOL-05, and D9.
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+import time
+from pathlib import Path
+from typing import Any, Literal
+
+from harness.kernel.approvals import ApprovalBroker
+from harness.kernel.bus import EventBus
+from harness.kernel.jail import PathOutsideWorkspace, WorkspaceJail
+from harness.kernel.registry import PluginRegistry
+from harness.kernel.sanitizer import sanitize_output
+from harness.kernel.secrets import Secrets
+from harness.kernel.settings import SettingsStore, validate_schema_value
+from harness.sdk.context import PolicyContext, ToolContext
+from harness.sdk.contracts import Executor, Policy
+from harness.sdk.errors import CapabilityDenied, SettingsValidationError
+from harness.sdk.events import Event
+from harness.sdk.types import (
+    RISK_ORDER,
+    Action,
+    Capability,
+    Decision,
+    HookEvent,
+    RiskClass,
+    TextBlock,
+    ToolCall,
+    ToolResult,
+    ToolSpec,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def _risk_rank(r: RiskClass | str | None) -> int:
+    """Returns numerical rank of risk class according to RISK_ORDER."""
+    if r is None:
+        return -1
+    try:
+        rc = RiskClass(r) if isinstance(r, str) else r
+        return RISK_ORDER.index(rc)
+    except (ValueError, IndexError):
+        return -1
+
+
+class WorkspaceJailPolicy(Policy):
+    """Normalises workspace path arguments and enforces workspace containment."""
+
+    name = "workspace_jail"
+    order = 10  # Evaluated first in policy chain
+
+    def __init__(self, jail: WorkspaceJail):
+        self.jail = jail
+
+    async def evaluate(self, call: ToolCall, spec: ToolSpec, ctx: PolicyContext) -> Decision:
+        props = (
+            spec.input_schema.get("properties", {})
+            if isinstance(spec.input_schema, dict)
+            else {}
+        )
+        replacements: dict[str, Any] = {}
+        is_write = spec.risk_class in (RiskClass.WRITE, RiskClass.DESTRUCTIVE)
+
+        for arg_name, arg_val in call.arguments.items():
+            prop_def = props.get(arg_name, {})
+            # Match explicit format: workspace-path or common path field naming
+            is_path_field = prop_def.get("format") == "workspace-path" or arg_name.lower() in (
+                "targetfile",
+                "cwd",
+                "file_path",
+                "filepath",
+                "path",
+            )
+            if isinstance(arg_val, str) and is_path_field:
+                try:
+                    resolved = self.jail.resolve(arg_val, for_write=is_write)
+                    replacements[arg_name] = str(resolved)
+                except PathOutsideWorkspace as err:
+                    return Decision(
+                        action=Action.DENY,
+                        reason=f"Path outside workspace: {err}",
+                        risk=spec.risk_class,
+                        policy=self.name,
+                    )
+
+        return Decision(
+            action=Action.ALLOW,
+            arguments=replacements if replacements else None,
+            policy=self.name,
+        )
+
+
+class PermissionModesPolicy(Policy):
+    """Enforces plan, allow, ask, and bypass permission modes."""
+
+    name = "permission_modes"
+    order = 900  # Evaluated towards the end of policy chain
+
+    def __init__(self, settings: SettingsStore):
+        self.settings = settings
+
+    async def evaluate(self, call: ToolCall, spec: ToolSpec, ctx: PolicyContext) -> Decision:
+        # Check if session principal holds approval:bypass capability
+        # Note: approval:bypass is NEVER grantable to plugins (clamped by registry)
+        if Capability.APPROVAL_BYPASS in ctx.capabilities:
+            return Decision(action=Action.ALLOW, policy=self.name)
+
+        mode = self.settings.get("kernel.security.permission_mode", "ask")
+        risk = spec.risk_class
+
+        if mode == "plan":
+            if risk != RiskClass.READ:
+                return Decision(
+                    action=Action.DENY,
+                    reason=f"Permission mode 'plan' denies non-read action '{spec.name}' (risk: {risk.value})",
+                    risk=risk,
+                    policy=self.name,
+                )
+            return Decision(action=Action.ALLOW, policy=self.name)
+
+        if mode == "allow":
+            if risk == RiskClass.DESTRUCTIVE:
+                return Decision(
+                    action=Action.ASK,
+                    reason=f"Destructive action '{spec.name}' requires approval in 'allow' mode",
+                    risk=risk,
+                    policy=self.name,
+                )
+            return Decision(action=Action.ALLOW, policy=self.name)
+
+        if mode == "ask":
+            if risk == RiskClass.READ:
+                return Decision(action=Action.ALLOW, policy=self.name)
+
+            if risk == RiskClass.DESTRUCTIVE:
+                destructive_blocking = self.settings.get(
+                    "kernel.security.destructive_blocking", True
+                )
+                if destructive_blocking:
+                    return Decision(
+                        action=Action.DENY,
+                        reason=f"Destructive action '{spec.name}' blocked by kernel security policy",
+                        risk=risk,
+                        policy=self.name,
+                    )
+
+            return Decision(
+                action=Action.ASK,
+                reason=f"Action '{spec.name}' (risk: {risk.value}) requires user approval in 'ask' mode",
+                risk=risk,
+                policy=self.name,
+            )
+
+        return Decision(action=Action.ALLOW, policy=self.name)
+
+
+class ToolContextImpl(ToolContext):
+    """ToolContext provided to tool handlers during execution."""
+
+    def __init__(
+        self,
+        call_id: str,
+        workspace: Path,
+        data_dir: Path,
+        capabilities: frozenset[Capability],
+        executor: Executor | None,
+        bus: EventBus | None = None,
+        session_id: str = "",
+        plugin_name: str = "",
+    ):
+        self.call_id = call_id
+        self.workspace = workspace
+        self.data_dir = data_dir
+        self.capabilities = capabilities
+        self._executor = executor
+        self._bus = bus
+        self._session_id = session_id
+        self._plugin_name = plugin_name
+
+    @property
+    def executor(self) -> Executor:
+        if Capability.EXEC not in self.capabilities:
+            raise CapabilityDenied(
+                capability="exec",
+                plugin=self._plugin_name,
+                message=f"Plugin '{self._plugin_name}' lacks Capability.EXEC to access executor",
+            )
+        if self._executor is None:
+            raise RuntimeError("No executor configured in kernel.")
+        return self._executor
+
+    def emit_output_delta(self, stream: Literal["stdout", "stderr"], text: str) -> None:
+        if self._bus:
+            evt = Event(
+                type="tool.output.delta",
+                session_id=self._session_id,
+                data={
+                    "call_id": self.call_id,
+                    "stream": stream,
+                    "text": text,
+                },
+            )
+            self._bus.publish(evt)
+
+
+class HookContextImpl:
+    """Concrete implementation satisfying the HookContext protocol."""
+
+    def __init__(self, session_id: str, workspace: Path):
+        self.session_id = session_id
+        self.workspace = workspace
+
+
+class PolicyContextImpl:
+    """Concrete implementation satisfying the PolicyContext protocol."""
+
+    def __init__(self, workspace: Path, capabilities: frozenset[Capability]):
+        self.workspace = workspace
+        self.capabilities = capabilities
+
+
+class PolicyGate:
+    """
+    Unified gatekeeper executing steps 1 through 9 for every tool invocation.
+    Enforces that no handler ever executes without all gate invariants held.
+    """
+
+    def __init__(
+        self,
+        registry: PluginRegistry,
+        jail: WorkspaceJail,
+        settings: SettingsStore,
+        secrets: Secrets,
+        approvals: ApprovalBroker,
+        bus: EventBus | None = None,
+    ):
+        self.registry = registry
+        self.jail = jail
+        self.settings = settings
+        self.secrets = secrets
+        self.approvals = approvals
+        self.bus = bus
+
+        # Built-in kernel policies
+        self.jail_policy = WorkspaceJailPolicy(jail)
+        self.permission_modes_policy = PermissionModesPolicy(settings)
+
+    async def execute(
+        self,
+        call: ToolCall,
+        options: dict[str, Any] | None = None,
+        session_id: str = "",
+        principal_capabilities: frozenset[Capability] = frozenset(),
+    ) -> ToolResult:
+        """Executes a single tool call through the complete 9-step PolicyGate pipeline."""
+        start_time = time.time()
+        options = options or {}
+        call_id = getattr(call, "id", getattr(call, "call_id", "call_unknown"))
+
+        # ---------------------------------------------------------
+        # Step 1: Resolve tool spec and validate input arguments
+        # ---------------------------------------------------------
+        if call.name not in self.registry.tools:
+            res = ToolResult.error(f"unknown tool '{call.name}'")
+            if self.bus:
+                self.bus.publish(
+                    Event(
+                        type="tool.result",
+                        session_id=session_id,
+                        data={
+                            "call_id": call_id,
+                            "name": call.name,
+                            "is_error": True,
+                            "duration_ms": 0.0,
+                        },
+                    )
+                )
+            return res
+
+        spec, handler, plugin_name = self.registry.tools[call.name]
+        risk_val = spec.risk_class.value if hasattr(spec.risk_class, "value") else str(spec.risk_class)
+
+        # Validate arguments against JSON Schema
+        try:
+            validate_schema_value(call.arguments, spec.input_schema, path=call.name)
+        except SettingsValidationError as err:
+            res = ToolResult.error(f"Invalid arguments for tool '{spec.name}': {err}")
+            if self.bus:
+                self.bus.publish(
+                    Event(
+                        type="tool.result",
+                        session_id=session_id,
+                        data={
+                            "call_id": call_id,
+                            "name": spec.name,
+                            "is_error": True,
+                            "duration_ms": 0.0,
+                        },
+                    )
+                )
+            return res
+
+        # ---------------------------------------------------------
+        # Step 2: PRE_TOOL_USE hooks & initial event
+        # ---------------------------------------------------------
+        current_args = dict(call.arguments)
+        if self.bus:
+            self.bus.publish(
+                Event(
+                    type="tool.call",
+                    session_id=session_id,
+                    data={
+                        "call_id": call_id,
+                        "name": spec.name,
+                        "arguments": current_args,
+                        "risk": risk_val,
+                        "plugin": plugin_name,
+                    },
+                )
+            )
+
+        hook_ctx = HookContextImpl(session_id=session_id, workspace=self.registry.workspace)
+        for hook, _h_plugin in self.registry.hooks:
+            if hook.event == HookEvent.PRE_TOOL_USE:
+                try:
+                    async with asyncio.timeout(5.0):
+                        outcome = await hook.execute(call, spec, hook_ctx)
+                    if outcome.action == "block":
+                        reason = outcome.reason or "Blocked by hook"
+                        if self.bus:
+                            self.bus.publish(
+                                Event(
+                                    type="tool.decision",
+                                    session_id=session_id,
+                                    data={
+                                        "call_id": call_id,
+                                        "action": "deny",
+                                        "policy": f"hook:{hook.name}",
+                                        "risk": risk_val,
+                                        "reason": reason,
+                                    },
+                                )
+                            )
+                        return ToolResult.error(f"blocked by hook {hook.name}: {reason}")
+                    if outcome.action == "mutate" and outcome.arguments is not None:
+                        current_args.update(outcome.arguments)
+                except Exception as err:
+                    logger.warning(f"PRE_TOOL_USE hook '{hook.name}' failed: {err}")
+
+        # ---------------------------------------------------------
+        # Step 3: Policy chain evaluation & combination
+        # ---------------------------------------------------------
+        # Gather all policies: jail (order 10) -> registered policies -> modes (order 900)
+        policies: list[Policy] = [self.jail_policy]
+        for p, _ in self.registry.policies:
+            policies.append(p)
+        policies.append(self.permission_modes_policy)
+        policies.sort(key=lambda p: getattr(p, "order", 500))
+
+        policy_ctx = PolicyContextImpl(
+            workspace=self.registry.workspace,
+            capabilities=principal_capabilities,
+        )
+
+        effective_risk = spec.risk_class
+        decisions: list[Decision] = []
+        eval_call = ToolCall(
+            id=call_id, name=spec.name, arguments=dict(current_args)
+        )
+
+        for policy in policies:
+            try:
+                dec = await policy.evaluate(eval_call, spec, policy_ctx)
+            except Exception as err:
+                logger.warning(f"Policy '{policy.name}' raised error: {err}")
+                dec = Decision(
+                    action=Action.DENY,
+                    reason=f"Policy error in {policy.name}: {err}",
+                    policy=policy.name,
+                )
+
+            decisions.append(dec)
+            if dec.arguments:
+                current_args.update(dec.arguments)
+                eval_call = ToolCall(
+                    id=call_id, name=spec.name, arguments=dict(current_args)
+                )
+            if dec.risk and _risk_rank(dec.risk) > _risk_rank(effective_risk):
+                effective_risk = dec.risk
+
+        effective_risk_val = effective_risk.value if hasattr(effective_risk, "value") else str(effective_risk)
+
+        # Policy combination logic:
+        # Any DENY wins -> deny
+        # Else any ASK -> ask
+        # Else -> allow
+        denials = [d for d in decisions if d.action == Action.DENY]
+        asks = [d for d in decisions if d.action == Action.ASK]
+
+        if denials:
+            first_deny = denials[0]
+            if self.bus:
+                self.bus.publish(
+                    Event(
+                        type="tool.decision",
+                        session_id=session_id,
+                        data={
+                            "call_id": call_id,
+                            "action": "deny",
+                            "policy": first_deny.policy or "policy",
+                            "risk": effective_risk_val,
+                            "reason": first_deny.reason,
+                        },
+                    )
+                )
+            return ToolResult.error(f"Action denied: {first_deny.reason}")
+
+        # ---------------------------------------------------------
+        # Step 4 & 5: Approvals (when ASK is returned)
+        # ---------------------------------------------------------
+        if asks:
+            reasons = "; ".join(a.reason for a in asks if a.reason)
+            if self.bus:
+                self.bus.publish(
+                    Event(
+                        type="tool.decision",
+                        session_id=session_id,
+                        data={
+                            "call_id": call_id,
+                            "action": "ask",
+                            "policy": asks[0].policy or "policy",
+                            "risk": effective_risk_val,
+                            "reason": reasons,
+                        },
+                    )
+                )
+
+            auto_approve = options.get("auto_approve", False)
+            timeout_s = self.settings.get("kernel.security.approval_timeout_s", 300)
+            approved, appr_reason = await self.approvals.ask(
+                kind="tool_execution",
+                summary=f"Tool '{spec.name}' execution requires approval",
+                details={
+                    "call_id": call_id,
+                    "name": spec.name,
+                    "arguments": current_args,
+                    "risk": effective_risk_val,
+                },
+                call_id=call_id,
+                timeout_s=float(timeout_s),
+                auto_approve=auto_approve,
+                session_id=session_id,
+            )
+
+            if not approved:
+                return ToolResult.error(f"Approval denied: {appr_reason}")
+
+        # Action is allowed
+        if self.bus and not asks:
+            self.bus.publish(
+                Event(
+                    type="tool.decision",
+                    session_id=session_id,
+                    data={
+                        "call_id": call_id,
+                        "action": "allow",
+                        "policy": "policy_gate",
+                        "risk": effective_risk_val,
+                        "reason": "OK",
+                    },
+                )
+            )
+
+        # ---------------------------------------------------------
+        # Step 6: Build capability-gated ToolContext
+        # ---------------------------------------------------------
+        plugin_info = self.registry.get_loaded(plugin_name)
+        plugin_caps = (
+            plugin_info.effective_capabilities if plugin_info else frozenset()
+        )
+        effective_caps = frozenset(spec.capabilities) & plugin_caps
+
+        executor = (
+            self.registry.executors.get("default", (None, ""))[0]
+            if self.registry.executors
+            else None
+        )
+        tool_ctx = ToolContextImpl(
+            call_id=call_id,
+            workspace=self.registry.workspace,
+            data_dir=self.registry.data_dir / "tools" / spec.name,
+            capabilities=effective_caps,
+            executor=executor,
+            bus=self.bus,
+            session_id=session_id,
+            plugin_name=plugin_name,
+        )
+
+        # ---------------------------------------------------------
+        # Step 7: Run tool handler under timeout and error capture
+        # ---------------------------------------------------------
+        try:
+            async with asyncio.timeout(spec.timeout_s):
+                result = await handler(current_args, tool_ctx)
+        except TimeoutError:
+            result = ToolResult.error(f"Tool '{spec.name}' timed out after {spec.timeout_s}s")
+        except Exception as err:
+            logger.exception(f"Unhandled exception in tool '{spec.name}': {err}")
+            result = ToolResult.error(f"{type(err).__name__}: {err}")
+
+        # ---------------------------------------------------------
+        # Step 8: POST_TOOL_USE hooks
+        # ---------------------------------------------------------
+        for hook, _h_plugin in self.registry.hooks:
+            if hook.event == HookEvent.POST_TOOL_USE:
+                try:
+                    async with asyncio.timeout(5.0):
+                        post_outcome = await hook.execute(call, result, hook_ctx)
+                    if post_outcome.additional_context:
+                        result = ToolResult(
+                            content=list(result.content)
+                            + [TextBlock(text=post_outcome.additional_context)],
+                            is_error=result.is_error,
+                            metadata=dict(result.metadata),
+                        )
+                    if post_outcome.action == "block":
+                        result = ToolResult(
+                            content=[
+                                TextBlock(
+                                    text=f"Blocked by post-tool hook: {post_outcome.reason}"
+                                )
+                            ],
+                            is_error=True,
+                            metadata=dict(result.metadata),
+                        )
+                except Exception as err:
+                    logger.warning(f"POST_TOOL_USE hook '{hook.name}' failed: {err}")
+
+        # ---------------------------------------------------------
+        # Step 9: Secret sanitization and size truncation
+        # ---------------------------------------------------------
+        # Extract secret values from Secrets store for exact-match redaction
+        secret_values: list[str] = []
+        try:
+            for _k, v in self.secrets._load().items():
+                if isinstance(v, str) and len(v) >= 6:
+                    secret_values.append(v)
+        except Exception:
+            pass
+
+        sanitized_content = []
+        full_content_str = ""
+        max_bytes = self.settings.get("kernel.limits.tool_result_bytes", 65536)
+
+        for block in result.content:
+            if isinstance(block, TextBlock):
+                full_content_str += block.text
+                sanitized_text = sanitize_output(block.text, secret_values)
+                # Check byte truncation
+                encoded = sanitized_text.encode("utf-8")
+                if len(encoded) > max_bytes:
+                    truncated_text = (
+                        encoded[:max_bytes].decode("utf-8", errors="ignore")
+                        + "\n... [TRUNCATED DUE TO SIZE LIMIT]"
+                    )
+                    sanitized_content.append(TextBlock(text=truncated_text))
+                    result.metadata["truncated"] = True
+                    result.metadata["full_content"] = sanitized_text
+                else:
+                    sanitized_content.append(TextBlock(text=sanitized_text))
+            else:
+                sanitized_content.append(block)
+
+        duration_ms = (time.time() - start_time) * 1000
+        final_metadata = dict(result.metadata)
+        final_metadata["duration_ms"] = duration_ms
+
+        final_result = ToolResult(
+            content=sanitized_content,
+            is_error=result.is_error,
+            metadata=final_metadata,
+        )
+
+        if self.bus:
+            self.bus.publish(
+                Event(
+                    type="tool.result",
+                    session_id=session_id,
+                    data={
+                        "call_id": call_id,
+                        "name": spec.name,
+                        "is_error": final_result.is_error,
+                        "duration_ms": duration_ms,
+                    },
+                )
+            )
+
+        return final_result
