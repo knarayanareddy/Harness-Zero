@@ -1,0 +1,8 @@
+[plugin]
+name = "local-executor"
+version = "1.0.0"
+api_version = "1"
+summary = "Local process executor with output streaming, process management, and cancellation"
+provides = ["executor"]
+capabilities = ["exec"]
+entry = "harness.plugins.executors.local.plugin:LocalExecutorPlugin"
