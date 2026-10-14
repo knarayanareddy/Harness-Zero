@@ -357,15 +357,15 @@ class HarnessDaemon:
                         cur[section] = {}
                     cur[section].update(body[section])
 
-            keys = body.get("api_keys", {})
-            provider = body.get("default_provider") or cur["models"].get("default_provider")
-            model = body.get("default_model") or cur["models"].get("default_model")
+            keys = body.get("api_keys")
+            provider = body.get("default_provider")
+            model = body.get("default_model")
 
-            if keys or provider or model:
+            if keys is not None or provider is not None or model is not None:
                 self.coordinator.router.save_config(
-                    keys=keys,
+                    keys=keys if keys else None,
                     default_provider=provider,
-                    default_model=model
+                    default_model=model,
                 )
 
             sf = self._settings_file()

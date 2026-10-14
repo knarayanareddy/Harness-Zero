@@ -51,10 +51,12 @@ class ModelRouter:
         default_model: str = "mock-model",
         api_keys: Optional[Dict[str, str]] = None,
         local_base_url: str = "http://localhost:11434/v1",
+        config_dir: Optional[Path] = None,
     ):
+        self.config_dir = Path(config_dir) if config_dir else Path(os.environ.get("HARNESS_CONFIG_DIR", Path.home() / ".harness"))
         config = self._load_config()
         saved_keys = config.get("api_keys", {})
-        hermes_keys = self._load_hermes_env()
+        hermes_keys = self._load_hermes_env() if os.environ.get("HARNESS_IMPORT_HERMES_KEYS") == "1" else {}
         
         self.api_keys = api_keys or {
             "openai": saved_keys.get("openai") or os.environ.get("OPENAI_API_KEY", "") or hermes_keys.get("openai", ""),
@@ -94,15 +96,11 @@ class ModelRouter:
         self.local_base_url = config.get("local_base_url") or local_base_url
         self._mock_responses: List[ModelResponse] = []
 
-    @staticmethod
-    def _config_path() -> Path:
-        p = Path.home() / ".harness" / "config.json"
-        p.parent.mkdir(parents=True, exist_ok=True)
-        return p
+    def _config_path(self) -> Path:
+        return self.config_dir / "config.json"
 
-    @classmethod
-    def _load_config(cls) -> Dict[str, Any]:
-        p = cls._config_path()
+    def _load_config(self) -> Dict[str, Any]:
+        p = self._config_path()
         if p.exists():
             try:
                 return json.loads(p.read_text(encoding="utf-8"))
@@ -110,7 +108,18 @@ class ModelRouter:
                 return {}
         return {}
 
-    def save_config(self, keys: Optional[Dict[str, str]] = None, default_provider: Optional[str] = None, default_model: Optional[str] = None):
+    def save_config(
+        self,
+        keys: Optional[Dict[str, str]] = None,
+        default_provider: Optional[str] = None,
+        default_model: Optional[str] = None,
+    ):
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(self.config_dir, 0o700)
+        except Exception:
+            pass
+
         cfg = self._load_config()
         if keys:
             cur_keys = cfg.get("api_keys", {})
@@ -123,7 +132,12 @@ class ModelRouter:
         if default_model:
             cfg["default_model"] = default_model
             self.default_model = default_model
-        self._config_path().write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+
+        p = self._config_path()
+        content = json.dumps(cfg, indent=2).encode("utf-8")
+        fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with open(fd, "wb") as f:
+            f.write(content)
 
     def set_mock_responses(self, responses: List[ModelResponse]) -> None:
         """Injects responses for deterministic offline testing."""

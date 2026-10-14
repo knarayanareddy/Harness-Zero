@@ -19,36 +19,40 @@ async def test_daemon_dual_port_endpoints(tmp_path: Path):
         ArtifactMetadata(summary="Preview demo widget"),
     )
 
-    daemon = HarnessDaemon(coordinator=coordinator, port=8888, sandbox_port=8889)
+    daemon = HarnessDaemon(coordinator=coordinator, port=0, sandbox_port=0)
 
     # Test API App
     app_runner = web.AppRunner(daemon.app)
     await app_runner.setup()
-    api_site = web.TCPSite(app_runner, host="127.0.0.1", port=8888)
+    api_site = web.TCPSite(app_runner, host="127.0.0.1", port=0)
     await api_site.start()
+    api_port = api_site._server.sockets[0].getsockname()[1]
+    daemon.port = api_port
 
     # Test Sandbox App
     sandbox_runner = web.AppRunner(daemon.sandbox_app)
     await sandbox_runner.setup()
-    sandbox_site = web.TCPSite(sandbox_runner, host="127.0.0.1", port=8889)
+    sandbox_site = web.TCPSite(sandbox_runner, host="127.0.0.1", port=0)
     await sandbox_site.start()
+    sandbox_port = sandbox_site._server.sockets[0].getsockname()[1]
+    daemon.sandbox_port = sandbox_port
 
     try:
         import httpx
         async with httpx.AsyncClient() as client:
             # 1. API Health
-            res_api = await client.get("http://127.0.0.1:8888/health")
+            res_api = await client.get(f"http://127.0.0.1:{api_port}/health")
             assert res_api.status_code == 200
             assert res_api.json()["status"] == "online"
 
             # 2. JSON-RPC Call
             rpc_payload = {"jsonrpc": "2.0", "method": "turn.submit", "params": {"prompt": "Hello"}, "id": 1}
-            res_rpc = await client.post("http://127.0.0.1:8888/rpc", json=rpc_payload)
+            res_rpc = await client.post(f"http://127.0.0.1:{api_port}/rpc", json=rpc_payload)
             assert res_rpc.status_code == 200
             assert "result" in res_rpc.json()
 
-            # 3. Sandbox Preview (Port 8889)
-            res_sb = await client.get("http://127.0.0.1:8889/artifacts/preview.html")
+            # 3. Sandbox Preview
+            res_sb = await client.get(f"http://127.0.0.1:{sandbox_port}/artifacts/preview.html")
             assert res_sb.status_code == 200
             assert "<h1>Generative UI Widget</h1>" in res_sb.text
             assert "postMessage" in res_sb.text  # Verified sandboxed bridge script is injected

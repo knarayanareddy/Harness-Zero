@@ -24,7 +24,13 @@ class RiskEvaluation:
     reason: str
 
 
-class SecurityPolicy:
+class SecurityPolicyMeta(type):
+    @property
+    def PROTECTED_SYSTEM_PATHS(cls) -> list[Path]:
+        return cls.get_protected_paths()
+
+
+class SecurityPolicy(metaclass=SecurityPolicyMeta):
     DESTRUCTIVE_SHELL_PATTERNS = [
         (r"\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f?|-f[a-zA-Z]*r[a-zA-Z]*)\b", "Destructive recursive file deletion (rm -rf)"),
         (r"\bgit\s+reset\s+--hard\b", "Destructive git hard reset (discards uncommitted work)"),
@@ -37,19 +43,22 @@ class SecurityPolicy:
         (r">\s*/dev/(sd[a-z]|nvme[0-9]n[0-9]|disk[0-9])", "Direct disk write redirection"),
     ]
 
-    PROTECTED_SYSTEM_PATHS = [
-        Path.home() / ".ssh",
-        Path.home() / ".aws",
-        Path.home() / ".gnupg",
-        Path.home() / ".zshrc",
-        Path.home() / ".bashrc",
-        Path("/etc"),
-        Path("/System"),
-        Path("/Library"),
-        Path("/usr/bin"),
-        Path("/bin"),
-        Path("/sbin"),
-    ]
+    @classmethod
+    def get_protected_paths(cls) -> list[Path]:
+        h = Path.home()
+        return [
+            h / ".ssh",
+            h / ".aws",
+            h / ".gnupg",
+            h / ".zshrc",
+            h / ".bashrc",
+            Path("/etc"),
+            Path("/System"),
+            Path("/Library"),
+            Path("/usr/bin"),
+            Path("/bin"),
+            Path("/sbin"),
+        ]
 
     @classmethod
     def evaluate_command_risk(cls, command: str, cwd: Path) -> RiskEvaluation:
