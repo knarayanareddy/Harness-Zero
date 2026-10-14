@@ -570,6 +570,10 @@ class PluginRegistry:
         self.strategies.clear()
         self.hooks.clear()
 
+    @property
+    def discovered(self) -> dict[str, DiscoveredPlugin]:
+        return dict(self._discovered)
+
     def get_loaded(self, name: str) -> LoadedPlugin | None:
         return self._loaded.get(name)
 

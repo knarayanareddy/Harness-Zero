@@ -211,7 +211,7 @@ class ContextAssembler:
     async def assemble(
         self,
         session_id: str,
-        user_prompt: str,
+        user_prompt: str = "",
         model: str = "",
         history_records: list[dict[str, Any]] | None = None,
         media: list[ImageBlock] | None = None,
@@ -219,7 +219,11 @@ class ContextAssembler:
         tools: list[ToolSpec] | None = None,
         provider_caps: ProviderCaps | None = None,
         params: ModelParams | None = None,
+        prompt: str = "",
+        options: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> ModelRequest:
+        actual_prompt = prompt or user_prompt
         """
         Assembles complete ModelRequest:
         - Parallel source collection with 5s timeout.
@@ -281,7 +285,7 @@ class ContextAssembler:
                 assembled_messages.append(ephemeral_msg)
 
         # 7. Latest user prompt message
-        user_content: list[ContentBlock] = [TextBlock(text=user_prompt)]
+        user_content: list[ContentBlock] = [TextBlock(text=actual_prompt)]
         if media:
             user_content.extend(media)
         latest_user_msg = Message(role=Role.USER, content=user_content)
