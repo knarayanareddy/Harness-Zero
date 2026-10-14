@@ -1,0 +1,8 @@
+[plugin]
+name = "bridge-shell-hooks"
+version = "1.0.0"
+api_version = "1"
+summary = "Claude Code-compatible shell hooks bridge supporting stdin JSON, exit codes, and matcher aliases"
+provides = ["hook"]
+capabilities = ["exec"]
+entry = "harness.plugins.bridges.shell_hooks.plugin:ShellHooksBridgePlugin"
