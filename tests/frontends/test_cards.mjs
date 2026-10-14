@@ -26,3 +26,15 @@ test('CardRenderer renders every built-in kind and unknown fallback without thro
     assert.ok(rendered.length > 0);
   }
 });
+
+test('CardRenderer routes HTML artifact iframes through sandboxOrigin', () => {
+  const renderer = new CardRenderer();
+  renderer.sandboxOrigin = 'http://127.0.0.1:8001';
+  const rendered = renderer.render({
+    kind: 'artifact',
+    payload: { filename: 'dashboard.html', type: 'text/html' },
+  });
+  assert.ok(rendered.includes('src="http://127.0.0.1:8001/artifacts/dashboard.html"'));
+  assert.ok(rendered.includes('sandbox="allow-same-origin"'));
+});
+

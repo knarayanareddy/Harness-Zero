@@ -47,6 +47,7 @@ export class HarnessStudioApp {
 
     // 3. Setup Models & Strategy Pickers
     await this.populateModels();
+    await this.populateStrategies();
 
     // 4. Load Sessions
     await this.loadSessions();
@@ -516,7 +517,7 @@ export class HarnessStudioApp {
     try {
       const models = await this.api.listModels();
       if (models && models.length > 0) {
-        select.innerHTML = '';
+        select.innerHTML = '<option value="">Default Model</option>';
         for (const m of models) {
           const opt = document.createElement('option');
           opt.value = m.id || m.model_name || m.name;
@@ -524,8 +525,45 @@ export class HarnessStudioApp {
           select.appendChild(opt);
         }
       }
+
+      // Restore saved selection
+      const savedModel = localStorage.getItem('harness_selected_model');
+      if (savedModel && Array.from(select.options).some(o => o.value === savedModel)) {
+        select.value = savedModel;
+      }
+
+      select.addEventListener('change', () => {
+        localStorage.setItem('harness_selected_model', select.value);
+      });
     } catch (err) {
       console.warn('Failed to populate models:', err);
+    }
+  }
+
+  async populateStrategies() {
+    const select = document.getElementById('strategy-select');
+    if (!select) return;
+    try {
+      // Restore from localStorage or settings
+      const savedStrategy = localStorage.getItem('harness_selected_strategy');
+      if (savedStrategy) {
+        select.value = savedStrategy;
+      } else {
+        const defaultStrategy = await this.api.getSettings('kernel.strategy', 'single_loop');
+        if (defaultStrategy) select.value = defaultStrategy;
+      }
+
+      select.addEventListener('change', async () => {
+        const val = select.value;
+        localStorage.setItem('harness_selected_strategy', val);
+        try {
+          await this.api.setSettings('kernel.strategy', val);
+        } catch (err) {
+          console.warn('Failed to persist strategy setting:', err);
+        }
+      });
+    } catch (err) {
+      console.warn('Failed to setup strategy picker:', err);
     }
   }
 

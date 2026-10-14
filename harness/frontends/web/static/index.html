@@ -54,8 +54,14 @@
       </div>
 
       <!-- Model Picker -->
-      <select id="model-select" class="bg-gray-800 text-xs text-white border border-gray-700 rounded px-2 py-1">
+      <select id="model-select" class="bg-gray-800 text-xs text-white border border-gray-700 rounded px-2 py-1" title="Select LLM Model">
         <option value="">Default Model</option>
+      </select>
+
+      <!-- Strategy / Mode Picker -->
+      <select id="strategy-select" class="bg-gray-800 text-xs text-white border border-gray-700 rounded px-2 py-1" title="Select Execution Strategy">
+        <option value="single_loop">Mode: Single Loop</option>
+        <option value="architect_editor">Mode: Architect / Editor</option>
       </select>
 
       <!-- Settings Button -->

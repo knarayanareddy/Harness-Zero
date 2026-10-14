@@ -541,4 +541,61 @@ async def test_settings_schema_and_secret_masking(
         await server.stop()
 
 
+@pytest.mark.asyncio
+async def test_models_and_strategy_settings(
+    commands: Commands, event_bus: EventBus, workspace_dir: Path
+):
+    server = HarnessWebServer(
+        commands=commands,
+        bus=event_bus,
+        host="127.0.0.1",
+        port=0,
+        sandbox_port=0,
+        workspace=workspace_dir,
+    )
+    await server.start()
+    base_url = f"http://127.0.0.1:{server.port}"
+
+    try:
+        async with httpx.AsyncClient() as client:
+            # 1. Check health has sandbox_origin
+            res_health = await client.get(
+                f"{base_url}/health",
+                headers={"Authorization": f"Bearer {server.auth_token}"},
+            )
+            assert res_health.status_code == 200
+            health_json = res_health.json()
+            assert health_json["sandbox_origin"] == f"http://127.0.0.1:{server.sandbox_port}"
+
+            # 2. Query models.list
+            res_models = await client.post(
+                f"{base_url}/commands/models.list",
+                json={},
+                headers={"Authorization": f"Bearer {server.auth_token}"},
+            )
+            assert res_models.status_code == 200
+            models_list = res_models.json()["result"]
+            assert isinstance(models_list, list)
+
+            # 3. Strategy settings get / set
+            res_set_strategy = await client.post(
+                f"{base_url}/commands/settings.set",
+                json={"path": "kernel.strategy", "value": "architect_editor"},
+                headers={"Authorization": f"Bearer {server.auth_token}"},
+            )
+            assert res_set_strategy.status_code == 200
+            assert res_set_strategy.json()["result"]["value"] == "architect_editor"
+
+            res_get_strategy = await client.post(
+                f"{base_url}/commands/settings.get",
+                json={"path": "kernel.strategy"},
+                headers={"Authorization": f"Bearer {server.auth_token}"},
+            )
+            assert res_get_strategy.status_code == 200
+            assert res_get_strategy.json()["result"] == "architect_editor"
+    finally:
+        await server.stop()
+
+
+
 
