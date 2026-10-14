@@ -55,6 +55,12 @@ export class CardRenderer {
         return this.renderNotice(payload, context);
       case 'approval':
         return this.renderApproval(payload, context);
+      case 'tool':
+        return this.renderTool(payload, context);
+      case 'task':
+        return this.renderTask(payload, context);
+      case 'compaction':
+        return this.renderCompaction(payload, context);
       default:
         return this.renderFallback(card, context);
     }
@@ -288,6 +294,71 @@ export class CardRenderer {
         <div class="flex justify-end gap-3 mt-3">
           <button type="button" onclick="window.HarnessApp?.resolveApproval('${reqId}', 'denied')" class="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium">Deny</button>
           <button type="button" onclick="window.HarnessApp?.resolveApproval('${reqId}', 'approved')" class="px-4 py-1.5 rounded bg-amber-600 hover:bg-amber-500 text-white text-sm font-bold shadow">Approve</button>
+        </div>
+      </div>
+    `;
+  }
+
+  renderTool(payload, _context) {
+    const tool = escapeHtml(payload.tool || payload.name || 'Tool');
+    const callId = escapeHtml(payload.call_id || payload.id || '');
+    const argsStr = payload.arguments ? escapeHtml(JSON.stringify(payload.arguments, null, 2)) : '';
+    const decision = payload.decision || payload.status || 'running';
+    const resultStr = payload.result ? escapeHtml(typeof payload.result === 'object' ? JSON.stringify(payload.result, null, 2) : String(payload.result)) : '';
+
+    return `
+      <div class="harness-card harness-card-tool border border-blue-900/60 bg-blue-950/20 p-3 rounded my-2" data-call-id="${callId}">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-blue-400">⚡</span>
+            <span class="font-mono font-bold text-sm text-blue-200">${tool}</span>
+            <span class="text-xs text-gray-500 font-mono">${callId}</span>
+          </div>
+          <span class="px-2 py-0.5 rounded text-xs font-mono uppercase bg-blue-900/40 text-blue-300 border border-blue-800/50">${escapeHtml(decision)}</span>
+        </div>
+        ${argsStr ? `<details class="mt-2 text-xs"><summary class="text-gray-400 cursor-pointer font-mono">Arguments</summary><pre class="p-2 mt-1 bg-gray-900/80 rounded border border-gray-800 text-gray-300 font-mono overflow-x-auto">${argsStr}</pre></details>` : ''}
+        ${resultStr ? `<div class="mt-2 text-xs"><div class="text-gray-400 font-mono font-medium mb-1">Output:</div><pre class="p-2 bg-gray-950/90 rounded border border-gray-800 text-emerald-300 font-mono overflow-x-auto max-h-48">${resultStr}</pre></div>` : ''}
+      </div>
+    `;
+  }
+
+  renderTask(payload, _context) {
+    const taskId = escapeHtml(payload.task_id || payload.id || 'Task');
+    const prompt = escapeHtml(payload.prompt || payload.description || '');
+    const status = escapeHtml(payload.status || 'running');
+    const statusIcon = status === 'completed' ? '✓' : status === 'failed' ? '✗' : '⏳';
+    const statusCls = status === 'completed' ? 'text-emerald-400 border-emerald-800 bg-emerald-950/30' :
+                      status === 'failed' ? 'text-red-400 border-red-800 bg-red-950/30' :
+                      'text-amber-300 border-amber-800 bg-amber-950/30';
+
+    return `
+      <div class="harness-card harness-card-task border p-3 rounded my-2 ${statusCls}">
+        <div class="flex items-center justify-between mb-1">
+          <div class="flex items-center gap-2">
+            <span>${statusIcon}</span>
+            <span class="font-mono font-semibold text-xs">${taskId}</span>
+          </div>
+          <span class="text-xs uppercase font-bold font-mono">${status}</span>
+        </div>
+        ${prompt ? `<div class="text-sm mt-1 text-gray-200">${prompt}</div>` : ''}
+      </div>
+    `;
+  }
+
+  renderCompaction(payload, _context) {
+    const before = payload.tokens_before || payload.before || 0;
+    const after = payload.tokens_after || payload.after || 0;
+    const saved = before - after;
+    const percent = before > 0 ? Math.round((saved / before) * 100) : 0;
+
+    return `
+      <div class="harness-card harness-card-compaction border border-purple-900/60 bg-purple-950/20 p-3 rounded my-2">
+        <div class="flex items-center gap-2">
+          <span class="text-purple-400">🗜️</span>
+          <span class="font-semibold text-sm text-purple-200">Context Memory Compacted</span>
+        </div>
+        <div class="text-xs text-gray-300 mt-1 font-mono">
+          Reduced tokens from <span class="text-purple-300 font-bold">${before.toLocaleString()}</span> to <span class="text-emerald-300 font-bold">${after.toLocaleString()}</span> (-${percent}%, saved ${saved.toLocaleString()} tokens).
         </div>
       </div>
     `;

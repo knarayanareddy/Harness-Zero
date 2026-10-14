@@ -126,6 +126,30 @@ export class HarnessStudioApp {
       this.appendToolCall(data);
     });
 
+    this.events.on('tool.decision', (data) => {
+      this.updateToolDecision(data);
+    });
+
+    this.events.on('tool.result', (data) => {
+      this.updateToolResult(data);
+    });
+
+    this.events.on('task.started', (data) => {
+      this.appendTask(data);
+    });
+
+    this.events.on('task.completed', (data) => {
+      this.completeTask(data);
+    });
+
+    this.events.on('compaction.started', () => {
+      this.appendNotice('Compacting context memory to optimize tokens...', 'info');
+    });
+
+    this.events.on('compaction.completed', (data) => {
+      this.appendCard({ kind: 'compaction', payload: data });
+    });
+
     this.events.on('ui.card', (data) => {
       const card = data.card || data;
       this.appendCard(card);
@@ -279,17 +303,68 @@ export class HarnessStudioApp {
     const timeline = document.getElementById('timeline');
     if (!timeline) return;
 
-    const card = document.createElement('div');
-    card.className = 'harness-card harness-card-tool border border-blue-900/40 bg-blue-950/20 p-2.5 rounded my-1 text-xs';
-    card.innerHTML = `
-      <div class="flex items-center gap-2">
-        <span class="text-blue-400">⚡</span>
-        <span class="font-mono font-semibold text-blue-200">${escapeHtml(data.tool || 'Tool Call')}</span>
-        <span class="text-gray-400">(${escapeHtml(data.call_id || '')})</span>
-      </div>
-    `;
-    timeline.appendChild(card);
+    const cardHtml = cardRenderer.render({ kind: 'tool', payload: data });
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = cardHtml;
+    timeline.appendChild(wrapper.firstElementChild);
     timeline.scrollTop = timeline.scrollHeight;
+  }
+
+  updateToolDecision(data) {
+    const callId = data.call_id;
+    if (!callId) return;
+    const card = document.querySelector(`.harness-card-tool[data-call-id="${callId}"]`);
+    if (card) {
+      const badge = card.querySelector('.uppercase');
+      if (badge) {
+        badge.textContent = data.decision || 'ALLOWED';
+        if (data.decision === 'DENIED') {
+          badge.className = 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-red-900/60 text-red-300 border border-red-800';
+        } else if (data.decision === 'APPROVAL_REQUIRED') {
+          badge.className = 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-amber-900/60 text-amber-300 border border-amber-800';
+        }
+      }
+    }
+  }
+
+  updateToolResult(data) {
+    const callId = data.call_id;
+    if (!callId) return;
+    const card = document.querySelector(`.harness-card-tool[data-call-id="${callId}"]`);
+    if (card) {
+      const badge = card.querySelector('.uppercase');
+      if (badge && badge.textContent === 'RUNNING') {
+        badge.textContent = data.is_error ? 'ERROR' : 'COMPLETED';
+        badge.className = data.is_error
+          ? 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-red-900/60 text-red-300 border border-red-800'
+          : 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-emerald-900/60 text-emerald-300 border border-emerald-800';
+      }
+
+      // Append result preview if not already present
+      if (!card.querySelector('.text-emerald-300')) {
+        const resultStr = escapeHtml(typeof data.result === 'object' ? JSON.stringify(data.result, null, 2) : String(data.result || ''));
+        const resDiv = document.createElement('div');
+        resDiv.className = 'mt-2 text-xs';
+        resDiv.innerHTML = `<div class="text-gray-400 font-mono font-medium mb-1">Output:</div><pre class="p-2 bg-gray-950/90 rounded border border-gray-800 text-emerald-300 font-mono overflow-x-auto max-h-48">${resultStr}</pre>`;
+        card.appendChild(resDiv);
+      }
+    }
+  }
+
+  appendTask(data) {
+    this.appendCard({ kind: 'task', payload: data });
+  }
+
+  completeTask(data) {
+    const taskId = data.task_id;
+    const card = document.querySelector(`.harness-card-task`);
+    if (card) {
+      card.className = 'harness-card harness-card-task border p-3 rounded my-2 text-emerald-400 border-emerald-800 bg-emerald-950/30';
+      const badge = card.querySelector('.uppercase');
+      if (badge) badge.textContent = 'COMPLETED';
+    } else {
+      this.appendCard({ kind: 'task', payload: { ...data, status: 'completed' } });
+    }
   }
 
   appendCard(card) {
