@@ -8,9 +8,11 @@ on:
 
 jobs:
   test:
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest]
         python-version: ["3.11", "3.12"]
 
     steps:
@@ -31,9 +33,27 @@ jobs:
         run: |
           ruff check .
 
+      - name: Check import boundaries
+        run: |
+          pytest -q tests/kernel/test_import_boundaries.py
+
       - name: Run hermetic test suite
         run: |
-          HOME=$(mktemp -d) pytest -q
+          export HOME=$(mktemp -d)
+          export HARNESS_CONFIG_DIR=$HOME/.harness
+          pytest -q
+
+      - name: Run plugin doctor
+        run: |
+          harness plugin doctor --all
+
+      - name: Run plugin test suites
+        run: |
+          harness plugin test --all
+
+      - name: Verify events schema drift
+        run: |
+          harness events schema | diff -u docs/events.schema.json -
 
       - name: Verify clean working tree
         run: |
