@@ -753,17 +753,43 @@ class HarnessWebServer:
         return web.Response(text=skill_file.read_text(encoding="utf-8"), content_type="text/plain")
 
     async def _handle_plugins(self, request: web.Request) -> web.Response:
-        plugins = []
-        for p in self.commands.registry.list_plugins():
-            plugins.append({
-                "name": p.name,
-                "version": p.version,
-                "description": p.description,
-                "enabled": p.enabled,
-                "kinds": p.provides_kinds,
-                "capabilities": p.capabilities,
-            })
-        return web.json_response({"plugins": plugins, "servers": {}, "tools": []})
+        try:
+            plugins = await self.commands.plugins_list()
+        except Exception as e:
+            logger.warning(f"Failed to fetch plugins list: {e}")
+            plugins = []
+
+        tools = []
+        try:
+            for spec in self.commands.registry.get_all_tool_specs():
+                tools.append({
+                    "name": spec.name,
+                    "description": spec.description,
+                    "risk_class": spec.risk_class.value if hasattr(spec.risk_class, "value") else str(spec.risk_class),
+                    "capabilities": [c.value if hasattr(c, "value") else str(c) for c in spec.capabilities],
+                })
+        except Exception as e:
+            logger.warning(f"Failed to fetch tools: {e}")
+
+        providers = []
+        try:
+            for prov in self.commands.registry.get_all_providers():
+                providers.append({
+                    "name": prov.name,
+                    "models": list(getattr(prov, "supported_models", [])),
+                })
+        except Exception as e:
+            logger.warning(f"Failed to fetch providers: {e}")
+
+        return web.json_response({
+            "plugins": plugins,
+            "servers": {
+                "mcp_server": {"name": "Harness MCP Server", "status": "active", "port": self.port, "protocol": "jsonrpc-2.0"},
+                "acp_bridge": {"name": "Agent Client Protocol (ACP)", "status": "active", "protocol": "acp-1.0"},
+            },
+            "tools": tools,
+            "providers": providers,
+        })
 
     def _settings_file(self) -> Path:
         harness_dir = self.workspace / ".harness"
