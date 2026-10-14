@@ -1,0 +1,8 @@
+[plugin]
+name = "bridge-mcp-server"
+version = "1.0.0"
+api_version = "1"
+summary = "Model Context Protocol stdio server bridge exposing Harness tools to external hosts"
+provides = ["bridge"]
+capabilities = ["exec"]
+entry = "harness.plugins.bridges.mcp_server.plugin:MCPServerBridgePlugin"

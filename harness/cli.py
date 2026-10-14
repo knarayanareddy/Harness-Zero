@@ -306,5 +306,25 @@ def plugin_disable(name: str, workspace: str):
     asyncio.run(_do())
 
 
+@main.command()
+@click.option("--workspace", "-w", default=".", help="Workspace path")
+def mcp(workspace: str):
+    """Run Harness as a Model Context Protocol stdio server for external AI tools."""
+    from harness.plugins.bridges.mcp_server import MCPServer, run_mcp_server_from_stdio
+
+    async def _run():
+        runtime = await bootstrap_kernel(workspace=workspace)
+        expose = runtime.settings.get("plugins.mcp-server.expose")
+        server = MCPServer(
+            tools_provider=lambda: [spec for spec, _, _ in runtime.registry.tools.values()],
+            tool_executor=lambda call: runtime.gate.execute_tool(call),
+            expose_list=expose,
+        )
+        await run_mcp_server_from_stdio(server)
+
+    asyncio.run(_run())
+
+
 if __name__ == "__main__":
     main()
+
