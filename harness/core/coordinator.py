@@ -24,6 +24,7 @@ from harness.core.types import (
     ToolResult,
 )
 from harness.desktop.macos_bridge import MacOSDesktopBridge
+from harness.kernel.validators import validate_session_id
 from harness.memory.fts5_index import FTS5MemoryIndex
 from harness.models.circuits import IntelligentModelRouter
 from harness.models.prefix_cache import PromptCacheBuilder, PromptTiers
@@ -66,7 +67,9 @@ class AgentCoordinator:
         router: ModelRouter | None = None,
     ):
         self.workspace = Path(workspace).resolve()
-        self.session_id = session_id or f"session_{uuid.uuid4().hex[:12]}"
+        sid = session_id or f"session_{uuid.uuid4().hex[:12]}"
+        validate_session_id(sid)
+        self.session_id = sid
         self.session_dir = (
             Path(session_dir)
             if session_dir
@@ -190,26 +193,51 @@ and verify your work with test runs.
         return sessions_list
 
     def switch_session(self, session_id: str) -> None:
-        """Switches active session context, transcripts, memory index, and artifacts."""
-        self.session_id = session_id
-        self.session_dir = self.workspace / ".harness" / "sessions" / self.session_id
-        self.session_dir.mkdir(parents=True, exist_ok=True)
+        """Switches active session context, transcripts, memory index, and artifacts atomically."""
+        validate_session_id(session_id)
+        target_dir = self.workspace / ".harness" / "sessions" / session_id
+        target_dir.mkdir(parents=True, exist_ok=True)
 
-        self.transcripts = TranscriptEngine(self.session_dir)
-        self.memory = FTS5MemoryIndex(self.session_dir / "memory.db")
-        self.memory.register_conversation(
-            conversation_id=self.session_id,
-            title=f"Harness Session {self.session_id}",
+        new_transcripts = TranscriptEngine(target_dir)
+        new_memory = FTS5MemoryIndex(target_dir / "memory.db")
+        new_memory.register_conversation(
+            conversation_id=session_id,
+            title=f"Harness Session {session_id}",
             workspace_uri=str(self.workspace),
         )
-        self.artifacts = ArtifactManager(brain_dir=self.session_dir / "artifacts")
-        self.desktop = MacOSDesktopBridge(scratch_dir=self.session_dir / "scratch")
+        new_artifacts = ArtifactManager(brain_dir=target_dir / "artifacts")
+        new_desktop = MacOSDesktopBridge(scratch_dir=target_dir / "scratch")
         from harness.orchestration.spawn_ledger import SpawnLedger
-        self.spawn_ledger = SpawnLedger(session_dir=self.session_dir)
+        new_spawn_ledger = SpawnLedger(session_dir=target_dir)
+
+        # Close old resources if needed
+        old_memory = getattr(self, "memory", None)
+        old_ledger = getattr(self, "spawn_ledger", None)
+
+        # Atomic state swap
+        self.session_id = session_id
+        self.session_dir = target_dir
+        self.transcripts = new_transcripts
+        self.memory = new_memory
+        self.artifacts = new_artifacts
+        self.desktop = new_desktop
+        self.spawn_ledger = new_spawn_ledger
+
+        if old_memory and hasattr(old_memory, "close"):
+            try:
+                old_memory.close()
+            except Exception:
+                pass
+        if old_ledger and hasattr(old_ledger, "close"):
+            try:
+                old_ledger.close()
+            except Exception:
+                pass
 
     def new_session(self, session_id: str | None = None) -> str:
         """Initializes and activates a new session."""
         new_sid = session_id or f"session_{uuid.uuid4().hex[:12]}"
+        validate_session_id(new_sid)
         self.switch_session(new_sid)
         return new_sid
 

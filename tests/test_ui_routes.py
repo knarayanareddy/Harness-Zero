@@ -149,8 +149,9 @@ async def test_ui_and_studio_endpoints(tmp_path: Path):
             res_set = await client.get(f"{base_url}/settings")
             assert res_set.status_code == 200
             set_data = res_set.json()
+            assert "account" not in set_data, "Fabricated account section must be deleted per SEC-09"
             for expected_section in [
-                "general", "account", "privacy", "billing", "capabilities",
+                "general", "privacy", "billing", "capabilities",
                 "memory", "reflect", "time_focus", "claude_code", "system",
                 "extensions", "developer", "skills", "connectors", "plugins",
                 "models", "security"
@@ -162,7 +163,7 @@ async def test_ui_and_studio_endpoints(tmp_path: Path):
 
             # Test POST /settings persists modifications across sections
             res_set_post = await client.post(f"{base_url}/settings", json={
-                "account": {"full_name": "Test User", "display_name": "testuser"},
+                "general": {"theme": "light"},
                 "cowork": {"trusted_folders": ["/tmp/trusted"]},
                 "system": {"device_name": "test-device"},
                 "time_focus": {"focus_interval_minutes": 30, "quiet_hours_enabled": True},
@@ -174,7 +175,7 @@ async def test_ui_and_studio_endpoints(tmp_path: Path):
             assert res_set_post.status_code == 200
             saved = res_set_post.json()
             assert saved["status"] == "saved"
-            assert saved["settings"]["account"]["full_name"] == "Test User"
+            assert saved["settings"]["general"]["theme"] == "light"
             assert saved["settings"]["time_focus"]["focus_interval_minutes"] == 30
             assert saved["settings"]["reflect"]["reflection_depth"] == "deep"
             assert saved["settings"]["claude_code"]["code_theme"] == "tokyo-night"

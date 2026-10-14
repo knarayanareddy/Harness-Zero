@@ -4,11 +4,14 @@ Manages markdown artifacts, persistent manifest, and sandboxed HTML webviews.
 """
 from __future__ import annotations
 
+import html
 import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from harness.kernel.validators import validate_safe_filename
 
 
 @dataclass
@@ -28,13 +31,20 @@ class ArtifactManager:
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
         self.manifest_file = self.brain_dir / "artifacts_manifest.json"
 
+    def _safe(self, filename: str) -> Path:
+        validate_safe_filename(filename, self.artifacts_dir)
+        target = (self.artifacts_dir / filename).resolve()
+        if not target.is_relative_to(self.artifacts_dir.resolve()):
+            raise ValueError(f"Path traversal detected: {filename!r}")
+        return target
+
     def write_artifact(
         self,
         filename: str,
         content: str,
         metadata: ArtifactMetadata,
     ) -> Path:
-        target_path = self.artifacts_dir / filename
+        target_path = self._safe(filename)
         target_path.write_text(content, encoding="utf-8")
 
         manifest = self.load_manifest()
@@ -61,25 +71,32 @@ class ArtifactManager:
         return {}
 
     def get_artifact(self, filename: str) -> str | None:
-        target = self.artifacts_dir / filename
+        target = self._safe(filename)
         if target.exists():
             return target.read_text(encoding="utf-8")
         return None
 
-    def render_sandboxed_html(self, raw_html: str, title: str = "Artifact Preview") -> str:
+    def render_sandboxed_html(
+        self,
+        raw_html: str,
+        title: str = "Artifact Preview",
+        api_origin: str = "*",
+    ) -> str:
         """
         Wraps generative UI widget inside a sandboxed HTML structure with a postMessage bridge.
         """
-        bridge_script = """
+        safe_title = html.escape(title)
+        safe_origin = api_origin if api_origin and api_origin != "*" else "'*'"
+        bridge_script = f"""
         <script>
-          window.addEventListener('message', (event) => {
+          window.addEventListener('message', (event) => {{
             console.log('[Harness-Zero Bridge] Message received:', event.data);
-          });
-          function notifyHarness(type, payload) {
-            if (window.parent) {
-              window.parent.postMessage({ source: 'harness_artifact_ui', type: type, payload: payload }, '*');
-            }
-          }
+          }});
+          function notifyHarness(type, payload) {{
+            if (window.parent) {{
+              window.parent.postMessage({{ source: 'harness_artifact_ui', type: type, payload: payload }}, {safe_origin});
+            }}
+          }}
         </script>
         """
         return f"""<!DOCTYPE html>
@@ -87,7 +104,7 @@ class ArtifactManager:
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>{title}</title>
+  <title>{safe_title}</title>
   <style>
     body {{
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;

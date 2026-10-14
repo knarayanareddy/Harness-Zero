@@ -21,8 +21,14 @@ from typing import Any
 from aiohttp import web
 
 from harness.core.coordinator import AgentCoordinator
+from harness.kernel.validators import validate_safe_filename, validate_session_id
 
 logger = logging.getLogger("harness.daemon")
+
+ALLOWED_MEDIA_EXTENSIONS = {
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".txt", ".md", ".json"
+}
+MAX_MEDIA_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
 class HarnessDaemon:
@@ -266,7 +272,10 @@ class HarnessDaemon:
 
     async def _handle_get_artifact(self, request: web.Request) -> web.Response:
         filename = request.match_info.get("filename", "")
-        content = self.coordinator.artifacts.get_artifact(filename)
+        try:
+            content = self.coordinator.artifacts.get_artifact(filename)
+        except ValueError as e:
+            return web.json_response({"error": str(e)}, status=400)
         if content is None:
             return web.Response(text="Artifact not found", status=404)
         return web.Response(text=content, content_type="text/plain")
@@ -318,13 +327,6 @@ class HarnessDaemon:
                 "keep_in_background": True,
                 "telemetry_enabled": False,
             },
-            "account": {
-                "account_id": "00000000-0000-0000-0000-000000000000",
-                "email": "user@local.device",
-                "organization_id": "00000000-0000-0000-0000-000000000000",
-                "is_signed_in": True,
-                "keyring_status": "unlocked",
-            },
             "cowork": {
                 "remote_control_enabled": True,
                 "cowork_user_files_path": str(self.coordinator.workspace),
@@ -352,9 +354,9 @@ class HarnessDaemon:
                 "developer_mode": True,
                 "unpacked_extensions_enabled": True,
                 "mcp_servers": {
-                    "filesystem_mcp": {"status": "connected", "command": "npx -y @modelcontextprotocol/server-filesystem"},
-                    "database_mcp": {"status": "connected", "command": "npx -y @modelcontextprotocol/server-sqlite"},
-                    "github_mcp": {"status": "connected", "command": "npx -y @modelcontextprotocol/server-github"},
+                    "filesystem_mcp": {"status": "not_configured", "command": "npx -y @modelcontextprotocol/server-filesystem"},
+                    "database_mcp": {"status": "not_configured", "command": "npx -y @modelcontextprotocol/server-sqlite"},
+                    "github_mcp": {"status": "not_configured", "command": "npx -y @modelcontextprotocol/server-github"},
                 },
             },
             "developer": {
@@ -437,23 +439,6 @@ class HarnessDaemon:
             "active_session_id": self.coordinator.session_id,
         }
 
-        # Also pull live claude_desktop_config.json if present
-        try:
-            claude_cfg = Path.home() / "Library/Application Support/Claude/claude_desktop_config.json"
-            if claude_cfg.exists():
-                cc_data = json.loads(claude_cfg.read_text(encoding="utf-8"))
-                prefs = cc_data.get("preferences", {})
-                if "coworkUserFilesPath" in cc_data:
-                    defaults["system"]["user_files_path"] = cc_data["coworkUserFilesPath"]
-                if "remoteToolsDeviceName" in prefs:
-                    defaults["system"]["device_name"] = prefs["remoteToolsDeviceName"]
-                if "coworkWebSearchEnabled" in prefs:
-                    defaults["capabilities"]["web_search_enabled"] = prefs["coworkWebSearchEnabled"]
-                if "coworkBrowserToolsEnabled" in prefs:
-                    defaults["capabilities"]["browser_tools_enabled"] = prefs["coworkBrowserToolsEnabled"]
-        except Exception:
-            pass
-
         for section, vals in stored.items():
             if isinstance(vals, dict) and section in defaults and isinstance(defaults[section], dict):
                 defaults[section].update(vals)
@@ -501,7 +486,14 @@ class HarnessDaemon:
                 )
 
             sf = self._settings_file()
-            sf.write_text(json.dumps(cur, indent=2), encoding="utf-8")
+            try:
+                os.chmod(sf.parent, 0o700)
+            except Exception:
+                pass
+            content = json.dumps(cur, indent=2).encode("utf-8")
+            fd = os.open(sf, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with open(fd, "wb") as f:
+                f.write(content)
             return web.json_response({"status": "saved", "settings": cur, "active_provider": self.coordinator.router.default_provider})
         except Exception as e:
             return web.json_response({"error": str(e)}, status=400)
@@ -799,7 +791,10 @@ class HarnessDaemon:
 
     async def _handle_sandbox_artifact(self, request: web.Request) -> web.Response:
         filename = request.match_info.get("filename", "")
-        content = self.coordinator.artifacts.get_artifact(filename)
+        try:
+            content = self.coordinator.artifacts.get_artifact(filename)
+        except ValueError as e:
+            return web.json_response({"error": str(e)}, status=400)
         if content is None:
             return web.Response(text="Artifact not found", status=404)
 
@@ -815,7 +810,9 @@ class HarnessDaemon:
             "X-Content-Type-Options": "nosniff",
         }
         if filename.endswith(".html"):
-            sandboxed_html = self.coordinator.artifacts.render_sandboxed_html(content, title=filename)
+            sandboxed_html = self.coordinator.artifacts.render_sandboxed_html(
+                content, title=filename, api_origin=f"http://127.0.0.1:{self.port}"
+            )
             return web.Response(text=sandboxed_html, content_type="text/html", headers=headers)
         elif filename.endswith(".json"):
             return web.Response(text=content, content_type="application/json", headers=headers)
@@ -929,7 +926,17 @@ class HarnessDaemon:
                 if field is None:
                     break
                 if field.filename:
+                    try:
+                        validate_safe_filename(field.filename, media_dir)
+                    except ValueError as e:
+                        return web.json_response({"error": str(e)}, status=400)
                     safe_name = Path(field.filename).name.replace(" ", "_")
+                    ext = Path(safe_name).suffix.lower()
+                    if ext not in ALLOWED_MEDIA_EXTENSIONS:
+                        return web.json_response(
+                            {"error": f"Extension '{ext}' not allowed. Allowed: {sorted(ALLOWED_MEDIA_EXTENSIONS)}"},
+                            status=400,
+                        )
                     dest = media_dir / safe_name
                     if dest.exists():
                         safe_name = f"{uuid.uuid4().hex[:6]}_{safe_name}"
@@ -941,6 +948,11 @@ class HarnessDaemon:
                             if not chunk:
                                 break
                             size += len(chunk)
+                            if size > MAX_MEDIA_UPLOAD_BYTES:
+                                f.close()
+                                if dest.exists():
+                                    dest.unlink()
+                                return web.json_response({"error": "Payload Too Large: exceeds 25 MiB"}, status=413)
                             f.write(chunk)
                     mime_type = field.headers.get("Content-Type", "application/octet-stream")
                     uploaded.append({
@@ -953,11 +965,20 @@ class HarnessDaemon:
             try:
                 body = await request.json()
                 filename = body.get("filename", f"upload_{uuid.uuid4().hex[:8]}.png")
+                validate_safe_filename(filename, media_dir)
                 safe_name = Path(filename).name.replace(" ", "_")
+                ext = Path(safe_name).suffix.lower()
+                if ext not in ALLOWED_MEDIA_EXTENSIONS:
+                    return web.json_response(
+                        {"error": f"Extension '{ext}' not allowed. Allowed: {sorted(ALLOWED_MEDIA_EXTENSIONS)}"},
+                        status=400,
+                    )
                 b64data = body.get("data", "")
                 if "," in b64data:
                     b64data = b64data.split(",", 1)[1]
                 raw_bytes = base64.b64decode(b64data)
+                if len(raw_bytes) > MAX_MEDIA_UPLOAD_BYTES:
+                    return web.json_response({"error": "Payload Too Large: exceeds 25 MiB"}, status=413)
                 dest = media_dir / safe_name
                 dest.write_bytes(raw_bytes)
                 uploaded.append({
@@ -966,6 +987,8 @@ class HarnessDaemon:
                     "mime_type": body.get("mime_type", "image/png"),
                     "size": len(raw_bytes),
                 })
+            except ValueError as e:
+                return web.json_response({"error": str(e)}, status=400)
             except Exception as e:
                 return web.json_response({"error": f"Failed to parse upload: {str(e)}"}, status=400)
 
@@ -974,14 +997,13 @@ class HarnessDaemon:
     async def _handle_media_serve(self, request: web.Request) -> web.Response:
         """Serves media file from session media repository."""
         filename = request.match_info.get("filename", "")
+        media_dir = self.coordinator.session_dir / "media"
+        try:
+            validate_safe_filename(filename, media_dir)
+        except ValueError as e:
+            return web.Response(text=f"Invalid filename: {e}", status=400)
         safe_name = Path(filename).name
-        target = self.coordinator.session_dir / "media" / safe_name
-        if not target.exists() or not target.is_file():
-            # Fallback across session media subdirectories
-            for s_dir in (self.coordinator.workspace / ".harness" / "sessions").glob(f"*/media/{safe_name}"):
-                if s_dir.exists() and s_dir.is_file():
-                    target = s_dir
-                    break
+        target = media_dir / safe_name
         if not target.exists() or not target.is_file():
             return web.Response(text="Media not found", status=404)
 
@@ -1011,6 +1033,10 @@ class HarnessDaemon:
     async def _handle_session_get(self, request: web.Request) -> web.Response:
         """Returns history transcript for a specific historical session."""
         session_id = request.match_info.get("session_id", "")
+        try:
+            validate_session_id(session_id)
+        except ValueError as e:
+            return web.json_response({"error": str(e)}, status=400)
         s_dir = self.coordinator.workspace / ".harness" / "sessions" / session_id
         if not s_dir.exists():
             return web.json_response({"error": "Session not found"}, status=404)
@@ -1035,8 +1061,11 @@ class HarnessDaemon:
             sid = body.get("session_id")
             if not sid:
                 return web.json_response({"error": "Missing session_id"}, status=400)
+            validate_session_id(sid)
             self.coordinator.switch_session(sid)
             return web.json_response({"status": "switched", "session_id": sid})
+        except ValueError as e:
+            return web.json_response({"error": str(e)}, status=400)
         except Exception as e:
             return web.json_response({"error": str(e)}, status=400)
 

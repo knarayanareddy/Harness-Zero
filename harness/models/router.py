@@ -18,33 +18,6 @@ from harness.core.types import ModelResponse, ToolCall
 
 
 class ModelRouter:
-    @staticmethod
-    def _load_hermes_env() -> dict[str, str]:
-        hermes_env = Path.home() / ".hermes" / ".env"
-        keys: dict[str, str] = {}
-        if hermes_env.exists():
-            try:
-                for line in hermes_env.read_text(encoding="utf-8").splitlines():
-                    line = line.strip()
-                    if not line or line.startswith("#") or "=" not in line:
-                        continue
-                    k, v = line.split("=", 1)
-                    k = k.strip()
-                    v = v.strip().strip('"').strip("'")
-                    if k in ("OPENROUTER_API_KEY_2", "OPENROUTER_API_KEY") and not keys.get("openrouter"):
-                        keys["openrouter"] = v
-                    elif k == "OPENAI_API_KEY" and not keys.get("openai"):
-                        keys["openai"] = v
-                    elif k == "ANTHROPIC_API_KEY" and not keys.get("anthropic"):
-                        keys["anthropic"] = v
-                    elif k == "GEMINI_API_KEY" and not keys.get("gemini"):
-                        keys["gemini"] = v
-                    elif k == "DEEPSEEK_API_KEY" and not keys.get("deepseek"):
-                        keys["deepseek"] = v
-            except Exception:
-                pass
-        return keys
-
     def __init__(
         self,
         default_provider: str = "mock",
@@ -56,14 +29,13 @@ class ModelRouter:
         self.config_dir = Path(config_dir) if config_dir else Path(os.environ.get("HARNESS_CONFIG_DIR", Path.home() / ".harness"))
         config = self._load_config()
         saved_keys = config.get("api_keys", {})
-        hermes_keys = self._load_hermes_env() if os.environ.get("HARNESS_IMPORT_HERMES_KEYS") == "1" else {}
-        
+
         self.api_keys = api_keys or {
-            "openai": saved_keys.get("openai") or os.environ.get("OPENAI_API_KEY", "") or hermes_keys.get("openai", ""),
-            "anthropic": saved_keys.get("anthropic") or os.environ.get("ANTHROPIC_API_KEY", "") or hermes_keys.get("anthropic", ""),
-            "gemini": saved_keys.get("gemini") or os.environ.get("GEMINI_API_KEY", "") or hermes_keys.get("gemini", ""),
-            "deepseek": saved_keys.get("deepseek") or os.environ.get("DEEPSEEK_API_KEY", "") or hermes_keys.get("deepseek", ""),
-            "openrouter": saved_keys.get("openrouter") or os.environ.get("OPENROUTER_API_KEY", "") or hermes_keys.get("openrouter", ""),
+            "openai": saved_keys.get("openai") or os.environ.get("OPENAI_API_KEY", ""),
+            "anthropic": saved_keys.get("anthropic") or os.environ.get("ANTHROPIC_API_KEY", ""),
+            "gemini": saved_keys.get("gemini") or os.environ.get("GEMINI_API_KEY", ""),
+            "deepseek": saved_keys.get("deepseek") or os.environ.get("DEEPSEEK_API_KEY", ""),
+            "openrouter": saved_keys.get("openrouter") or os.environ.get("OPENROUTER_API_KEY", ""),
         }
         
         # If user configured a default provider in config, use it
