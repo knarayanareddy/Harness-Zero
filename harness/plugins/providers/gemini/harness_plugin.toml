@@ -1,0 +1,8 @@
+[plugin]
+name = "provider-gemini"
+version = "1.0.0"
+api_version = "1"
+summary = "Google Gemini generateContent and function calling provider"
+provides = ["provider"]
+capabilities = ["net", "secrets"]
+entry = "harness.plugins.providers.gemini.plugin:GeminiProviderPlugin"
