@@ -1,0 +1,8 @@
+[plugin]
+name = "hook-checkpoints"
+version = "1.0.0"
+api_version = "1"
+summary = "Cline-style shadow git repo snapshots before mutating tools with checkpoint_restore tool"
+provides = ["hook", "tool"]
+capabilities = ["fs:write", "exec"]
+entry = "harness.plugins.hooks.checkpoints.plugin:CheckpointsPlugin"

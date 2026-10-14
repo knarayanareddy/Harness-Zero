@@ -365,10 +365,20 @@ class PolicyGate:
 
         hook_ctx = HookContextImpl(session_id=session_id, workspace=self.registry.workspace)
         for hook, _h_plugin in self.registry.hooks:
-            if hook.event == HookEvent.PRE_TOOL_USE:
+            is_pre = getattr(hook, "event", None) == HookEvent.PRE_TOOL_USE or (
+                hasattr(hook, "events") and HookEvent.PRE_TOOL_USE in hook.events
+            )
+            if is_pre:
                 try:
                     async with asyncio.timeout(5.0):
-                        outcome = await hook.execute(call, spec, hook_ctx)
+                        if hasattr(hook, "execute"):
+                            outcome = await hook.execute(call, spec, hook_ctx)
+                        else:
+                            outcome = await hook.on(
+                                HookEvent.PRE_TOOL_USE,
+                                {"call": call, "spec": spec},
+                                hook_ctx,
+                            )
                     if outcome.action == "block":
                         reason = outcome.reason or "Blocked by hook"
                         if self.bus:
@@ -560,10 +570,20 @@ class PolicyGate:
         # Step 8: POST_TOOL_USE hooks
         # ---------------------------------------------------------
         for hook, _h_plugin in self.registry.hooks:
-            if hook.event == HookEvent.POST_TOOL_USE:
+            is_post = getattr(hook, "event", None) == HookEvent.POST_TOOL_USE or (
+                hasattr(hook, "events") and HookEvent.POST_TOOL_USE in hook.events
+            )
+            if is_post:
                 try:
                     async with asyncio.timeout(5.0):
-                        post_outcome = await hook.execute(call, result, hook_ctx)
+                        if hasattr(hook, "execute"):
+                            post_outcome = await hook.execute(call, result, hook_ctx)
+                        else:
+                            post_outcome = await hook.on(
+                                HookEvent.POST_TOOL_USE,
+                                {"call": call, "result": result},
+                                hook_ctx,
+                            )
                     if post_outcome.additional_context:
                         result = ToolResult(
                             content=list(result.content)
