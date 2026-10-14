@@ -92,3 +92,9 @@ class PluginLoadError(HarnessError):
 class IncompatiblePlugin(PluginLoadError):
     """Raised when a plugin requires an incompatible SDK or harness version."""
     pass
+
+
+class SettingsValidationError(HarnessError, ValueError):
+    """Raised when a setting value fails schema validation or format requirements."""
+    pass
+

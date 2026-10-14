@@ -38,6 +38,7 @@ from harness.sdk.errors import (
     PathOutsideWorkspace,
     PluginLoadError,
     ProviderError,
+    SettingsValidationError,
     SpendCapExceeded,
     ToolInputError,
 )
@@ -99,6 +100,7 @@ __all__ = [
     "SpendCapExceeded",
     "PluginLoadError",
     "IncompatiblePlugin",
+    "SettingsValidationError",
     # Manifest
     "PluginManifest",
     # Core Types
