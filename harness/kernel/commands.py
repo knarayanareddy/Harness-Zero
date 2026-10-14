@@ -23,6 +23,7 @@ from harness.kernel.session import SessionManager
 from harness.kernel.settings import SettingsStore
 from harness.kernel.validators import validate_session_id
 from harness.sdk.errors import HarnessError
+from harness.sdk.events import Event
 from harness.sdk.types import TurnResult
 
 logger = logging.getLogger(__name__)
@@ -90,18 +91,31 @@ class Commands:
 
     async def resolve_approval(
         self,
-        approval_id: str,
-        approved: bool,
+        approval_id: str | None = None,
+        request_id: str | None = None,
+        approved: bool | None = None,
+        decision: str | None = None,
         by: str = "user",
         reason: str = "",
-    ) -> bool:
+        feedback: str = "",
+    ) -> dict[str, Any]:
         """Resolves an in-flight approval request."""
-        return self.gate.approvals.resolve(
-            approval_id=approval_id,
-            approved=approved,
+        target_id = approval_id or request_id
+        if not target_id:
+            raise HarnessError("Missing 'approval_id' or 'request_id'")
+        is_approved = approved if approved is not None else (decision == "approved")
+        res_reason = reason or feedback
+        ok = self.gate.approvals.resolve(
+            approval_id=target_id,
+            approved=is_approved,
             by=by,
-            reason=reason,
+            reason=res_reason,
         )
+        return {
+            "status": "resolved" if ok else "not_found",
+            "approval_id": target_id,
+            "decision": "approved" if is_approved else "denied",
+        }
 
     async def sessions_list(self) -> list[dict[str, Any]]:
         """Lists historical and active sessions in the workspace."""
@@ -271,7 +285,7 @@ class Commands:
 
     async def approvals_list(self) -> list[dict[str, Any]]:
         """Lists pending approval requests waiting for human resolution."""
-        return self.gate.approvals.list_pending()
+        return self.gate.approvals.pending()
 
     async def economics(self, session_id: str | None = None) -> dict[str, Any]:
         """Returns spend and token usage ledger totals."""
@@ -286,6 +300,27 @@ class Commands:
             "totals": totals.to_dict() if totals else None,
         }
 
+    async def form_submit(self, form_id: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Handles human interactive form submission from studio frontends."""
+        payload = data or {}
+        if self.bus:
+            self.bus.publish(
+                Event(
+                    type="ui.card",
+                    data={
+                        "card": {
+                            "kind": "notice",
+                            "payload": {
+                                "level": "success",
+                                "message": f"Form '{form_id}' submitted.",
+                            },
+                        }
+                    },
+                    session_id=self.session_manager.active_session.session_id if self.session_manager.active_session else None,
+                )
+            )
+        return {"form_id": form_id, "status": "submitted", "data": payload}
+
     async def dispatch(self, command: str, args: dict[str, Any] | None = None) -> Any:
         """Generic command dispatcher for JSON-based frontend interfaces."""
         params = args or {}
@@ -293,6 +328,8 @@ class Commands:
             "submit_turn": self.submit_turn,
             "cancel_turn": self.cancel_turn,
             "resolve_approval": self.resolve_approval,
+            "form.submit": self.form_submit,
+            "form_submit": self.form_submit,
             "sessions.list": self.sessions_list,
             "sessions.create": self.sessions_create,
             "sessions.get": self.sessions_get,

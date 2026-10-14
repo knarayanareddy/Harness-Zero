@@ -173,3 +173,6 @@ class ApprovalBroker:
             for r in self._pending.values()
             if not r.resolved
         ]
+
+    # Alias for API compatibility
+    list_pending = pending

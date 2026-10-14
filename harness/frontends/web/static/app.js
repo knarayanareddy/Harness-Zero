@@ -376,6 +376,38 @@ export class HarnessStudioApp {
     wrapper.innerHTML = cardHtml;
     timeline.appendChild(wrapper.firstElementChild);
     timeline.scrollTop = timeline.scrollHeight;
+
+    // Proceed banner only for artifact.request_feedback (§11, WEB-04)
+    if (card.kind === 'artifact' && (card.payload?.request_feedback || card.payload?.feedback_requested)) {
+      this.showProceedBanner(card.payload);
+    }
+  }
+
+  showProceedBanner(payload) {
+    const banner = document.getElementById('proceed-banner');
+    if (banner) {
+      banner.classList.remove('hidden');
+      banner.setAttribute('data-artifact', payload.filename || payload.path || '');
+    }
+  }
+
+  dismissProceedBanner() {
+    const banner = document.getElementById('proceed-banner');
+    if (banner) banner.classList.add('hidden');
+  }
+
+  async submitProceedFeedback() {
+    this.dismissProceedBanner();
+    this.appendUserTurn('Proceed with artifact.');
+    try {
+      const model = document.getElementById('model-select')?.value;
+      await this.api.submitTurn('Proceed with artifact.', {
+        session_id: this.activeSessionId,
+        model: model || undefined,
+      });
+    } catch (err) {
+      this.appendNotice(`Proceed turn failed: ${err.message}`, 'error');
+    }
   }
 
   appendNotice(msg, level = 'info') {

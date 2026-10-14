@@ -328,14 +328,20 @@ class HarnessWebServer:
         subscriber = self.bus.subscribe(interactive=True)
         try:
             while True:
+                if request.transport is None or request.transport.is_closing():
+                    break
                 try:
                     event = await asyncio.wait_for(subscriber.get(), timeout=15.0)
+                    if request.transport is None or request.transport.is_closing():
+                        break
                     msg = f"id: {event.id}\nevent: {event.type}\ndata: {json.dumps(event.to_dict())}\n\n"
                     await response.write(msg.encode("utf-8"))
                 except TimeoutError:
+                    if request.transport is None or request.transport.is_closing():
+                        break
                     # 15s Heartbeat ping to keep connection alive through proxies
                     await response.write(b": heartbeat\n\n")
-        except (asyncio.CancelledError, ConnectionResetError):
+        except (asyncio.CancelledError, ConnectionResetError, ConnectionError, Exception):
             pass
         finally:
             self.bus.unsubscribe(subscriber)

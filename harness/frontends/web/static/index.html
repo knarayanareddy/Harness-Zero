@@ -22,6 +22,17 @@
     </div>
   </div>
 
+  <!-- Proceed Banner (only for artifact.request_feedback) -->
+  <div id="proceed-banner" class="hidden bg-indigo-600/95 text-white px-4 py-2 flex items-center justify-between text-sm font-semibold z-40 shadow-lg border-b border-indigo-400">
+    <div class="flex items-center gap-2">
+      <span>✨ Artifact ready for review: user feedback requested</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <button type="button" onclick="window.HarnessApp?.dismissProceedBanner();" class="px-2.5 py-1 bg-white/20 hover:bg-white/30 text-white rounded text-xs">Dismiss</button>
+      <button type="button" onclick="window.HarnessApp?.submitProceedFeedback();" class="px-3 py-1 bg-white text-indigo-700 hover:bg-white/90 rounded text-xs font-bold">Proceed ➔</button>
+    </div>
+  </div>
+
   <!-- Header -->
   <header class="app-header">
     <div class="brand">

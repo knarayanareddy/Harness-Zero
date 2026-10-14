@@ -357,3 +357,121 @@ async def test_static_assets_serving(commands: Commands, event_bus: EventBus, wo
     finally:
         await server.stop()
 
+
+@pytest.mark.asyncio
+async def test_approval_resolution_and_form_submit(
+    commands: Commands, event_bus: EventBus, workspace_dir: Path
+):
+    server = HarnessWebServer(
+        commands=commands,
+        bus=event_bus,
+        host="127.0.0.1",
+        port=0,
+        sandbox_port=0,
+        workspace=workspace_dir,
+    )
+    await server.start()
+    base_url = f"http://127.0.0.1:{server.port}"
+
+    try:
+        async with httpx.AsyncClient() as client:
+            async with client.stream(
+                "GET",
+                f"{base_url}/events",
+                headers={"Authorization": f"Bearer {server.auth_token}"},
+            ) as sse_stream:
+                assert sse_stream.status_code == 200
+                await asyncio.sleep(0.02)
+
+                # 1. Test form submission command
+                res_form = await client.post(
+                    f"{base_url}/commands/form.submit",
+                    json={"form_id": "form_auth_test", "data": {"username": "admin"}},
+                    headers={"Authorization": f"Bearer {server.auth_token}"},
+                )
+                assert res_form.status_code == 200
+                data = res_form.json()
+                assert data["result"]["status"] == "submitted"
+                assert data["result"]["form_id"] == "form_auth_test"
+
+                # 2. Test approval broker integration with interactive subscriber
+                ask_task = asyncio.create_task(
+                    commands.gate.approvals.ask(
+                        kind="shell_exec",
+                        summary="rm -rf /test",
+                        details={"target": "/test"},
+                    )
+                )
+                await asyncio.sleep(0.02)
+                pending_list = commands.gate.approvals.pending()
+                assert len(pending_list) > 0
+                req_id = pending_list[0]["approval_id"]
+
+                # Verify it shows up in approvals.list
+                res_list = await client.post(
+                    f"{base_url}/commands/approvals.list",
+                    json={},
+                    headers={"Authorization": f"Bearer {server.auth_token}"},
+                )
+                assert res_list.status_code == 200
+                pending = res_list.json()["result"]
+                assert any(p["approval_id"] == req_id for p in pending)
+
+                # Resolve approval via POST /commands/resolve_approval
+                res_res = await client.post(
+                    f"{base_url}/commands/resolve_approval",
+                    json={"request_id": req_id, "decision": "approved", "feedback": "Authorized test"},
+                    headers={"Authorization": f"Bearer {server.auth_token}"},
+                )
+                assert res_res.status_code == 200
+                assert res_res.json()["result"]["status"] == "resolved"
+                assert res_res.json()["result"]["decision"] == "approved"
+
+                approved, reason = await ask_task
+                assert approved is True
+                assert reason == "Authorized test"
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_interactive_subscriber_flag(
+    commands: Commands, event_bus: EventBus, workspace_dir: Path
+):
+    server = HarnessWebServer(
+        commands=commands,
+        bus=event_bus,
+        host="127.0.0.1",
+        port=0,
+        sandbox_port=0,
+        workspace=workspace_dir,
+    )
+    await server.start()
+    base_url = f"http://127.0.0.1:{server.port}"
+
+    try:
+        # Before any SSE connection, no interactive subscribers exist
+        assert not event_bus.has_interactive_subscribers()
+
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            async with client.stream(
+                "GET",
+                f"{base_url}/events",
+                headers={"Authorization": f"Bearer {server.auth_token}"},
+            ) as response:
+                assert response.status_code == 200
+                await asyncio.sleep(0.05)
+                # While connected, interactive=True subscriber is registered
+                assert event_bus.has_interactive_subscribers()
+
+        # Publish events to trigger write error on the closed socket and cleanup
+        for _ in range(5):
+            event_bus.publish(Event(type="log", data={"message": "disconnect_check"}))
+            await asyncio.sleep(0.05)
+            if not event_bus.has_interactive_subscribers():
+                break
+        assert not event_bus.has_interactive_subscribers()
+    finally:
+        await server.stop()
+
+
