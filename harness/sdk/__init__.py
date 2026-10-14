@@ -46,6 +46,7 @@ from harness.sdk.errors import (
 from harness.sdk.events import KNOWN_EVENT_TYPES, Event
 from harness.sdk.events import schema as events_schema
 from harness.sdk.manifest import PluginManifest
+from harness.sdk.scaffold import scaffold_plugin
 from harness.sdk.types import (
     RISK_ORDER,
     SDK_API_VERSION,
@@ -179,4 +180,6 @@ __all__ = [
     "Event",
     "KNOWN_EVENT_TYPES",
     "events_schema",
+    # Tooling
+    "scaffold_plugin",
 ]

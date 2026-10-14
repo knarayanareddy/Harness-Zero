@@ -220,8 +220,43 @@ def events_schema():
 
 @main.group()
 def plugin():
-    """Manage plugins (list, info, enable, disable)."""
+    """Manage plugins (new, list, info, enable, disable)."""
     pass
+
+
+@plugin.command(name="new")
+@click.argument("name")
+@click.option(
+    "--kind",
+    "-k",
+    required=True,
+    type=click.Choice(
+        ["tool", "context", "provider", "policy", "executor", "strategy", "hook", "store"],
+        case_sensitive=False,
+    ),
+    help="Plugin component kind",
+)
+@click.option(
+    "--dir",
+    "-d",
+    "target_dir",
+    default=None,
+    help="Target directory for plugin (defaults to ./<name>)",
+)
+@click.option("--summary", "-s", default="", help="Short summary of the plugin")
+def plugin_new(name: str, kind: str, target_dir: str | None, summary: str):
+    """Scaffold a new plugin directory from SDK template."""
+    from harness.sdk.scaffold import scaffold_plugin
+
+    try:
+        out = scaffold_plugin(name=name, kind=kind, target_dir=target_dir, summary=summary)
+        console.print(
+            f"[bold green]Successfully scaffolded {kind} plugin '{name}' at:[/bold green] {out}\n"
+            f"[dim]Run tests with: harness plugin test {out}[/dim]"
+        )
+    except Exception as e:
+        console.print(f"[bold red]Failed to scaffold plugin: {e}[/bold red]")
+        sys.exit(1)
 
 
 @plugin.command(name="list")
