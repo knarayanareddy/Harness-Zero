@@ -1,0 +1,8 @@
+[plugin]
+name = "strategy-architect-editor"
+version = "1.0.0"
+api_version = "1"
+summary = "Two-phase Architect/Editor coding strategy with surgical SEARCH/REPLACE diffs and verified testing"
+provides = ["strategy"]
+capabilities = ["fs:read", "fs:write", "exec"]
+entry = "harness.plugins.strategies.architect_editor.plugin:ArchitectEditorStrategyPlugin"

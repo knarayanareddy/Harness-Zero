@@ -793,6 +793,7 @@ class TurnResult:
     stop_reason: str = "end_turn"
     error: str | None = None
     cards: list[Any] = field(default_factory=list)
+    changed_files: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -803,6 +804,7 @@ class TurnResult:
             "stop_reason": self.stop_reason,
             "error": self.error,
             "cards": [c.to_dict() if hasattr(c, "to_dict") else c for c in self.cards],
+            "changed_files": self.changed_files,
         }
 
     @classmethod
@@ -817,6 +819,7 @@ class TurnResult:
             stop_reason=data.get("stop_reason", "end_turn"),
             error=data.get("error"),
             cards=data.get("cards", []),
+            changed_files=data.get("changed_files", []),
         )
 
 
