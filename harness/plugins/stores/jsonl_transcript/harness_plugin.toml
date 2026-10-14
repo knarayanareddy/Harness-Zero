@@ -1,0 +1,8 @@
+[plugin]
+name = "store-jsonl-transcript"
+version = "1.0.0"
+api_version = "1"
+summary = "Append-only dual-log JSONL transcript store with tolerant reads and byte offsets"
+provides = ["store"]
+capabilities = ["fs:read", "fs:write"]
+entry = "harness.plugins.stores.jsonl_transcript.plugin:JsonlTranscriptPlugin"

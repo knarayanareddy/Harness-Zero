@@ -1,0 +1,8 @@
+[plugin]
+name = "store-cost-ledger"
+version = "1.0.0"
+api_version = "1"
+summary = "Token economics and persistent cost ledger with per-provider pricing tables"
+provides = ["store"]
+capabilities = ["fs:read", "fs:write"]
+entry = "harness.plugins.stores.cost_ledger.plugin:CostLedgerPlugin"
