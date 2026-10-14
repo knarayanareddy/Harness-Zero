@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import signal
 import sys
 from pathlib import Path
 from typing import Any
@@ -149,13 +150,7 @@ async def _run_kernel_interactive(
 @click.option("--allow-host", "-a", multiple=True, help="Allowed Host header hostnames (repeatable)")
 def daemon(workspace: str, port: int, sandbox_port: int, host: str, allow_host: tuple[str, ...]):
     """Run the background daemon IPC server."""
-    console.print(Panel(
-        "[yellow]Harness-Zero daemon server is unavailable during modular kernel cutover.\n"
-        "Web and daemon frontends are being rebuilt in Phase 4 (WEB-01).\n"
-        "Please use [bold]harness interactive[/bold] or [bold]harness run[/bold].[/yellow]",
-        title="[bold yellow]Migration Notice[/bold yellow]",
-        border_style="yellow",
-    ))
+    asyncio.run(_run_web_server(Path(workspace), port, sandbox_port, host, allow_host, open_browser=False))
 
 
 @main.command()
@@ -196,13 +191,63 @@ def url(workspace: str):
 @click.option("--no-open", is_flag=True, help="Don't open browser automatically")
 def ui(workspace: str, port: int, sandbox_port: int, host: str, allow_host: tuple[str, ...], no_open: bool):
     """Launch the Sovereign Agent Studio Web UI."""
-    console.print(Panel(
-        "[yellow]Harness-Zero Sovereign Agent Studio is unavailable during modular kernel cutover.\n"
-        "Web and daemon frontends are being rebuilt in Phase 4 (WEB-01).\n"
-        "Please use [bold]harness interactive[/bold] or [bold]harness run[/bold].[/yellow]",
-        title="[bold yellow]Migration Notice[/bold yellow]",
-        border_style="yellow",
-    ))
+    asyncio.run(_run_web_server(Path(workspace), port, sandbox_port, host, allow_host, open_browser=not no_open))
+
+
+async def _run_web_server(
+    workspace: Path,
+    port: int,
+    sandbox_port: int,
+    host: str,
+    allow_host: tuple[str, ...],
+    open_browser: bool = False,
+):
+    try:
+        from harness.frontends.web.server import HarnessWebServer
+        runtime = await bootstrap_kernel(workspace=workspace)
+        server = HarnessWebServer(
+            commands=runtime.commands,
+            bus=runtime.bus,
+            host=host,
+            port=port,
+            sandbox_port=sandbox_port,
+            allowed_hosts=list(allow_host),
+            workspace=workspace,
+        )
+        await server.start()
+
+        access_url = f"http://{host}:{server.port}/?token={server.auth_token}"
+        console.print(Panel(
+            f"[bold green]Harness-Zero Sovereign Agent Studio active![/bold green]\n\n"
+            f"• API / UI:      [cyan]{access_url}[/cyan]\n"
+            f"• Sandbox:       [cyan]http://{host}:{server.sandbox_port}/[/cyan]\n"
+            f"• Auth Token:    [yellow]{server.auth_token}[/yellow]\n"
+            f"• Workspace:     [dim]{workspace.resolve()}[/dim]\n\n"
+            f"[dim]Press Ctrl+C to shut down gracefully.[/dim]",
+            title="[bold cyan]Harness-Zero Studio[/bold cyan]",
+            border_style="green",
+        ))
+
+        if open_browser:
+            import webbrowser
+            webbrowser.open(access_url)
+
+        stop_event = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(sig, stop_event.set)
+            except (NotImplementedError, RuntimeError):
+                pass
+
+        try:
+            await stop_event.wait()
+        finally:
+            console.print("\n[yellow]Shutting down Harness Web Server...[/yellow]")
+            await server.stop()
+            console.print("[green]Shutdown complete.[/green]")
+    except Exception as e:
+        console.print(f"[bold red]Web server error: {e}[/bold red]")
 
 
 @main.group()
