@@ -1,0 +1,8 @@
+[plugin]
+name = "provider-anthropic"
+version = "1.0.0"
+api_version = "1"
+summary = "Anthropic Messages API provider with prompt caching, thinking blocks, and native tool calling"
+provides = ["provider"]
+capabilities = ["net", "secrets"]
+entry = "harness.plugins.providers.anthropic.plugin:AnthropicProviderPlugin"
