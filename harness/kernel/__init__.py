@@ -1,11 +1,16 @@
 """
 Harness Kernel package.
-Foundation primitives for sovereignty, sandboxing, policy enforcement, settings, and secrets.
+Foundation primitives for sovereignty, sandboxing, policy enforcement, settings, secrets, and plugins.
 """
 from __future__ import annotations
 
 from harness.kernel.bus import EventBus
 from harness.kernel.jail import WorkspaceJail
+from harness.kernel.registry import (
+    PluginRegistry,
+    TrustTier,
+    clamp_capabilities,
+)
 from harness.kernel.secrets import PluginSecretsView, Secrets, migrate_legacy_config
 from harness.kernel.settings import (
     CURRENT_SCHEMA_VERSION,
@@ -29,4 +34,7 @@ __all__ = [
     "Secrets",
     "PluginSecretsView",
     "migrate_legacy_config",
+    "PluginRegistry",
+    "TrustTier",
+    "clamp_capabilities",
 ]
