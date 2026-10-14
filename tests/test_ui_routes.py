@@ -140,28 +140,40 @@ async def test_ui_and_studio_endpoints(tmp_path: Path):
             assert res_cancel.status_code == 200
             assert res_cancel.json()["status"] in ("idle", "cancelled")
 
-            # Test GET /settings returns 7-tab structure
+            # Test GET /settings returns all 17 sections reverse-engineered from Claude Desktop
             res_set = await client.get("http://127.0.0.1:8990/settings")
             assert res_set.status_code == 200
             set_data = res_set.json()
-            assert "general" in set_data
-            assert "account" in set_data
-            assert "cowork" in set_data
-            assert "capabilities" in set_data
-            assert "extensions" in set_data
-            assert "models" in set_data
-            assert "security" in set_data
-            assert set_data["cowork"]["cowork_user_files_path"]
+            for expected_section in [
+                "general", "account", "privacy", "billing", "capabilities",
+                "memory", "reflect", "time_focus", "claude_code", "system",
+                "extensions", "developer", "skills", "connectors", "plugins",
+                "models", "security"
+            ]:
+                assert expected_section in set_data, f"Missing {expected_section} in settings"
 
-            # Test POST /settings persists modifications
+            assert set_data["system"]["user_files_path"]
+            assert set_data["billing"]["plan"] == "Free"
+
+            # Test POST /settings persists modifications across sections
             res_set_post = await client.post("http://127.0.0.1:8990/settings", json={
+                "account": {"full_name": "Kiran Reddy", "display_name": "kiranreddy"},
                 "cowork": {"trusted_folders": ["/Users/brightech/Claude", "/tmp/trusted"]},
+                "system": {"device_name": "macbook-air-van-brightech-local"},
+                "time_focus": {"focus_interval_minutes": 30, "quiet_hours_enabled": True},
+                "reflect": {"reflection_depth": "deep", "thinking_budget": "high"},
+                "claude_code": {"code_theme": "tokyo-night"},
                 "models": {"temperature": 0.45, "auto_fallback": True},
                 "security": {"session_spend_cap_usd": 12.50}
             })
             assert res_set_post.status_code == 200
-            assert res_set_post.json()["status"] == "saved"
-            assert res_set_post.json()["settings"]["models"]["temperature"] == 0.45
-            assert res_set_post.json()["settings"]["security"]["session_spend_cap_usd"] == 12.50
+            saved = res_set_post.json()
+            assert saved["status"] == "saved"
+            assert saved["settings"]["account"]["full_name"] == "Kiran Reddy"
+            assert saved["settings"]["time_focus"]["focus_interval_minutes"] == 30
+            assert saved["settings"]["reflect"]["reflection_depth"] == "deep"
+            assert saved["settings"]["claude_code"]["code_theme"] == "tokyo-night"
+            assert saved["settings"]["models"]["temperature"] == 0.45
+            assert saved["settings"]["security"]["session_spend_cap_usd"] == 12.50
     finally:
         await app_runner.cleanup()

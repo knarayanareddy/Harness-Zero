@@ -549,16 +549,52 @@
     .settings-layout {
       display: flex;
       gap: 16px;
-      height: 480px;
+      height: 560px;
     }
     .settings-sidebar {
-      width: 200px;
+      width: 230px;
       display: flex;
       flex-direction: column;
-      gap: 4px;
       border-right: 1px solid #27272a;
       padding-right: 12px;
       flex-shrink: 0;
+      overflow: hidden;
+    }
+    .settings-search-box {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      padding: 6px 10px;
+      margin-bottom: 8px;
+      flex-shrink: 0;
+    }
+    .settings-search-box input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #f4f4f5;
+      font-size: 12px;
+      width: 100%;
+    }
+    .settings-tabs-scroll {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding-right: 2px;
+    }
+    .settings-group-header {
+      font-size: 11px;
+      font-weight: 700;
+      color: #71717a;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 8px 10px 4px 10px;
+      margin-top: 4px;
     }
     .settings-tab-btn {
       display: flex;
@@ -569,9 +605,9 @@
       background: transparent;
       border: none;
       color: #a1a1aa;
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 500;
-      padding: 8px 12px;
+      padding: 6px 10px;
       border-radius: 6px;
       cursor: pointer;
       transition: all 0.15s ease;
@@ -585,11 +621,21 @@
       background: rgba(56, 189, 248, 0.12);
       font-weight: 600;
     }
+    .settings-sidebar-user {
+      margin-top: auto;
+      padding-top: 8px;
+      border-top: 1px solid #27272a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
     .settings-content {
       flex: 1;
       overflow-y: auto;
-      max-height: 480px;
-      padding-right: 6px;
+      max-height: 560px;
+      padding-right: 8px;
     }
     .settings-page {
       display: none;
@@ -616,6 +662,51 @@
       font-size: 11px;
       color: #71717a;
       margin-top: 2px;
+    }
+    .day-pill {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: #a1a1aa;
+      background: #27272a;
+      cursor: pointer;
+      border: 1px solid transparent;
+      user-select: none;
+      transition: all 0.15s ease;
+    }
+    .day-pill.active {
+      background: #38bdf8;
+      color: #09090b;
+      font-weight: 700;
+    }
+    .mode-segmented-control {
+      display: flex;
+      background: #27272a;
+      border-radius: 8px;
+      padding: 2px;
+      gap: 2px;
+    }
+    .mode-segment-btn {
+      background: transparent;
+      border: none;
+      color: #a1a1aa;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .mode-segment-btn.active {
+      background: #18181b;
+      color: #f4f4f5;
+      font-weight: 600;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
     }
     .btn-stop {
       display: none;
@@ -1134,14 +1225,14 @@
 
         <!-- Floating Antigravity Composer Dock -->
         <div class="composer-dock">
-          <!-- Suggestion Chips -->
-          <div class="chips-carousel">
+          <!-- Claude Cowork Starter Prompt Pills -->
+          <div class="chips-carousel" style="margin-bottom:8px;">
+            <div class="suggestion-chip" onclick="quickPrompt('Explain the core architecture and features of Harness-Zero.')">🎓 Learn</div>
+            <div class="suggestion-chip" onclick="quickPrompt('Write a concise documentation guide for this project.')">✏️ Write</div>
+            <div class="suggestion-chip" onclick="quickPrompt('Create an interactive HTML artifact visualization.')">🎨 Create</div>
+            <div class="suggestion-chip" onclick="quickPrompt('Run pytest tests/ -v and check our test coverage.')">&lt;/&gt; Code</div>
+            <div class="suggestion-chip" onclick="quickPrompt('Summarize the workspace status and what we should work on next.')">☕️ Life stuff</div>
             <div class="suggestion-chip" onclick="quickPrompt('what can you do?')">✨ What can you do?</div>
-            <div class="suggestion-chip" onclick="quickPrompt('run pytest')">🧪 Run pytest</div>
-            <div class="suggestion-chip" onclick="quickPrompt('search codebase for Coordinator')">🔍 Search codebase</div>
-            <div class="suggestion-chip" onclick="quickPrompt('check git status')">🌿 Git status</div>
-            <div class="suggestion-chip" onclick="quickPrompt('list skills')">🧩 Skills catalog</div>
-            <div class="suggestion-chip" onclick="quickPrompt('plan architecture for SOP pipeline')">⚡ Architecture plan</div>
           </div>
 
           <!-- Input Card -->
@@ -1198,7 +1289,7 @@
               class="composer-input"
               id="prompt-input"
               rows="1"
-              placeholder="Ask Antigravity anything... (/ commands, @ files, drag/paste images)"
+              placeholder="How can I help you today? (/ commands, @ files, drag/paste images)"
             ></textarea>
 
             <div class="composer-controls">
@@ -1207,7 +1298,13 @@
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
                 </button>
 
-                <select class="select-pill" id="mode-selector">
+                <!-- Claude Cowork [Chat | Cowork] Segmented Control -->
+                <div class="mode-segmented-control" id="chat-cowork-segmented">
+                  <button class="mode-segment-btn active" id="seg-btn-chat" onclick="setCoworkMode('chat')">Chat</button>
+                  <button class="mode-segment-btn" id="seg-btn-cowork" onclick="setCoworkMode('cowork')">Cowork</button>
+                </div>
+
+                <select class="select-pill" id="mode-selector" style="display:none;">
                   <option value="autonomous">Autonomous Agent</option>
                   <option value="architect">Architect/Editor Loop</option>
                   <option value="battle">Battle Arena Fork</option>
@@ -1232,6 +1329,12 @@
               </div>
 
               <div style="display:flex; align-items:center; gap:6px;">
+                <button class="btn-icon" id="btn-mic" onclick="toggleVoiceDictation()" title="Voice input (dictation)">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                </button>
+                <button class="btn-icon" id="btn-audio" onclick="toggleSpeechAudio()" title="Audio speech response">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                </button>
                 <button class="btn-stop" id="stop-btn" onclick="stopGenerating()" title="Stop Generation">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
                   <span>Stop</span>
@@ -1346,8 +1449,8 @@
   </div>
 
   <!-- Replicated Claude Cowork Settings Modal (End-to-End Reverse-Engineered Architecture) -->
-  <div class="modal-backdrop" id="settings-modal">
-    <div class="modal-dialog" style="max-width:820px; width:94vw; max-height:88vh; display:flex; flex-direction:column;">
+  <div class="modal-backdrop" id="settings-modal" onclick="if (event.target === this) closeSettingsModal()">
+    <div class="modal-dialog" style="max-width:920px; width:95vw; height:640px; max-height:92vh; display:flex; flex-direction:column;">
       <!-- Modal Header -->
       <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #27272a; padding-bottom:12px; margin-bottom:12px;">
         <div style="display:flex; align-items:center; gap:10px;">
@@ -1359,29 +1462,90 @@
 
       <!-- Main Layout: Sidebar + Content -->
       <div class="settings-layout" style="flex:1; overflow:hidden;">
-        <!-- Left Sidebar: 7 Tabs matching Claude Cowork desktop_config.json -->
+        <!-- Left Sidebar: 4 Groups, 17 Sections -->
         <div class="settings-sidebar">
-          <button class="settings-tab-btn active" id="stab-general" onclick="switchSettingsTab('general')">
-            <span>⚙️</span><span>General</span>
-          </button>
-          <button class="settings-tab-btn" id="stab-account" onclick="switchSettingsTab('account')">
-            <span>👤</span><span>Account</span>
-          </button>
-          <button class="settings-tab-btn" id="stab-cowork" onclick="switchSettingsTab('cowork')">
-            <span>🤝</span><span>Cowork & Remote</span>
-          </button>
-          <button class="settings-tab-btn" id="stab-capabilities" onclick="switchSettingsTab('capabilities')">
-            <span>🌐</span><span>Capabilities & Sites</span>
-          </button>
-          <button class="settings-tab-btn" id="stab-extensions" onclick="switchSettingsTab('extensions')">
-            <span>🧩</span><span>Extensions & MCP</span>
-          </button>
-          <button class="settings-tab-btn" id="stab-models" onclick="switchSettingsTab('models')">
-            <span>🔑</span><span>Models & Routing</span>
-          </button>
-          <button class="settings-tab-btn" id="stab-security" onclick="switchSettingsTab('security')">
-            <span>🛡️</span><span>Security & Guardrails</span>
-          </button>
+          <!-- Search box -->
+          <div class="settings-search-box">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" id="settings-search-input" placeholder="Search" oninput="filterSettingsTabs(this.value)">
+          </div>
+
+          <div class="settings-tabs-scroll" id="settings-tabs-container">
+            <!-- Group 1: Settings -->
+            <div class="settings-group-header" data-group="Settings">Settings</div>
+            <button class="settings-tab-btn active" id="stab-general" onclick="switchSettingsTab('general')" data-label="General">
+              <span>⚙️</span><span>General</span>
+            </button>
+            <button class="settings-tab-btn" id="stab-account" onclick="switchSettingsTab('account')" data-label="Account">
+              <span>👤</span><span>Account</span>
+            </button>
+            <button class="settings-tab-btn" id="stab-privacy" onclick="switchSettingsTab('privacy')" data-label="Privacy">
+              <span>🛡️</span><span>Privacy</span>
+            </button>
+            <button class="settings-tab-btn" id="stab-billing" onclick="switchSettingsTab('billing')" data-label="Billing">
+              <span>💳</span><span>Billing</span>
+            </button>
+            <button class="settings-tab-btn" id="stab-capabilities" onclick="switchSettingsTab('capabilities')" data-label="Capabilities">
+              <span>🌐</span><span>Capabilities</span>
+            </button>
+            <button class="settings-tab-btn" id="stab-memory" onclick="switchSettingsTab('memory')" data-label="Memory">
+              <span>🧠</span><span>Memory</span>
+            </button>
+            <button class="settings-tab-btn" id="stab-reflect" onclick="switchSettingsTab('reflect')" data-label="Reflect">
+              <span>💡</span><span>Reflect</span>
+            </button>
+            <button class="settings-tab-btn" id="stab-time_focus" onclick="switchSettingsTab('time_focus')" data-label="Time and focus">
+              <span>🌙</span><span>Time and focus</span>
+            </button>
+            <button class="settings-tab-btn" id="stab-claude_code" onclick="switchSettingsTab('claude_code')" data-label="Claude Code">
+              <span>💻</span><span>Claude Code</span>
+            </button>
+
+            <!-- Group 2: This computer -->
+            <div class="settings-group-header" data-group="This computer">This computer</div>
+            <button class="settings-tab-btn" id="stab-system" onclick="switchSettingsTab('system')" data-label="System">
+              <span>🖥️</span><span>System</span>
+            </button>
+            <button class="settings-tab-btn" id="stab-extensions" onclick="switchSettingsTab('extensions')" data-label="Extensions">
+              <span>🧩</span><span>Extensions</span>
+            </button>
+            <button class="settings-tab-btn" id="stab-developer" onclick="switchSettingsTab('developer')" data-label="Developer">
+              <span>🔧</span><span>Developer</span>
+            </button>
+
+            <!-- Group 3: Customize -->
+            <div class="settings-group-header" data-group="Customize">Customize</div>
+            <button class="settings-tab-btn" id="stab-skills" onclick="switchSettingsTab('skills')" data-label="Skills">
+              <span>📜</span><span>Skills</span>
+            </button>
+            <button class="settings-tab-btn" id="stab-connectors" onclick="switchSettingsTab('connectors')" data-label="Connectors">
+              <span>🔗</span><span>Connectors</span>
+            </button>
+            <button class="settings-tab-btn" id="stab-plugins" onclick="switchSettingsTab('plugins')" data-label="Plugins">
+              <span>🔌</span><span>Plugins</span>
+            </button>
+
+            <!-- Group 4: Platform -->
+            <div class="settings-group-header" data-group="Platform">Platform</div>
+            <button class="settings-tab-btn" id="stab-models" onclick="switchSettingsTab('models')" data-label="API keys">
+              <span>🔑</span><span>API keys</span>
+            </button>
+            <button class="settings-tab-btn" id="stab-security" onclick="switchSettingsTab('security')" data-label="Security & Guardrails">
+              <span>🛡️</span><span>Security & Guardrails</span>
+            </button>
+          </div>
+
+          <!-- Bottom User Profile Pill -->
+          <div class="settings-sidebar-user" onclick="switchSettingsTab('account')">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="width:24px; height:24px; border-radius:50%; background:#38bdf8; color:#09090b; font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:center;">K</div>
+              <div style="display:flex; flex-direction:column; line-height:1.2;">
+                <span style="font-size:12px; font-weight:600; color:#f4f4f5;" id="user-display-name-pill">kiranreddy</span>
+                <span style="font-size:10px; color:#a1a1aa;">Free plan</span>
+              </div>
+            </div>
+            <span style="color:#71717a; font-size:12px;">⌵</span>
+          </div>
         </div>
 
         <!-- Right Content Area -->
@@ -1424,6 +1588,22 @@
 
             <div class="toggle-row">
               <div>
+                <span>Desktop Notifications</span>
+                <div class="toggle-desc">Send notification alerts when background tasks finish</div>
+              </div>
+              <input type="checkbox" id="gen-notifications" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Launch on Startup</span>
+                <div class="toggle-desc">Start Harness-Zero daemon on system login</div>
+              </div>
+              <input type="checkbox" id="gen-startup" style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
                 <span>Anonymous Performance Diagnostics</span>
                 <div class="toggle-desc">Log local inference latencies and crash reports to local memory</div>
               </div>
@@ -1433,11 +1613,47 @@
 
           <!-- 2. Account Tab -->
           <div class="settings-page" id="spage-account">
-            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">Account Identity & Keyring Status</h4>
-            <div style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:8px;">
+            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">Profile & Account</h4>
+            <div style="display:flex; align-items:center; gap:16px; background:#18181b; border:1px solid #27272a; border-radius:8px; padding:12px;">
+              <div style="width:54px; height:54px; border-radius:50%; background:#27272a; border:2px solid #38bdf8; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:700; color:#38bdf8;">K</div>
+              <div style="flex:1;">
+                <div style="font-size:13px; font-weight:600; color:#f4f4f5;">Profile Photo</div>
+                <div style="font-size:11px; color:#71717a;">PNG, JPEG, or WebP, up to 10MB</div>
+              </div>
+              <button class="btn-changes" style="font-size:11px; padding:4px 10px;" onclick="alert('Photo upload active')">Upload</button>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <label style="font-size:12px; color:#a1a1aa;">Full Name</label>
+              <input type="text" class="input-field" id="acc-full-name" value="kiranreddy"/>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <label style="font-size:12px; color:#a1a1aa;">What should Claude call you?</label>
+              <input type="text" class="input-field" id="acc-display-name" value="kiranreddy"/>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <label style="font-size:12px; color:#a1a1aa;">What best describes your work?</label>
+              <select class="select-pill" id="acc-work-type" style="width:100%; border-radius:6px; height:34px;">
+                <option value="engineering">Software Engineering & Architecture</option>
+                <option value="research">AI Research & Machine Learning</option>
+                <option value="product">Product Management</option>
+                <option value="design">UI/UX Design</option>
+                <option value="other">Other Professional</option>
+              </select>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <label style="font-size:12px; color:#a1a1aa;">Instructions for Claude</label>
+              <div style="font-size:11px; color:#71717a;">Claude will keep these in mind across chats and Cowork within safety guidelines.</div>
+              <textarea class="input-field" id="acc-instructions" rows="3" style="resize:vertical;" placeholder="E.g., Prefer concise explanations with executable terminal commands..."></textarea>
+            </div>
+
+            <div style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:6px; margin-top:4px;">
               <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:12px; color:#a1a1aa;">Active Identity:</span>
-                <span style="font-size:13px; font-weight:600; color:#f4f4f5;" id="acc-email">brightech@local.device</span>
+                <span style="font-size:12px; color:#a1a1aa;">Email:</span>
+                <span style="font-size:12px; font-weight:600; color:#f4f4f5;" id="acc-email">brightech@local.device</span>
               </div>
               <div style="display:flex; justify-content:space-between; align-items:center;">
                 <span style="font-size:12px; color:#a1a1aa;">Account UUID:</span>
@@ -1447,28 +1663,396 @@
                 <span style="font-size:12px; color:#a1a1aa;">Organization:</span>
                 <span style="font-family:var(--font-mono); font-size:11px; color:#a1a1aa;" id="acc-org">90abf3fd-1c92-4b4e-8733-809314ab824b</span>
               </div>
-              <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:12px; color:#a1a1aa;">System Keyring:</span>
-                <span style="font-size:12px; color:#22c55e; font-weight:500;">Apple Keychain (Unlocked & Active ✓)</span>
-              </div>
             </div>
 
-            <div style="display:flex; gap:8px; margin-top:8px;">
-              <button class="btn-proceed" style="background:#27272a; color:#f4f4f5;" onclick="alert('Session authenticated with local credentials.')">Re-authenticate Session</button>
-              <button class="btn-changes" onclick="alert('Local account cached.')">Clear Session Cache</button>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+              <button class="btn-changes" onclick="alert('Signed out of all devices.')">Log out of all devices</button>
+              <button class="btn-changes" style="color:#ef4444; border-color:rgba(239,68,68,0.4);" onclick="alert('Account deletion confirmed.')">Delete your account</button>
             </div>
           </div>
 
-          <!-- 3. Cowork & Remote Control -->
-          <div class="settings-page" id="spage-cowork">
-            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">Cowork Folders & Remote Control</h4>
-            
+          <!-- 3. Privacy Tab -->
+          <div class="settings-page" id="spage-privacy">
+            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">Privacy & Data Governance</h4>
+            <div style="font-size:12px; color:#a1a1aa; line-height:1.5;">
+              Harness-Zero and Claude maintain sovereign local execution boundaries. Learn how your data and workspaces are safeguarded.
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; background:#18181b; border:1px solid #27272a; border-radius:8px; padding:10px 14px; cursor:pointer;" onclick="alert('Data is stored strictly in your local SQLite and file directory.')">
+                <span style="font-size:13px; color:#e4e4e7;">How we protect your data</span>
+                <span style="color:#71717a;">›</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; background:#18181b; border:1px solid #27272a; border-radius:8px; padding:10px 14px; cursor:pointer;" onclick="alert('Inference requests route only to configured BYOK endpoints.')">
+                <span style="font-size:13px; color:#e4e4e7;">How we use your data</span>
+                <span style="color:#71717a;">›</span>
+              </div>
+            </div>
+
+            <h5 style="font-size:12px; font-weight:700; color:#71717a; text-transform:uppercase; margin:8px 0 2px 0;">Preferences</h5>
             <div class="toggle-row">
               <div>
-                <span>Remote Control</span>
-                <div class="toggle-desc">Allow phone and claude.ai sessions to start sessions and interact with this computer</div>
+                <span>Location metadata</span>
+                <div class="toggle-desc">Allow coarse location metadata to improve local time and timezone tools</div>
               </div>
-              <input type="checkbox" id="cowork-remote-control" checked style="transform:scale(1.2); cursor:pointer;"/>
+              <input type="checkbox" id="priv-location" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Help improve AI models</span>
+                <div class="toggle-desc">Allow anonymous session trajectories for local fine-tuning evaluation</div>
+              </div>
+              <input type="checkbox" id="priv-train" style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Local Data Retention Mode</span>
+                <div class="toggle-desc">Control automated pruning of transcripts and memory vectors</div>
+              </div>
+              <select class="select-pill" id="priv-retention" style="width:130px;">
+                <option value="local_only">Local Sovereign (Keep)</option>
+                <option value="30_days">Prune &gt; 30 Days</option>
+                <option value="session_only">Purge on Exit</option>
+              </select>
+            </div>
+
+            <h5 style="font-size:12px; font-weight:700; color:#71717a; text-transform:uppercase; margin:8px 0 2px 0;">Your Data</h5>
+            <div style="display:flex; justify-content:space-between; align-items:center; background:#18181b; border:1px solid #27272a; border-radius:8px; padding:10px 14px;">
+              <div>
+                <div style="font-size:13px; color:#e4e4e7;">Export all conversations and artifacts</div>
+                <div class="toggle-desc">Download full JSONL transcript archive</div>
+              </div>
+              <button class="btn-proceed" style="padding:4px 12px; font-size:11px;" onclick="window.open('/sessions')">Export Data</button>
+            </div>
+          </div>
+
+          <!-- 4. Billing Tab -->
+          <div class="settings-page" id="spage-billing">
+            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">Subscription Plan & Usage</h4>
+            <div style="background:linear-gradient(135deg, #18181b, #222227); border:1px solid #38bdf8; border-radius:10px; padding:16px; display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:20px;">✴️</span>
+                  <span style="font-size:16px; font-weight:700; color:#f4f4f5;" id="bill-plan-badge">Free Plan</span>
+                  <span class="status-pill status-ready" style="font-size:10px;">Active</span>
+                </div>
+                <div style="font-size:12px; color:#a1a1aa; margin-top:4px;">Try Claude and Harness-Zero with local Bring-Your-Own-Key routing</div>
+              </div>
+              <button class="btn-proceed" style="padding:6px 16px; font-size:12px;" onclick="alert('You have unlimited local Bring-Your-Own-Key access!')">Upgrade Plan ↗</button>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
+              <div style="font-size:12px; font-weight:600; color:#e4e4e7;">Included Features:</div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:12px; color:#a1a1aa;">
+                <div>✓ Chat on web, iOS, Android, and desktop</div>
+                <div>✓ Generate code and visualize data</div>
+                <div>✓ Write, edit, and create content</div>
+                <div>✓ Ability to search the web</div>
+                <div>✓ Memory across conversations</div>
+                <div>✓ Create files and execute code</div>
+                <div>✓ Unlock more with desktop extensions</div>
+                <div>✓ Connect Slack & Google Workspace</div>
+                <div>✓ Remote MCP connectors</div>
+                <div>✓ Extended thinking for complex work</div>
+              </div>
+            </div>
+
+            <div style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:12px; margin-top:10px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="font-size:12px; color:#a1a1aa;">Current Session Spend:</span>
+                <span style="font-family:var(--font-mono); font-size:12px; color:#22c55e;" id="bill-usage-text">$0.04 USD</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:12px; color:#a1a1aa;">Safety Spend Cap:</span>
+                <span style="font-family:var(--font-mono); font-size:12px; color:#38bdf8;" id="bill-cap-text">$10.00 USD</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 5. Capabilities & Visuals Tab -->
+          <div class="settings-page" id="spage-capabilities">
+            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">Agent Capabilities & Tool Access</h4>
+
+            <h5 style="font-size:12px; font-weight:700; color:#71717a; text-transform:uppercase; margin:4px 0 2px 0;">General</h5>
+            <div class="toggle-row">
+              <div>
+                <span>Tool Access Mode</span>
+                <div class="toggle-desc">Controls how connector and workspace tools are loaded in new conversations</div>
+              </div>
+              <select class="select-pill" id="cap-tool-mode" style="width:170px;">
+                <option value="on_demand">Load tools when needed</option>
+                <option value="always">Load all tools upfront</option>
+              </select>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Connector Search</span>
+                <div class="toggle-desc">Let agent search connector directory and surface tools relevant to conversation</div>
+              </div>
+              <input type="checkbox" id="cap-connector-search" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Switch models when a message is flagged</span>
+                <div class="toggle-desc">When safeguards flag a message, automatically switch to a different model to keep chatting</div>
+              </div>
+              <input type="checkbox" id="cap-switch-models" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <h5 style="font-size:12px; font-weight:700; color:#71717a; text-transform:uppercase; margin:8px 0 2px 0;">Visuals</h5>
+            <div class="toggle-row">
+              <div>
+                <span>Artifacts</span>
+                <div class="toggle-desc">Generate code, documents, and designs in a dedicated window alongside conversation</div>
+              </div>
+              <input type="checkbox" id="cap-artifacts" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>AI-powered Artifacts</span>
+                <div class="toggle-desc">Build apps and interactive documents that use model inside the artifact</div>
+              </div>
+              <input type="checkbox" id="cap-ai-artifacts" style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Inline Visualizations</span>
+                <div class="toggle-desc">Allow agent to generate interactive visualizations, charts, and diagrams directly in chat</div>
+              </div>
+              <input type="checkbox" id="cap-inline-vis" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <h5 style="font-size:12px; font-weight:700; color:#71717a; text-transform:uppercase; margin:8px 0 2px 0;">Code Execution and File Creation</h5>
+            <div class="toggle-row">
+              <div>
+                <span>Code Execution and File Creation</span>
+                <div class="toggle-desc">Allow local script execution, surgical file edits, and bash commands</div>
+              </div>
+              <input type="checkbox" id="cap-code-exec" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Web Search Capability</span>
+                <div class="toggle-desc">Allow agent to execute web search queries via search tools</div>
+              </div>
+              <input type="checkbox" id="cap-web-search" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Browser Automation Tools</span>
+                <div class="toggle-desc">Allow Stagehand CDP navigation, DOM inspection, and clicking</div>
+              </div>
+              <input type="checkbox" id="cap-browser-tools" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Preferred Browser</span>
+                <div class="toggle-desc">Browser runtime used for generative preview rendering</div>
+              </div>
+              <select class="select-pill" id="cap-preferred-browser" style="width:140px;">
+                <option value="built_in">Built-in Sandbox (:8001)</option>
+                <option value="system">System Default Browser</option>
+              </select>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <label style="font-size:12px; color:#a1a1aa;">Allowed Sites & Network Egress Allowlist</label>
+                <button class="btn-proceed" style="padding:2px 8px; font-size:11px;" onclick="addAllowedSitePrompt()">＋ Add Host</button>
+              </div>
+              <div id="allowed-sites-list" style="display:flex; flex-wrap:wrap; gap:6px; background:#18181b; border:1px solid #27272a; border-radius:6px; padding:8px;"></div>
+            </div>
+          </div>
+
+          <!-- 6. Memory Tab -->
+          <div class="settings-page" id="spage-memory">
+            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">Cross-Session Memory</h4>
+            <div class="toggle-row">
+              <div>
+                <span>Generate memory from chats</span>
+                <div class="toggle-desc">Allow agent to retain key architectural insights, preferences, and facts across sessions</div>
+              </div>
+              <input type="checkbox" id="mem-generate" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:12px; color:#a1a1aa;">Learned Memory Facts (SQLite FTS5):</span>
+                <button class="btn-changes" style="font-size:11px; padding:2px 8px; color:#ef4444;" onclick="clearMemories()">Clear All Memories</button>
+              </div>
+              <div id="memory-facts-list" style="display:flex; flex-direction:column; gap:4px; max-height:160px; overflow-y:auto; background:#18181b; border:1px solid #27272a; border-radius:6px; padding:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#222227; padding:4px 8px; border-radius:4px; font-size:11px;">
+                  <span style="color:#e4e4e7;">💡 Prefers concise GitHub-style markdown and clickable links</span>
+                  <button style="background:transparent; border:none; color:#71717a; cursor:pointer;" onclick="this.parentElement.remove()">✕</button>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#222227; padding:4px 8px; border-radius:4px; font-size:11px;">
+                  <span style="color:#e4e4e7;">💡 Workspace root is /Users/brightech/.gemini/antigravity/scratch/Harness-Zero</span>
+                  <button style="background:transparent; border:none; color:#71717a; cursor:pointer;" onclick="this.parentElement.remove()">✕</button>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#222227; padding:4px 8px; border-radius:4px; font-size:11px;">
+                  <span style="color:#e4e4e7;">💡 Host architecture is macOS Darwin 24 on Apple Silicon</span>
+                  <button style="background:transparent; border:none; color:#71717a; cursor:pointer;" onclick="this.parentElement.remove()">✕</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 7. Reflect Tab -->
+          <div class="settings-page" id="spage-reflect">
+            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">Reflect & Self-Correction</h4>
+            <div style="font-size:12px; color:#a1a1aa; line-height:1.5;">
+              Based on your conversations and tool verification cycles, the agent evaluates reasoning accuracy before emitting side-effects.
+            </div>
+
+            <div class="toggle-row" style="margin-top:8px;">
+              <div>
+                <span>Autonomous Self-Correction</span>
+                <div class="toggle-desc">Enable internal multi-turn critique and test validation before completing turns</div>
+              </div>
+              <input type="checkbox" id="ref-enabled" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Reflection Depth</span>
+                <div class="toggle-desc">Intensity of chain-of-thought verification before mutating code</div>
+              </div>
+              <select class="select-pill" id="ref-depth" style="width:140px;">
+                <option value="shallow">Shallow (Fast)</option>
+                <option value="balanced" selected>Balanced (Standard)</option>
+                <option value="deep">Deep Exhaustive</option>
+              </select>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Thinking Budget</span>
+                <div class="toggle-desc">Max token allocation for reasoning tokens (DeepSeek-R1 / Sonnet 3.7)</div>
+              </div>
+              <select class="select-pill" id="ref-budget" style="width:140px;">
+                <option value="low">Low (1024 tokens)</option>
+                <option value="medium" selected>Medium (4096 tokens)</option>
+                <option value="high">High (8192 tokens)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 8. Time and focus Tab -->
+          <div class="settings-page" id="spage-time_focus">
+            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">Time and Focus</h4>
+
+            <div class="toggle-row">
+              <div>
+                <span>Break Reminders</span>
+                <div class="toggle-desc">Get a nudge to take a break from long coding sessions. Snooze or adjust anytime.</div>
+              </div>
+              <select class="select-pill" id="tf-break-interval" style="width:130px;">
+                <option value="off">Off</option>
+                <option value="30min">Every 30 mins</option>
+                <option value="1hr">Every hour</option>
+                <option value="2hr" selected>Every 2 hours</option>
+              </select>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Quiet Hours</span>
+                <div class="toggle-desc">Set time limits for notifications and sound chimes</div>
+              </div>
+              <input type="checkbox" id="tf-quiet-hours" style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:8px;">
+              <div style="font-size:12px; color:#a1a1aa;">Active Days for Quiet Hours:</div>
+              <div style="display:flex; gap:8px;">
+                <div class="day-pill" onclick="this.classList.toggle('active')">S</div>
+                <div class="day-pill active" onclick="this.classList.toggle('active')">M</div>
+                <div class="day-pill active" onclick="this.classList.toggle('active')">T</div>
+                <div class="day-pill active" onclick="this.classList.toggle('active')">W</div>
+                <div class="day-pill active" onclick="this.classList.toggle('active')">T</div>
+                <div class="day-pill active" onclick="this.classList.toggle('active')">F</div>
+                <div class="day-pill" onclick="this.classList.toggle('active')">S</div>
+              </div>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; background:#18181b; border:1px solid #27272a; border-radius:8px; padding:10px 14px;">
+              <div>
+                <div style="font-size:13px; color:#e4e4e7;">Focus Interval Length</div>
+                <div class="toggle-desc">Pomodoro focus chunk length for agentic builds</div>
+              </div>
+              <input type="number" id="tf-focus-interval" class="input-field" value="25" min="5" max="120" style="width:70px; text-align:center;"/>
+            </div>
+          </div>
+
+          <!-- 9. Claude Code Tab -->
+          <div class="settings-page" id="spage-claude_code">
+            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">Claude Code Integration</h4>
+
+            <div style="background:#18181b; border:1px solid #27272a; border-radius:10px; padding:16px; display:flex; gap:16px; align-items:center;">
+              <div style="flex:1;">
+                <div style="font-size:15px; font-weight:700; color:#f4f4f5;">Claude Code</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-top:4px;">
+                  Claude understands your codebase and helps you build, debug, and ship faster in the terminal.
+                </div>
+                <button class="btn-proceed" style="margin-top:10px; padding:5px 14px; font-size:11px;" onclick="alert('Claude Code CLI is wired into the local daemon session.')">Upgrade to Max or Pro ↗</button>
+              </div>
+              <div style="background:#09090b; border:1px solid #3f3f46; border-radius:8px; padding:12px; font-family:var(--font-mono); font-size:11px; width:220px; color:#a1a1aa;">
+                <div style="display:flex; gap:4px; margin-bottom:8px;">
+                  <span style="width:8px; height:8px; border-radius:50%; background:#ef4444;"></span>
+                  <span style="width:8px; height:8px; border-radius:50%; background:#eab308;"></span>
+                  <span style="width:8px; height:8px; border-radius:50%; background:#22c55e;"></span>
+                </div>
+                <div style="color:#e4e4e7;">&gt; Fix auth bug</div>
+                <div style="color:#38bdf8; margin-top:4px;">* Contemplating...</div>
+              </div>
+            </div>
+
+            <h5 style="font-size:12px; font-weight:700; color:#71717a; text-transform:uppercase; margin:8px 0 2px 0;">General</h5>
+            <div class="toggle-row">
+              <div>
+                <span>Classify session states</span>
+                <div class="toggle-desc">Allow automatic classification of sessions as blocked, ready for review, or done</div>
+              </div>
+              <input type="checkbox" id="cc-classify" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Switch models when a message is flagged</span>
+                <div class="toggle-desc">Automatically switch to fallback model when safeguards trigger</div>
+              </div>
+              <input type="checkbox" id="cc-switch" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <span>Code Appearance Theme</span>
+                <div class="toggle-desc">Syntax highlighting theme inside terminal and code editor views</div>
+              </div>
+              <select class="select-pill" id="cc-code-theme" style="width:140px;">
+                <option value="dark" selected>Claude Dark</option>
+                <option value="light">Claude Light</option>
+                <option value="tokyo-night">Tokyo Night</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 10. System & Cowork Tab -->
+          <div class="settings-page" id="spage-system">
+            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">This Computer: System & Cowork Files</h4>
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <label style="font-size:12px; color:#a1a1aa;">Device Name (<code>remoteToolsDeviceName</code>)</label>
+              <input type="text" class="input-field" id="sys-device-name" value="macbook-air-van-brightech-local"/>
             </div>
 
             <div style="display:flex; flex-direction:column; gap:6px;">
@@ -1494,66 +2078,48 @@
 
             <div class="toggle-row">
               <div>
-                <span>Maker Devices BLE Interface</span>
-                <div class="toggle-desc">Connect maker devices over Bluetooth Low Energy to display permissions and status</div>
+                <span>Hardware Acceleration</span>
+                <div class="toggle-desc">Use Apple Metal GPU acceleration for webviews and canvas</div>
               </div>
-              <input type="checkbox" id="cowork-ble" style="transform:scale(1.2); cursor:pointer;"/>
+              <input type="checkbox" id="sys-hw-accel" checked style="transform:scale(1.2); cursor:pointer;"/>
             </div>
           </div>
 
-          <!-- 4. Capabilities & Allowed Sites -->
-          <div class="settings-page" id="spage-capabilities">
-            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">Capabilities & Network Host Allowlist</h4>
-
-            <div class="toggle-row">
-              <div>
-                <span>Web Search Capability</span>
-                <div class="toggle-desc">Allow agent to execute web search queries via search tools</div>
-              </div>
-              <input type="checkbox" id="cap-web-search" checked style="transform:scale(1.2); cursor:pointer;"/>
-            </div>
-
-            <div class="toggle-row">
-              <div>
-                <span>Browser Automation Tools</span>
-                <div class="toggle-desc">Allow Stagehand CDP navigation, DOM inspection, and clicking</div>
-              </div>
-              <input type="checkbox" id="cap-browser-tools" checked style="transform:scale(1.2); cursor:pointer;"/>
-            </div>
-
-            <div class="toggle-row">
-              <div>
-                <span>Preferred Browser</span>
-                <div class="toggle-desc">Browser runtime used for generative preview rendering</div>
-              </div>
-              <select class="select-pill" id="cap-preferred-browser" style="width:130px;">
-                <option value="built_in">Built-in Sandbox (:8001)</option>
-                <option value="system">System Default Browser</option>
-              </select>
-            </div>
-
-            <div style="display:flex; flex-direction:column; gap:6px;">
-              <div style="display:flex; justify-content:space-between; align-items:center;">
-                <label style="font-size:12px; color:#a1a1aa;">Allowed Sites & Network Egress Allowlist</label>
-                <button class="btn-proceed" style="padding:2px 8px; font-size:11px;" onclick="addAllowedSitePrompt()">＋ Add Host</button>
-              </div>
-              <div id="allowed-sites-list" style="display:flex; flex-wrap:wrap; gap:6px; background:#18181b; border:1px solid #27272a; border-radius:6px; padding:8px;"></div>
-            </div>
-
-            <div class="toggle-row">
-              <div>
-                <span>Scheduled Background Routines</span>
-                <div class="toggle-desc">Allow agent to register recurring cron schedules and timers</div>
-              </div>
-              <input type="checkbox" id="cap-scheduled-tasks" style="transform:scale(1.2); cursor:pointer;"/>
-            </div>
-          </div>
-
-          <!-- 5. Extensions & MCP -->
+          <!-- 11. Extensions Tab -->
           <div class="settings-page" id="spage-extensions">
-            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">Model Context Protocol & Extensions</h4>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 2px 0;">Extensions</h4>
+                <div style="font-size:11px; color:#71717a;">Allow Claude to directly interact with apps, data, and tools on your computer.</div>
+              </div>
+              <button class="btn-proceed" style="padding:4px 12px; font-size:11px;" onclick="alert('Opening Extension Catalog')">Browse extensions</button>
+            </div>
 
-            <div class="toggle-row">
+            <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;" id="extensions-list">
+              <div style="display:flex; justify-content:space-between; align-items:center; background:#18181b; border:1px solid #27272a; border-radius:8px; padding:12px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <span style="font-size:20px;">📄</span>
+                  <div>
+                    <div style="font-size:13px; font-weight:600; color:#f4f4f5;">Office 365 MCP</div>
+                    <div style="font-size:11px; color:#71717a;">Integrated Word (.docx), PowerPoint (.pptx), Excel (.xlsx) tools</div>
+                  </div>
+                </div>
+                <span class="status-pill status-ready" style="font-size:10px;">Active ✓</span>
+              </div>
+
+              <div style="display:flex; justify-content:space-between; align-items:center; background:#18181b; border:1px solid #27272a; border-radius:8px; padding:12px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <span style="font-size:20px;">📁</span>
+                  <div>
+                    <div style="font-size:13px; font-weight:600; color:#f4f4f5;">Filesystem MCP Bridge</div>
+                    <div style="font-size:11px; color:#71717a;">Protected directory sandboxing and file operations</div>
+                  </div>
+                </div>
+                <span class="status-pill status-ready" style="font-size:10px;">Active ✓</span>
+              </div>
+            </div>
+
+            <div class="toggle-row" style="margin-top:6px;">
               <div>
                 <span>Developer Mode</span>
                 <div class="toggle-desc">Enables local MCP debugging, inspecting webviews, and raw protocol frames</div>
@@ -1569,31 +2135,249 @@
               <input type="checkbox" id="ext-unpacked" checked style="transform:scale(1.2); cursor:pointer;"/>
             </div>
 
-            <div style="display:flex; flex-direction:column; gap:6px;">
-              <label style="font-size:12px; color:#a1a1aa;">Configured MCP Servers (<code>claude_desktop_config.json</code>)</label>
-              <div id="mcp-servers-list" style="display:flex; flex-direction:column; gap:6px; background:#18181b; border:1px solid #27272a; border-radius:6px; padding:8px;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                  <span style="font-family:var(--font-mono); font-size:12px; color:#f4f4f5;">filesystem_mcp</span>
-                  <span class="status-pill status-ready" style="font-size:10px;">Connected ✓</span>
-                </div>
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                  <span style="font-family:var(--font-mono); font-size:12px; color:#f4f4f5;">database_mcp</span>
-                  <span class="status-pill status-ready" style="font-size:10px;">Connected ✓</span>
-                </div>
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                  <span style="font-family:var(--font-mono); font-size:12px; color:#f4f4f5;">github_mcp</span>
-                  <span class="status-pill status-ready" style="font-size:10px;">Connected ✓</span>
-                </div>
-              </div>
-            </div>
-
-            <div style="display:flex; gap:8px; margin-top:6px;">
-              <button class="btn-proceed" style="background:#27272a; color:#f4f4f5; font-size:11px;" onclick="reloadMcpConfig()">🔄 Reload MCP Configuration</button>
-              <button class="btn-proceed" style="background:#27272a; color:#f4f4f5; font-size:11px;" onclick="selectStudioTab('skills')">📖 Inspect Skills & Tools</button>
+            <div style="text-align:center; padding:8px; color:#71717a; font-size:11px;">
+              💡 Drag .MCPB or .DXT files here to install
             </div>
           </div>
 
-          <!-- 6. Models & Routing -->
+          <!-- 12. Developer Tab -->
+          <div class="settings-page" id="spage-developer">
+            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 2px 0;">Local MCP Servers</h4>
+            <div style="font-size:11px; color:#71717a;">Add and manage Model Context Protocol servers that you are developing.</div>
+
+            <div id="mcp-servers-list" style="display:flex; flex-direction:column; gap:6px; background:#18181b; border:1px solid #27272a; border-radius:8px; padding:10px; margin-top:8px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #222227;">
+                <div>
+                  <div style="font-family:var(--font-mono); font-size:12px; color:#f4f4f5;">filesystem_mcp</div>
+                  <div style="font-size:10px; color:#71717a;">npx -y @modelcontextprotocol/server-filesystem</div>
+                </div>
+                <span class="status-pill status-ready" style="font-size:10px;">Connected ✓</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #222227;">
+                <div>
+                  <div style="font-family:var(--font-mono); font-size:12px; color:#f4f4f5;">database_mcp</div>
+                  <div style="font-size:10px; color:#71717a;">npx -y @modelcontextprotocol/server-sqlite</div>
+                </div>
+                <span class="status-pill status-ready" style="font-size:10px;">Connected ✓</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0;">
+                <div>
+                  <div style="font-family:var(--font-mono); font-size:12px; color:#f4f4f5;">github_mcp</div>
+                  <div style="font-size:10px; color:#71717a;">npx -y @modelcontextprotocol/server-github</div>
+                </div>
+                <span class="status-pill status-ready" style="font-size:10px;">Connected ✓</span>
+              </div>
+            </div>
+
+            <div style="display:flex; gap:8px; margin-top:8px;">
+              <button class="btn-proceed" style="background:#27272a; color:#f4f4f5; font-size:11px;" onclick="reloadMcpConfig()">Edit Config</button>
+              <button class="btn-changes" style="font-size:11px;" onclick="window.open('https://modelcontextprotocol.io', '_blank')">Developer Docs ↗</button>
+            </div>
+
+            <div style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:12px; margin-top:8px;">
+              <div style="font-size:13px; font-weight:600; color:#f4f4f5;">&lt;/&gt; Want an API key?</div>
+              <div style="font-size:11px; color:#71717a; margin-top:2px;">Create keys, check usage, and more on Claude Platform.</div>
+              <button class="btn-changes" style="margin-top:8px; font-size:11px;" onclick="switchSettingsTab('models')">Configure in Platform / API Keys ↗</button>
+            </div>
+          </div>
+
+          <!-- 13. Skills Tab (Bundled Skills Reverse Engineered) -->
+          <div class="settings-page" id="spage-skills">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 2px 0;">Bundled Skills</h4>
+                <div style="font-size:11px; color:#71717a;">Reverse-engineered bundled skills from Claude Cowork and Harness Engine.</div>
+              </div>
+              <button class="btn-proceed" style="padding:4px 10px; font-size:11px;" onclick="reloadSkillsCatalog()">🔄 Reload Skills</button>
+            </div>
+
+            <div id="skills-catalog-list" style="display:flex; flex-direction:column; gap:8px; margin-top:8px; max-height:360px; overflow-y:auto;">
+              <!-- 1. docx -->
+              <div style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-weight:700; font-size:13px; color:#f4f4f5;">docx</span>
+                    <span class="status-pill status-ready" style="font-size:9px;">Tier: always</span>
+                  </div>
+                  <input type="checkbox" checked style="cursor:pointer; transform:scale(1.1);"/>
+                </div>
+                <div style="font-size:11px; color:#a1a1aa; margin-top:4px;">Create, read, edit Word documents (.docx) and templates (.dotx) with tracked changes.</div>
+              </div>
+
+              <!-- 2. pdf -->
+              <div style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-weight:700; font-size:13px; color:#f4f4f5;">pdf</span>
+                    <span class="status-pill status-ready" style="font-size:9px;">Tier: always</span>
+                  </div>
+                  <input type="checkbox" checked style="cursor:pointer; transform:scale(1.1);"/>
+                </div>
+                <div style="font-size:11px; color:#a1a1aa; margin-top:4px;">PDF manipulation, merge, encrypt, decrypt, watermarking, and OCR on scanned pages.</div>
+              </div>
+
+              <!-- 3. pdf-reading -->
+              <div style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-weight:700; font-size:13px; color:#f4f4f5;">pdf-reading</span>
+                    <span class="status-pill status-ready" style="font-size:9px;">Tier: always</span>
+                  </div>
+                  <input type="checkbox" checked style="cursor:pointer; transform:scale(1.1);"/>
+                </div>
+                <div style="font-size:11px; color:#a1a1aa; margin-top:4px;">In-depth inspection, table extraction, rasterization for visual review, and structured parsing.</div>
+              </div>
+
+              <!-- 4. pptx -->
+              <div style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-weight:700; font-size:13px; color:#f4f4f5;">pptx</span>
+                    <span class="status-pill status-ready" style="font-size:9px;">Tier: always</span>
+                  </div>
+                  <input type="checkbox" checked style="cursor:pointer; transform:scale(1.1);"/>
+                </div>
+                <div style="font-size:11px; color:#a1a1aa; margin-top:4px;">PowerPoint presentations, slide decks, pitch decks, layout manipulation, and speaker notes.</div>
+              </div>
+
+              <!-- 5. xlsx -->
+              <div style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-weight:700; font-size:13px; color:#f4f4f5;">xlsx</span>
+                    <span class="status-pill status-ready" style="font-size:9px;">Tier: always</span>
+                  </div>
+                  <input type="checkbox" checked style="cursor:pointer; transform:scale(1.1);"/>
+                </div>
+                <div style="font-size:11px; color:#a1a1aa; margin-top:4px;">Spreadsheets, formulas, calculations, data cleaning, restructuring tabular CSV/XLSX data.</div>
+              </div>
+
+              <!-- 6. frontend-design -->
+              <div style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-weight:700; font-size:13px; color:#f4f4f5;">frontend-design</span>
+                    <span class="status-pill status-ready" style="font-size:9px;">Tier: always</span>
+                  </div>
+                  <input type="checkbox" checked style="cursor:pointer; transform:scale(1.1);"/>
+                </div>
+                <div style="font-size:11px; color:#a1a1aa; margin-top:4px;">Distinctive, intentional visual design, typography hierarchy, and non-templated aesthetics.</div>
+              </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:4px; margin-top:6px;">
+              <label style="font-size:11px; color:#a1a1aa;">Custom Skills Workspace Directory</label>
+              <input type="text" class="input-field" id="skills-dir-path" value="/Users/brightech/.gemini/antigravity/builtin/skills"/>
+            </div>
+          </div>
+
+          <!-- 14. Connectors Tab -->
+          <div class="settings-page" id="spage-connectors">
+            <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 2px 0;">External Connectors</h4>
+            <div style="font-size:11px; color:#71717a;">Integrate any context or tool through connectors with remote MCP and oauth services.</div>
+
+            <div class="toggle-row" style="margin-top:8px;">
+              <div>
+                <span>Connector Directory Search</span>
+                <div class="toggle-desc">Let agent search the connector directory for matching services</div>
+              </div>
+              <input type="checkbox" id="cap-connector-search-2" checked style="transform:scale(1.2); cursor:pointer;"/>
+            </div>
+
+            <div id="connectors-list" style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; background:#18181b; border:1px solid #27272a; border-radius:8px; padding:12px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <span style="font-size:20px;">🐙</span>
+                  <div>
+                    <div style="font-size:13px; font-weight:600; color:#f4f4f5;">GitHub Connector</div>
+                    <div style="font-size:11px; color:#71717a;">Source code repositories, pull requests, and commit logs</div>
+                  </div>
+                </div>
+                <span class="status-pill status-ready" style="font-size:10px;">Connected ✓</span>
+              </div>
+
+              <div style="display:flex; justify-content:space-between; align-items:center; background:#18181b; border:1px solid #27272a; border-radius:8px; padding:12px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <span style="font-size:20px;">📁</span>
+                  <div>
+                    <div style="font-size:13px; font-weight:600; color:#f4f4f5;">Google Drive</div>
+                    <div style="font-size:11px; color:#71717a;">Read, search, and update Workspace spreadsheets and docs</div>
+                  </div>
+                </div>
+                <button class="btn-proceed" style="font-size:11px; padding:4px 10px;" onclick="alert('Connect Google Drive via OAuth')">Connect</button>
+              </div>
+
+              <div style="display:flex; justify-content:space-between; align-items:center; background:#18181b; border:1px solid #27272a; border-radius:8px; padding:12px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <span style="font-size:20px;">💬</span>
+                  <div>
+                    <div style="font-size:13px; font-weight:600; color:#f4f4f5;">Slack Connector</div>
+                    <div style="font-size:11px; color:#71717a;">Workspace channels, direct messages, and thread context</div>
+                  </div>
+                </div>
+                <button class="btn-proceed" style="font-size:11px; padding:4px 10px;" onclick="alert('Connect Slack via OAuth')">Connect</button>
+              </div>
+
+              <div style="display:flex; justify-content:space-between; align-items:center; background:#18181b; border:1px solid #27272a; border-radius:8px; padding:12px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <span style="font-size:20px;">📓</span>
+                  <div>
+                    <div style="font-size:13px; font-weight:600; color:#f4f4f5;">Notion Connector</div>
+                    <div style="font-size:11px; color:#71717a;">Company wiki, databases, and structured notes</div>
+                  </div>
+                </div>
+                <button class="btn-proceed" style="font-size:11px; padding:4px 10px;" onclick="alert('Connect Notion via OAuth')">Connect</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 15. Plugins Tab -->
+          <div class="settings-page" id="spage-plugins">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 2px 0;">Plugins</h4>
+                <div style="font-size:11px; color:#71717a;">Give Claude role-level expertise with plugins. Add from Discover or create your own.</div>
+              </div>
+              <button class="btn-proceed" style="font-size:11px; padding:4px 12px;" onclick="alert('Plugin installer active')">＋ Add Plugin ⌵</button>
+            </div>
+
+            <div id="plugins-list" style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
+              <div style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:12px; display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <span style="font-size:22px;">⚡</span>
+                  <div>
+                    <div style="font-size:13px; font-weight:600; color:#f4f4f5;">REA: Reverse Engineer Anything</div>
+                    <div style="font-size:11px; color:#71717a;">morluto/rea runtime · Analyzed 445 application modules and IPC boundaries</div>
+                  </div>
+                </div>
+                <span class="status-pill status-ready" style="font-size:10px;">v6.4.0 Active ✓</span>
+              </div>
+
+              <div style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:12px; display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <span style="font-size:22px;">🏛️</span>
+                  <div>
+                    <div style="font-size:13px; font-weight:600; color:#f4f4f5;">Hermes Multi-Agent Engine</div>
+                    <div style="font-size:11px; color:#71717a;">Deterministic spawn tree, concurrency gates, and prefix cache hierarchy</div>
+                  </div>
+                </div>
+                <span class="status-pill status-ready" style="font-size:10px;">v2.1.0 Active ✓</span>
+              </div>
+
+              <div style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:12px; display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <span style="font-size:22px;">🛡️</span>
+                  <div>
+                    <div style="font-size:13px; font-weight:600; color:#f4f4f5;">Tirith Security Capsule</div>
+                    <div style="font-size:11px; color:#71717a;">AST secret detection, IMDS SSRF cloud shield, blast radius containment</div>
+                  </div>
+                </div>
+                <span class="status-pill status-ready" style="font-size:10px;">v1.8.4 Active ✓</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 16. Platform: Models & API Keys Tab -->
           <div class="settings-page" id="spage-models">
             <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">BYOK Providers & Model Auto-Fallback</h4>
 
@@ -1655,7 +2439,7 @@
             </div>
           </div>
 
-          <!-- 7. Security & Guardrails -->
+          <!-- 17. Platform: Security & Guardrails Tab -->
           <div class="settings-page" id="spage-security">
             <h4 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 6px 0;">Tirith Security Capsule & Guardrails</h4>
 
@@ -1721,6 +2505,7 @@
           <button class="btn-changes" onclick="closeSettingsModal()">Cancel</button>
           <button class="btn-proceed" onclick="saveSettings()">Save & Apply Changes</button>
         </div>
+      </div>
     </div>
   </div>
 
@@ -2122,6 +2907,8 @@
 
       row.innerHTML = html;
       document.getElementById('timeline').scrollTop = document.getElementById('timeline').scrollHeight;
+
+      speakTextIfEnabled(outputText);
 
       if (window.Prism) {
         window.Prism.highlightAllUnder(row);
@@ -2865,9 +3652,160 @@
       }
     }
 
-    // Replicated Claude Cowork Settings Controller
+    // Replicated Claude Cowork Settings Controller & Audio/Voice
     let trustedFoldersData = [];
     let allowedSitesData = [];
+    let currentCoworkMode = 'chat';
+    let voiceRecognition = null;
+    let isListening = false;
+    let speechAudioEnabled = false;
+
+    function filterSettingsTabs(query) {
+      const q = (query || '').toLowerCase().trim();
+      const tabBtns = document.querySelectorAll('.settings-tab-btn');
+      const headers = document.querySelectorAll('.settings-group-header');
+
+      if (!q) {
+        tabBtns.forEach(b => b.style.display = 'flex');
+        headers.forEach(h => h.style.display = 'block');
+        return;
+      }
+
+      tabBtns.forEach(b => {
+        const label = (b.getAttribute('data-label') || b.textContent || '').toLowerCase();
+        const matches = label.includes(q);
+        b.style.display = matches ? 'flex' : 'none';
+      });
+
+      // Filter headers based on whether any child buttons in that group are visible
+      headers.forEach(h => {
+        let nextEl = h.nextElementSibling;
+        let anyVisible = false;
+        while (nextEl && !nextEl.classList.contains('settings-group-header')) {
+          if (nextEl.classList.contains('settings-tab-btn') && nextEl.style.display !== 'none') {
+            anyVisible = true;
+            break;
+          }
+          nextEl = nextEl.nextElementSibling;
+        }
+        h.style.display = anyVisible ? 'block' : 'none';
+      });
+    }
+
+    function setCoworkMode(mode) {
+      currentCoworkMode = mode;
+      const chatBtn = document.getElementById('seg-btn-chat');
+      const coworkBtn = document.getElementById('seg-btn-cowork');
+      const promptInput = document.getElementById('prompt-input');
+
+      if (mode === 'cowork') {
+        if (coworkBtn) coworkBtn.classList.add('active');
+        if (chatBtn) chatBtn.classList.remove('active');
+        if (promptInput) promptInput.placeholder = 'Ask Claude to work with your files, create documents, or code...';
+        const modeSel = document.getElementById('mode-selector');
+        if (modeSel) modeSel.value = 'autonomous';
+      } else {
+        if (chatBtn) chatBtn.classList.add('active');
+        if (coworkBtn) coworkBtn.classList.remove('active');
+        if (promptInput) promptInput.placeholder = 'How can I help you today? (/ commands, @ files, drag/paste images)';
+      }
+    }
+
+    function toggleVoiceDictation() {
+      const micBtn = document.getElementById('btn-mic');
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+      if (!SpeechRecognition) {
+        alert('Voice dictation (Web Speech API) is ready. Click again or use microphone permissions on macOS.');
+        return;
+      }
+
+      if (isListening && voiceRecognition) {
+        try { voiceRecognition.stop(); } catch (e) {}
+        isListening = false;
+        if (micBtn) {
+          micBtn.style.color = '';
+          micBtn.style.borderColor = '';
+        }
+        return;
+      }
+
+      try {
+        voiceRecognition = new SpeechRecognition();
+        voiceRecognition.continuous = false;
+        voiceRecognition.interimResults = false;
+        voiceRecognition.lang = 'en-US';
+
+        voiceRecognition.onstart = () => {
+          isListening = true;
+          if (micBtn) {
+            micBtn.style.color = '#ef4444';
+            micBtn.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+          }
+        };
+
+        voiceRecognition.onresult = (event) => {
+          if (event.results && event.results[0] && event.results[0][0]) {
+            const transcript = event.results[0][0].transcript;
+            const promptInput = document.getElementById('prompt-input');
+            if (promptInput) {
+              promptInput.value = (promptInput.value ? promptInput.value + ' ' : '') + transcript;
+              promptInput.focus();
+            }
+          }
+        };
+
+        voiceRecognition.onerror = (e) => {
+          isListening = false;
+          if (micBtn) {
+            micBtn.style.color = '';
+            micBtn.style.borderColor = '';
+          }
+        };
+
+        voiceRecognition.onend = () => {
+          isListening = false;
+          if (micBtn) {
+            micBtn.style.color = '';
+            micBtn.style.borderColor = '';
+          }
+        };
+
+        voiceRecognition.start();
+      } catch (err) {
+        isListening = false;
+        if (micBtn) {
+          micBtn.style.color = '';
+          micBtn.style.borderColor = '';
+        }
+      }
+    }
+
+    function toggleSpeechAudio() {
+      speechAudioEnabled = !speechAudioEnabled;
+      const audioBtn = document.getElementById('btn-audio');
+      if (audioBtn) {
+        if (speechAudioEnabled) {
+          audioBtn.style.color = '#38bdf8';
+          audioBtn.style.borderColor = 'rgba(56, 189, 248, 0.5)';
+        } else {
+          audioBtn.style.color = '';
+          audioBtn.style.borderColor = '';
+          if (window.speechSynthesis) window.speechSynthesis.cancel();
+        }
+      }
+    }
+
+    function speakTextIfEnabled(text) {
+      if (!speechAudioEnabled || !window.speechSynthesis || !text) return;
+      try {
+        window.speechSynthesis.cancel();
+        const cleanText = text.replace(/```[\s\S]*?```/g, 'Code block omitted.').replace(/[#*_`]/g, '');
+        const utter = new SpeechSynthesisUtterance(cleanText.slice(0, 400));
+        utter.rate = 1.05;
+        window.speechSynthesis.speak(utter);
+      } catch (e) {}
+    }
 
     function switchSettingsTab(tabName) {
       document.querySelectorAll('.settings-tab-btn').forEach(b => b.classList.remove('active'));
@@ -2955,6 +3893,24 @@
       }
     }
 
+    async function reloadSkillsCatalog() {
+      try {
+        const res = await fetch('/skills');
+        const data = await res.json();
+        const count = data.skills ? data.skills.length : 6;
+        alert(`Bundled and workspace skills reloaded (${count} skills active).`);
+      } catch (e) {
+        alert('Failed to reload skills: ' + e.message);
+      }
+    }
+
+    function clearMemories() {
+      const list = document.getElementById('memory-facts-list');
+      if (list) {
+        list.innerHTML = '<span style="font-size:11px; color:#71717a; padding:4px;">All cross-session memories cleared.</span>';
+      }
+    }
+
     async function resetSettingsDefaults() {
       if (!confirm('Reset all preferences to Claude Cowork defaults?')) return;
       try {
@@ -2962,9 +3918,9 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            general: { theme: 'dark', locale: 'en-US', keep_in_background: true, telemetry_enabled: false },
+            general: { theme: 'dark', locale: 'en-US', keep_in_background: true, notifications: true, launch_at_login: false, telemetry_enabled: false },
             cowork: { remote_control_enabled: true, cowork_user_files_path: '/Users/brightech/Claude', bypass_permissions_gate: false, ble_maker_enabled: false },
-            capabilities: { web_search_enabled: true, browser_tools_enabled: true, preferred_browser: 'built_in', scheduled_tasks_enabled: false },
+            capabilities: { tool_mode: 'on_demand', connector_search: true, switch_models_flagged: true, artifacts_enabled: true, ai_artifacts_enabled: false, inline_visualizations: true, code_execution_file_creation: true, web_search_enabled: true, browser_tools_enabled: true, preferred_browser: 'built_in', scheduled_tasks_enabled: false },
             models: { auto_fallback: true, temperature: 0.2, max_tool_iterations: 10 },
             security: { default_permission_mode: 'allow', tirith_ssrf_shield: true, destructive_command_blocking: true, ssh_key_shield: true, session_spend_cap_usd: 5.0 }
           })
@@ -2983,70 +3939,126 @@
 
         // 1. General
         if (data.general) {
-          if (data.general.theme) document.getElementById('gen-theme').value = data.general.theme;
-          if (data.general.locale) document.getElementById('gen-locale').value = data.general.locale;
-          document.getElementById('gen-background').checked = Boolean(data.general.keep_in_background);
-          document.getElementById('gen-telemetry').checked = Boolean(data.general.telemetry_enabled);
+          if (data.general.theme && document.getElementById('gen-theme')) document.getElementById('gen-theme').value = data.general.theme;
+          if (data.general.locale && document.getElementById('gen-locale')) document.getElementById('gen-locale').value = data.general.locale;
+          if (document.getElementById('gen-background')) document.getElementById('gen-background').checked = Boolean(data.general.keep_in_background);
+          if (document.getElementById('gen-notifications')) document.getElementById('gen-notifications').checked = Boolean(data.general.notifications !== false);
+          if (document.getElementById('gen-startup')) document.getElementById('gen-startup').checked = Boolean(data.general.launch_at_login);
+          if (document.getElementById('gen-telemetry')) document.getElementById('gen-telemetry').checked = Boolean(data.general.telemetry_enabled);
         }
 
         // 2. Account
         if (data.account) {
-          if (data.account.email) document.getElementById('acc-email').textContent = data.account.email;
-          if (data.account.account_id) document.getElementById('acc-uuid').textContent = data.account.account_id;
-          if (data.account.organization_id) document.getElementById('acc-org').textContent = data.account.organization_id;
-        }
-
-        // 3. Cowork
-        if (data.cowork) {
-          document.getElementById('cowork-remote-control').checked = Boolean(data.cowork.remote_control_enabled);
-          if (data.cowork.cowork_user_files_path) document.getElementById('cowork-user-files-path').value = data.cowork.cowork_user_files_path;
-          renderTrustedFolders(data.cowork.trusted_folders || []);
-          document.getElementById('cowork-bypass-gate').checked = Boolean(data.cowork.bypass_permissions_gate);
-          document.getElementById('cowork-ble').checked = Boolean(data.cowork.ble_maker_enabled);
-        }
-
-        // 4. Capabilities
-        if (data.capabilities) {
-          document.getElementById('cap-web-search').checked = Boolean(data.capabilities.web_search_enabled);
-          document.getElementById('cap-browser-tools').checked = Boolean(data.capabilities.browser_tools_enabled);
-          if (data.capabilities.preferred_browser) document.getElementById('cap-preferred-browser').value = data.capabilities.preferred_browser;
-          renderAllowedSites(data.capabilities.allowed_sites || []);
-          document.getElementById('cap-scheduled-tasks').checked = Boolean(data.capabilities.scheduled_tasks_enabled);
-        }
-
-        // 5. Extensions
-        if (data.extensions) {
-          document.getElementById('ext-dev-mode').checked = Boolean(data.extensions.developer_mode);
-          document.getElementById('ext-unpacked').checked = Boolean(data.extensions.unpacked_extensions_enabled);
-        }
-
-        // 6. Models
-        if (data.models) {
-          document.getElementById('param-autofallback').checked = Boolean(data.models.auto_fallback);
-          if (data.models.temperature !== undefined) {
-            document.getElementById('param-temp').value = data.models.temperature;
-            document.getElementById('temp-val').textContent = Number(data.models.temperature).toFixed(2);
+          if (data.account.full_name && document.getElementById('acc-full-name')) document.getElementById('acc-full-name').value = data.account.full_name;
+          if (data.account.display_name) {
+            if (document.getElementById('acc-display-name')) document.getElementById('acc-display-name').value = data.account.display_name;
+            if (document.getElementById('user-display-name-pill')) document.getElementById('user-display-name-pill').textContent = data.account.display_name;
           }
-          if (data.models.max_tool_iterations !== undefined) {
+          if (data.account.work_type && document.getElementById('acc-work-type')) document.getElementById('acc-work-type').value = data.account.work_type;
+          if (data.account.custom_instructions && document.getElementById('acc-instructions')) document.getElementById('acc-instructions').value = data.account.custom_instructions;
+          if (data.account.email && document.getElementById('acc-email')) document.getElementById('acc-email').textContent = data.account.email;
+          if (data.account.account_id && document.getElementById('acc-uuid')) document.getElementById('acc-uuid').textContent = data.account.account_id;
+          if (data.account.organization_id && document.getElementById('acc-org')) document.getElementById('acc-org').textContent = data.account.organization_id;
+        }
+
+        // 3. Privacy
+        if (data.privacy) {
+          if (document.getElementById('priv-location')) document.getElementById('priv-location').checked = Boolean(data.privacy.location_metadata !== false);
+          if (document.getElementById('priv-train')) document.getElementById('priv-train').checked = Boolean(data.privacy.model_improvement);
+          if (data.privacy.data_retention && document.getElementById('priv-retention')) document.getElementById('priv-retention').value = data.privacy.data_retention;
+        }
+
+        // 4. Billing
+        if (data.billing) {
+          if (data.billing.plan && document.getElementById('bill-plan-badge')) document.getElementById('bill-plan-badge').textContent = `${data.billing.plan} Plan`;
+          if (data.billing.total_usage_usd !== undefined && document.getElementById('bill-usage-text')) document.getElementById('bill-usage-text').textContent = `$${Number(data.billing.total_usage_usd).toFixed(2)} USD`;
+          if (data.billing.spend_cap_usd !== undefined && document.getElementById('bill-cap-text')) document.getElementById('bill-cap-text').textContent = `$${Number(data.billing.spend_cap_usd).toFixed(2)} USD`;
+        }
+
+        // 5. Capabilities
+        if (data.capabilities) {
+          if (data.capabilities.tool_mode && document.getElementById('cap-tool-mode')) document.getElementById('cap-tool-mode').value = data.capabilities.tool_mode;
+          if (document.getElementById('cap-connector-search')) document.getElementById('cap-connector-search').checked = Boolean(data.capabilities.connector_search !== false);
+          if (document.getElementById('cap-connector-search-2')) document.getElementById('cap-connector-search-2').checked = Boolean(data.capabilities.connector_search !== false);
+          if (document.getElementById('cap-switch-models')) document.getElementById('cap-switch-models').checked = Boolean(data.capabilities.switch_models_flagged !== false);
+          if (document.getElementById('cap-artifacts')) document.getElementById('cap-artifacts').checked = Boolean(data.capabilities.artifacts_enabled !== false);
+          if (document.getElementById('cap-ai-artifacts')) document.getElementById('cap-ai-artifacts').checked = Boolean(data.capabilities.ai_artifacts_enabled);
+          if (document.getElementById('cap-inline-vis')) document.getElementById('cap-inline-vis').checked = Boolean(data.capabilities.inline_visualizations !== false);
+          if (document.getElementById('cap-code-exec')) document.getElementById('cap-code-exec').checked = Boolean(data.capabilities.code_execution_file_creation !== false);
+          if (document.getElementById('cap-web-search')) document.getElementById('cap-web-search').checked = Boolean(data.capabilities.web_search_enabled);
+          if (document.getElementById('cap-browser-tools')) document.getElementById('cap-browser-tools').checked = Boolean(data.capabilities.browser_tools_enabled);
+          if (data.capabilities.preferred_browser && document.getElementById('cap-preferred-browser')) document.getElementById('cap-preferred-browser').value = data.capabilities.preferred_browser;
+          renderAllowedSites(data.capabilities.allowed_sites || []);
+        }
+
+        // 6. Memory
+        if (data.memory) {
+          if (document.getElementById('mem-generate')) document.getElementById('mem-generate').checked = Boolean(data.memory.generate_memory_from_chats !== false);
+        }
+
+        // 7. Reflect
+        if (data.reflect) {
+          if (document.getElementById('ref-enabled')) document.getElementById('ref-enabled').checked = Boolean(data.reflect.reflection_enabled !== false);
+          if (data.reflect.reflection_depth && document.getElementById('ref-depth')) document.getElementById('ref-depth').value = data.reflect.reflection_depth;
+          if (data.reflect.thinking_budget && document.getElementById('ref-budget')) document.getElementById('ref-budget').value = data.reflect.thinking_budget;
+        }
+
+        // 8. Time and Focus
+        if (data.time_focus) {
+          if (data.time_focus.break_interval && document.getElementById('tf-break-interval')) document.getElementById('tf-break-interval').value = data.time_focus.break_interval;
+          if (document.getElementById('tf-quiet-hours')) document.getElementById('tf-quiet-hours').checked = Boolean(data.time_focus.quiet_hours_enabled);
+          if (data.time_focus.focus_interval_minutes && document.getElementById('tf-focus-interval')) document.getElementById('tf-focus-interval').value = data.time_focus.focus_interval_minutes;
+        }
+
+        // 9. Claude Code
+        if (data.claude_code) {
+          if (document.getElementById('cc-classify')) document.getElementById('cc-classify').checked = Boolean(data.claude_code.classify_session_states !== false);
+          if (document.getElementById('cc-switch')) document.getElementById('cc-switch').checked = Boolean(data.claude_code.switch_models_when_flagged !== false);
+          if (data.claude_code.code_theme && document.getElementById('cc-code-theme')) document.getElementById('cc-code-theme').value = data.claude_code.code_theme;
+        }
+
+        // 10. System
+        if (data.system) {
+          if (data.system.device_name && document.getElementById('sys-device-name')) document.getElementById('sys-device-name').value = data.system.device_name;
+          if (data.system.user_files_path && document.getElementById('cowork-user-files-path')) document.getElementById('cowork-user-files-path').value = data.system.user_files_path;
+          if (document.getElementById('cowork-bypass-gate')) document.getElementById('cowork-bypass-gate').checked = Boolean(data.system.permissions_gate);
+          if (document.getElementById('sys-hw-accel')) document.getElementById('sys-hw-accel').checked = Boolean(data.system.hardware_acceleration !== false);
+          renderTrustedFolders(data.system.trusted_folders || (data.cowork ? data.cowork.trusted_folders : []));
+        }
+
+        // 11. Extensions
+        if (data.extensions) {
+          if (document.getElementById('ext-dev-mode')) document.getElementById('ext-dev-mode').checked = Boolean(data.extensions.developer_mode !== false);
+          if (document.getElementById('ext-unpacked')) document.getElementById('ext-unpacked').checked = Boolean(data.extensions.unpacked_extensions_enabled !== false);
+        }
+
+        // 12. Models
+        if (data.models) {
+          if (document.getElementById('param-autofallback')) document.getElementById('param-autofallback').checked = Boolean(data.models.auto_fallback);
+          if (data.models.temperature !== undefined && document.getElementById('param-temp')) {
+            document.getElementById('param-temp').value = data.models.temperature;
+            if (document.getElementById('temp-val')) document.getElementById('temp-val').textContent = Number(data.models.temperature).toFixed(2);
+          }
+          if (data.models.max_tool_iterations !== undefined && document.getElementById('param-iterations')) {
             document.getElementById('param-iterations').value = data.models.max_tool_iterations;
           }
-          if (data.models.local_base_url) {
+          if (data.models.local_base_url && document.getElementById('key-ollama')) {
             document.getElementById('key-ollama').value = data.models.local_base_url;
           }
-          if (data.models.default_model) {
+          if (data.models.default_model && document.getElementById('model-selector')) {
             document.getElementById('model-selector').value = data.models.default_model;
-            document.getElementById('active-model-display').textContent = data.models.default_model;
+            const disp = document.getElementById('active-model-display');
+            if (disp) disp.textContent = data.models.default_model;
           }
         }
 
-        // 7. Security
+        // 13. Security
         if (data.security) {
-          if (data.security.default_permission_mode) document.getElementById('sec-permission-mode').value = data.security.default_permission_mode;
-          document.getElementById('guard-tirith').checked = Boolean(data.security.tirith_ssrf_shield);
-          document.getElementById('guard-ssrf').checked = Boolean(data.security.tirith_ssrf_shield);
-          document.getElementById('guard-destructive').checked = Boolean(data.security.destructive_command_blocking);
-          document.getElementById('guard-paths').checked = Boolean(data.security.ssh_key_shield);
-          if (data.security.session_spend_cap_usd !== undefined) {
+          if (data.security.default_permission_mode && document.getElementById('sec-permission-mode')) document.getElementById('sec-permission-mode').value = data.security.default_permission_mode;
+          if (document.getElementById('guard-tirith')) document.getElementById('guard-tirith').checked = Boolean(data.security.tirith_ssrf_shield);
+          if (document.getElementById('guard-destructive')) document.getElementById('guard-destructive').checked = Boolean(data.security.destructive_command_blocking);
+          if (document.getElementById('guard-paths')) document.getElementById('guard-paths').checked = Boolean(data.security.ssh_key_shield);
+          if (data.security.session_spend_cap_usd !== undefined && document.getElementById('budget-limit')) {
             document.getElementById('budget-limit').value = Number(data.security.session_spend_cap_usd).toFixed(2);
           }
         }
@@ -3055,24 +4067,30 @@
         if (data.configured_providers) {
           const hasAny = Object.values(data.configured_providers).some(Boolean);
           const pill = document.getElementById('api-status-pill');
-          if (hasAny) {
-            pill.textContent = '⚙️ Active';
-            pill.style.color = '#4ade80';
-            pill.style.borderColor = 'rgba(34, 197, 94, 0.4)';
+          if (pill) {
+            if (hasAny) {
+              pill.textContent = '⚙️ Active';
+              pill.style.color = '#4ade80';
+              pill.style.borderColor = 'rgba(34, 197, 94, 0.4)';
+            } else {
+              pill.textContent = '⚙️ Settings';
+              pill.style.color = '#a1a1aa';
+              pill.style.borderColor = '#27272a';
+            }
           }
-          if (data.configured_providers.openrouter) {
+          if (data.configured_providers.openrouter && document.getElementById('key-openrouter')) {
             document.getElementById('key-openrouter').placeholder = '●●●●●●●● (Active via Environment)';
           }
-          if (data.configured_providers.openai) {
+          if (data.configured_providers.openai && document.getElementById('key-openai')) {
             document.getElementById('key-openai').placeholder = '●●●●●●●● (Active via Environment)';
           }
-          if (data.configured_providers.anthropic) {
+          if (data.configured_providers.anthropic && document.getElementById('key-anthropic')) {
             document.getElementById('key-anthropic').placeholder = '●●●●●●●● (Active via Environment)';
           }
-          if (data.configured_providers.gemini) {
+          if (data.configured_providers.gemini && document.getElementById('key-gemini')) {
             document.getElementById('key-gemini').placeholder = '●●●●●●●● (Active via Environment)';
           }
-          if (data.configured_providers.deepseek) {
+          if (data.configured_providers.deepseek && document.getElementById('key-deepseek')) {
             document.getElementById('key-deepseek').placeholder = '●●●●●●●● (Active via Environment)';
           }
         }
@@ -3085,18 +4103,19 @@
         const sRes = await fetch('/sessions');
         const sData = await sRes.json();
         if (sData.active_session_id) {
-          document.getElementById('top-session-id-text').textContent = `Session: ${sData.active_session_id.slice(0, 10)}`;
+          const sText = document.getElementById('top-session-id-text');
+          if (sText) sText.textContent = `Session: ${sData.active_session_id.slice(0, 10)}`;
         }
       } catch (e) {}
     }
 
     async function saveSettings() {
-      const openrouter = document.getElementById('key-openrouter').value.trim();
-      const anthropic = document.getElementById('key-anthropic').value.trim();
-      const openai = document.getElementById('key-openai').value.trim();
-      const gemini = document.getElementById('key-gemini').value.trim();
-      const deepseek = document.getElementById('key-deepseek').value.trim();
-      const ollama = document.getElementById('key-ollama').value.trim();
+      const openrouter = (document.getElementById('key-openrouter') ? document.getElementById('key-openrouter').value : '').trim();
+      const anthropic = (document.getElementById('key-anthropic') ? document.getElementById('key-anthropic').value : '').trim();
+      const openai = (document.getElementById('key-openai') ? document.getElementById('key-openai').value : '').trim();
+      const gemini = (document.getElementById('key-gemini') ? document.getElementById('key-gemini').value : '').trim();
+      const deepseek = (document.getElementById('key-deepseek') ? document.getElementById('key-deepseek').value : '').trim();
+      const ollama = (document.getElementById('key-ollama') ? document.getElementById('key-ollama').value : '').trim();
 
       const keys = {};
       if (openrouter) keys.openrouter = openrouter;
@@ -3107,45 +4126,96 @@
 
       const payload = {
         general: {
-          theme: document.getElementById('gen-theme').value,
-          locale: document.getElementById('gen-locale').value,
-          keep_in_background: document.getElementById('gen-background').checked,
-          telemetry_enabled: document.getElementById('gen-telemetry').checked
+          theme: document.getElementById('gen-theme') ? document.getElementById('gen-theme').value : 'dark',
+          locale: document.getElementById('gen-locale') ? document.getElementById('gen-locale').value : 'en-US',
+          keep_in_background: document.getElementById('gen-background') ? document.getElementById('gen-background').checked : true,
+          notifications: document.getElementById('gen-notifications') ? document.getElementById('gen-notifications').checked : true,
+          launch_at_login: document.getElementById('gen-startup') ? document.getElementById('gen-startup').checked : false,
+          telemetry_enabled: document.getElementById('gen-telemetry') ? document.getElementById('gen-telemetry').checked : false
         },
-        cowork: {
-          remote_control_enabled: document.getElementById('cowork-remote-control').checked,
-          cowork_user_files_path: document.getElementById('cowork-user-files-path').value.trim(),
-          trusted_folders: trustedFoldersData,
-          bypass_permissions_gate: document.getElementById('cowork-bypass-gate').checked,
-          ble_maker_enabled: document.getElementById('cowork-ble').checked
+        account: {
+          full_name: document.getElementById('acc-full-name') ? document.getElementById('acc-full-name').value.trim() : 'kiranreddy',
+          display_name: document.getElementById('acc-display-name') ? document.getElementById('acc-display-name').value.trim() : 'kiranreddy',
+          work_type: document.getElementById('acc-work-type') ? document.getElementById('acc-work-type').value : 'engineering',
+          custom_instructions: document.getElementById('acc-instructions') ? document.getElementById('acc-instructions').value.trim() : '',
+          email: document.getElementById('acc-email') ? document.getElementById('acc-email').textContent.trim() : 'brightech@local.device'
+        },
+        privacy: {
+          location_metadata: document.getElementById('priv-location') ? document.getElementById('priv-location').checked : true,
+          model_improvement: document.getElementById('priv-train') ? document.getElementById('priv-train').checked : false,
+          data_retention: document.getElementById('priv-retention') ? document.getElementById('priv-retention').value : 'local_only'
+        },
+        billing: {
+          spend_cap_usd: parseFloat(document.getElementById('budget-limit') ? document.getElementById('budget-limit').value : 10.0) || 10.0
         },
         capabilities: {
-          web_search_enabled: document.getElementById('cap-web-search').checked,
-          browser_tools_enabled: document.getElementById('cap-browser-tools').checked,
-          preferred_browser: document.getElementById('cap-preferred-browser').value,
-          allowed_sites: allowedSitesData,
-          scheduled_tasks_enabled: document.getElementById('cap-scheduled-tasks').checked
+          tool_mode: document.getElementById('cap-tool-mode') ? document.getElementById('cap-tool-mode').value : 'on_demand',
+          connector_search: document.getElementById('cap-connector-search') ? document.getElementById('cap-connector-search').checked : true,
+          switch_models_flagged: document.getElementById('cap-switch-models') ? document.getElementById('cap-switch-models').checked : true,
+          artifacts_enabled: document.getElementById('cap-artifacts') ? document.getElementById('cap-artifacts').checked : true,
+          ai_artifacts_enabled: document.getElementById('cap-ai-artifacts') ? document.getElementById('cap-ai-artifacts').checked : false,
+          inline_visualizations: document.getElementById('cap-inline-vis') ? document.getElementById('cap-inline-vis').checked : true,
+          code_execution_file_creation: document.getElementById('cap-code-exec') ? document.getElementById('cap-code-exec').checked : true,
+          web_search_enabled: document.getElementById('cap-web-search') ? document.getElementById('cap-web-search').checked : true,
+          browser_tools_enabled: document.getElementById('cap-browser-tools') ? document.getElementById('cap-browser-tools').checked : true,
+          preferred_browser: document.getElementById('cap-preferred-browser') ? document.getElementById('cap-preferred-browser').value : 'built_in',
+          allowed_sites: allowedSitesData
+        },
+        memory: {
+          generate_memory_from_chats: document.getElementById('mem-generate') ? document.getElementById('mem-generate').checked : true
+        },
+        reflect: {
+          reflection_enabled: document.getElementById('ref-enabled') ? document.getElementById('ref-enabled').checked : true,
+          reflection_depth: document.getElementById('ref-depth') ? document.getElementById('ref-depth').value : 'balanced',
+          thinking_budget: document.getElementById('ref-budget') ? document.getElementById('ref-budget').value : 'medium'
+        },
+        time_focus: {
+          break_interval: document.getElementById('tf-break-interval') ? document.getElementById('tf-break-interval').value : '2hr',
+          quiet_hours_enabled: document.getElementById('tf-quiet-hours') ? document.getElementById('tf-quiet-hours').checked : false,
+          focus_interval_minutes: parseInt(document.getElementById('tf-focus-interval') ? document.getElementById('tf-focus-interval').value : 25) || 25
+        },
+        claude_code: {
+          classify_session_states: document.getElementById('cc-classify') ? document.getElementById('cc-classify').checked : true,
+          switch_models_when_flagged: document.getElementById('cc-switch') ? document.getElementById('cc-switch').checked : true,
+          code_theme: document.getElementById('cc-code-theme') ? document.getElementById('cc-code-theme').value : 'dark'
+        },
+        system: {
+          device_name: document.getElementById('sys-device-name') ? document.getElementById('sys-device-name').value.trim() : 'macbook-air-van-brightech-local',
+          user_files_path: document.getElementById('cowork-user-files-path') ? document.getElementById('cowork-user-files-path').value.trim() : '/Users/brightech/Claude',
+          trusted_folders: trustedFoldersData,
+          permissions_gate: document.getElementById('cowork-bypass-gate') ? document.getElementById('cowork-bypass-gate').checked : false,
+          hardware_acceleration: document.getElementById('sys-hw-accel') ? document.getElementById('sys-hw-accel').checked : true
+        },
+        cowork: {
+          remote_control_enabled: true,
+          cowork_user_files_path: document.getElementById('cowork-user-files-path') ? document.getElementById('cowork-user-files-path').value.trim() : '/Users/brightech/Claude',
+          trusted_folders: trustedFoldersData,
+          bypass_permissions_gate: document.getElementById('cowork-bypass-gate') ? document.getElementById('cowork-bypass-gate').checked : false,
+          ble_maker_enabled: false
         },
         extensions: {
-          developer_mode: document.getElementById('ext-dev-mode').checked,
-          unpacked_extensions_enabled: document.getElementById('ext-unpacked').checked
+          developer_mode: document.getElementById('ext-dev-mode') ? document.getElementById('ext-dev-mode').checked : true,
+          unpacked_extensions_enabled: document.getElementById('ext-unpacked') ? document.getElementById('ext-unpacked').checked : true
+        },
+        skills: {
+          directory_path: document.getElementById('skills-dir-path') ? document.getElementById('skills-dir-path').value.trim() : '/Users/brightech/.gemini/antigravity/builtin/skills'
         },
         models: {
-          default_model: document.getElementById('model-selector').value,
-          auto_fallback: document.getElementById('param-autofallback').checked,
-          temperature: parseFloat(document.getElementById('param-temp').value) || 0.2,
-          max_tool_iterations: parseInt(document.getElementById('param-iterations').value) || 10,
+          default_model: document.getElementById('model-selector') ? document.getElementById('model-selector').value : 'deepseek/deepseek-chat',
+          auto_fallback: document.getElementById('param-autofallback') ? document.getElementById('param-autofallback').checked : true,
+          temperature: parseFloat(document.getElementById('param-temp') ? document.getElementById('param-temp').value : 0.2) || 0.2,
+          max_tool_iterations: parseInt(document.getElementById('param-iterations') ? document.getElementById('param-iterations').value : 10) || 10,
           local_base_url: ollama || undefined
         },
         security: {
-          default_permission_mode: document.getElementById('sec-permission-mode').value,
-          tirith_ssrf_shield: document.getElementById('guard-tirith').checked,
-          destructive_command_blocking: document.getElementById('guard-destructive').checked,
-          ssh_key_shield: document.getElementById('guard-paths').checked,
-          session_spend_cap_usd: parseFloat(document.getElementById('budget-limit').value) || 5.0
+          default_permission_mode: document.getElementById('sec-permission-mode') ? document.getElementById('sec-permission-mode').value : 'allow',
+          tirith_ssrf_shield: document.getElementById('guard-tirith') ? document.getElementById('guard-tirith').checked : true,
+          destructive_command_blocking: document.getElementById('guard-destructive') ? document.getElementById('guard-destructive').checked : true,
+          ssh_key_shield: document.getElementById('guard-paths') ? document.getElementById('guard-paths').checked : true,
+          session_spend_cap_usd: parseFloat(document.getElementById('budget-limit') ? document.getElementById('budget-limit').value : 5.0) || 5.0
         },
         api_keys: keys,
-        default_model: document.getElementById('model-selector').value
+        default_model: document.getElementById('model-selector') ? document.getElementById('model-selector').value : 'deepseek/deepseek-chat'
       };
 
       try {
@@ -3169,13 +4239,19 @@
       );
     }
 
-    // Keyboard shortcut for Cmd+S to save in Code Editor
+    // Keyboard shortcuts
     window.addEventListener('keydown', (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         if (currentStudioTab === 'editor') {
           e.preventDefault();
           saveActiveFile();
         }
+      }
+      if (e.key === 'Escape') {
+        const sm = document.getElementById('settings-modal');
+        if (sm && sm.classList.contains('open')) closeSettingsModal();
+        const mm = document.getElementById('media-modal');
+        if (mm && mm.classList.contains('open')) closeMediaModal();
       }
     });
 

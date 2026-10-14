@@ -225,6 +225,11 @@ class HarnessDaemon:
                     "github_mcp": {"status": "connected", "command": "npx -y @modelcontextprotocol/server-github"},
                 },
             },
+            "developer": {
+                "developer_mode": True,
+                "allow_custom_mcp_servers": True,
+                "mcp_debug_logging": True,
+            },
             "models": {
                 "default_provider": router.default_provider,
                 "default_model": router.default_model,
@@ -243,12 +248,79 @@ class HarnessDaemon:
                 "protected_locations": ["/etc", "/var", "~/.ssh", "~/.gnupg"],
                 "session_spend_cap_usd": 5.0,
             },
+            "privacy": {
+                "data_retention": "local_only",
+                "crash_diagnostics": False,
+                "analytics_logging": False,
+            },
+            "billing": {
+                "plan": "Free",
+                "spend_cap_usd": 10.0,
+                "total_usage_usd": 0.04,
+                "currency": "USD",
+            },
+            "memory": {
+                "generate_memory_from_chats": False,
+            },
+            "reflect": {
+                "thinking_budget": "medium",
+                "reflection_depth": "balanced",
+            },
+            "time_focus": {
+                "quiet_hours_enabled": False,
+                "focus_interval_minutes": 25,
+            },
+            "claude_code": {
+                "classify_session_states": True,
+                "switch_models_when_flagged": True,
+                "code_theme": "dark",
+            },
+            "system": {
+                "user_files_path": str(Path.home() / "Claude"),
+                "permissions_gate": False,
+                "preferred_browser": "built_in",
+                "device_name": "macbook-air-van-brightech-local",
+            },
+            "skills": {
+                "docx": {"name": "docx", "enabled": True, "description": "Create, read, edit Word documents (.docx)"},
+                "pdf": {"name": "pdf", "enabled": True, "description": "PDF manipulation, merge, encrypt, OCR"},
+                "pdf-reading": {"name": "pdf-reading", "enabled": True, "description": "Read, inspect, extract content from PDF files"},
+                "pptx": {"name": "pptx", "enabled": True, "description": "PowerPoint presentations creation and editing"},
+                "xlsx": {"name": "xlsx", "enabled": True, "description": "Spreadsheet manipulation, data cleaning, formulas"},
+                "frontend-design": {"name": "frontend-design", "enabled": True, "description": "Distinctive intentional UI visual design guidance"},
+            },
+            "connectors": {
+                "directory_search_enabled": True,
+                "active_connectors": [],
+            },
+            "plugins": {
+                "active_plugins": [
+                    {"id": "rea", "name": "REA: Reverse Engineer Anything", "version": "6.4.0", "status": "active"},
+                ],
+            },
             "configured_providers": {
                 p: bool(router.api_keys.get(p))
                 for p in ("anthropic", "openai", "gemini", "deepseek", "openrouter")
             },
             "active_session_id": self.coordinator.session_id,
         }
+
+        # Also pull live claude_desktop_config.json if present
+        try:
+            claude_cfg = Path.home() / "Library/Application Support/Claude/claude_desktop_config.json"
+            if claude_cfg.exists():
+                cc_data = json.loads(claude_cfg.read_text(encoding="utf-8"))
+                prefs = cc_data.get("preferences", {})
+                if "coworkUserFilesPath" in cc_data:
+                    defaults["system"]["user_files_path"] = cc_data["coworkUserFilesPath"]
+                if "remoteToolsDeviceName" in prefs:
+                    defaults["system"]["device_name"] = prefs["remoteToolsDeviceName"]
+                if "coworkWebSearchEnabled" in prefs:
+                    defaults["capabilities"]["web_search_enabled"] = prefs["coworkWebSearchEnabled"]
+                if "coworkBrowserToolsEnabled" in prefs:
+                    defaults["capabilities"]["browser_tools_enabled"] = prefs["coworkBrowserToolsEnabled"]
+        except Exception:
+            pass
 
         for section, vals in stored.items():
             if isinstance(vals, dict) and section in defaults and isinstance(defaults[section], dict):
@@ -273,8 +345,16 @@ class HarnessDaemon:
             body = await request.json()
             cur = self._get_cowork_settings()
 
-            for section in ("general", "account", "cowork", "capabilities", "extensions", "models", "security"):
+            all_sections = (
+                "general", "account", "privacy", "billing", "capabilities",
+                "memory", "reflect", "time_focus", "claude_code", "system",
+                "extensions", "developer", "skills", "connectors", "plugins",
+                "models", "security", "cowork"
+            )
+            for section in all_sections:
                 if section in body and isinstance(body[section], dict):
+                    if section not in cur:
+                        cur[section] = {}
                     cur[section].update(body[section])
 
             keys = body.get("api_keys", {})
