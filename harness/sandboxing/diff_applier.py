@@ -6,6 +6,10 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from harness.kernel.jail import WorkspaceJail
 
 
 class DiffApplier:
@@ -14,12 +18,24 @@ class DiffApplier:
     )
 
     @classmethod
-    def apply_diff(cls, file_path: Path, diff_block: str) -> tuple[bool, str]:
+    def apply_diff(
+        cls,
+        file_path: Path | str,
+        diff_block: str,
+        jail: WorkspaceJail | None = None,
+    ) -> tuple[bool, str]:
         """
         Applies SEARCH/REPLACE blocks to file_path.
         Returns: (success: bool, message: str)
         """
-        file_path = Path(file_path)
+        if jail is not None:
+            try:
+                file_path = jail.resolve(file_path, for_write=True)
+            except Exception as e:
+                return False, f"Security Violation: {e}"
+        else:
+            file_path = Path(file_path)
+
         if not file_path.exists():
             return False, f"File not found: {file_path}"
 

@@ -10,6 +10,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from harness.kernel.jail import WorkspaceJail
 from harness.models.router import ModelRouter
 from harness.sandboxing.diff_applier import DiffApplier
 from harness.sandboxing.executor import CommandExecutor
@@ -47,6 +48,7 @@ class ArchitectEditorLoop:
         editor_provider: str = "anthropic",
     ):
         self.workspace_root = Path(workspace_root)
+        self.jail = WorkspaceJail(self.workspace_root)
         self.router = router
         self.architect_model = architect_model
         self.editor_model = editor_model
@@ -69,6 +71,15 @@ class ArchitectEditorLoop:
         Step 4: Run test_command; if fail, feed error back to Editor (self-healing loop).
         Step 5: Git auto-commit once green.
         """
+        # Resolve target files strictly within jail
+        resolved_targets: list[Path] = []
+        for p in target_files:
+            try:
+                resolved_targets.append(self.jail.resolve(p, for_write=True))
+            except Exception as e:
+                logger.warning(f"[Architect/Editor] Target file {p} outside workspace: {e}")
+        target_files = resolved_targets
+
         # Read file contents
         files_context = []
         for p in target_files:
@@ -129,7 +140,7 @@ Files:
             # Apply diff to files
             applied_any = False
             for target_path in target_files:
-                ok, _ = DiffApplier.apply_diff(target_path, diff_text)
+                ok, _ = DiffApplier.apply_diff(target_path, diff_text, jail=self.jail)
                 if ok:
                     applied_any = True
 

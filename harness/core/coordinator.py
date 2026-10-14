@@ -24,6 +24,7 @@ from harness.core.types import (
     ToolResult,
 )
 from harness.desktop.macos_bridge import MacOSDesktopBridge
+from harness.kernel.jail import PathOutsideWorkspace, WorkspaceJail
 from harness.kernel.validators import validate_session_id
 from harness.memory.fts5_index import FTS5MemoryIndex
 from harness.models.circuits import IntelligentModelRouter
@@ -76,6 +77,7 @@ class AgentCoordinator:
             else self.workspace / ".harness" / "sessions" / self.session_id
         )
         self.session_dir.mkdir(parents=True, exist_ok=True)
+        self.jail = WorkspaceJail(self.workspace)
 
         # 1. Subsystems
         self.transcripts = TranscriptEngine(self.session_dir)
@@ -574,8 +576,10 @@ and verify your work with test runs.
         try:
             if name == "view_file":
                 raw_path = args.get("AbsolutePath") or args.get("TargetFile") or args.get("path", "")
-                p = Path(raw_path)
-                path = p.resolve() if p.is_absolute() else (self.workspace / p).resolve()
+                try:
+                    path = self.jail.resolve(raw_path, for_write=False)
+                except PathOutsideWorkspace as e:
+                    return ToolResult(tool_call.id, name, f"Security Violation: {e}", is_error=True)
 
                 # Red-team credential security check: protect sensitive system paths
                 for protected in SecurityPolicy.PROTECTED_SYSTEM_PATHS:
@@ -596,8 +600,11 @@ and verify your work with test runs.
 
             elif name == "write_to_file":
                 raw_path = args.get("TargetFile") or args.get("AbsolutePath") or args.get("path", "")
-                p = Path(raw_path)
-                target = p.resolve() if p.is_absolute() else (self.workspace / p).resolve()
+                try:
+                    target = self.jail.resolve(raw_path, for_write=True)
+                except PathOutsideWorkspace as e:
+                    return ToolResult(tool_call.id, name, f"Security Violation: {e}", is_error=True)
+
                 risk = SecurityPolicy.evaluate_file_write_risk(target, self.workspace)
                 if risk.requires_approval and risk.level == RiskLevel.DESTRUCTIVE:
                     return ToolResult(tool_call.id, name, f"Security Violation: {risk.reason}", is_error=True)
@@ -617,22 +624,42 @@ and verify your work with test runs.
 
             elif name == "edit_file":
                 raw_path = args.get("TargetFile") or args.get("AbsolutePath") or args.get("path", "")
-                p = Path(raw_path)
-                target = p.resolve() if p.is_absolute() else (self.workspace / p).resolve()
+                try:
+                    target = self.jail.resolve(raw_path, for_write=True)
+                except PathOutsideWorkspace as e:
+                    return ToolResult(tool_call.id, name, f"Security Violation: {e}", is_error=True)
+
+                risk = SecurityPolicy.evaluate_file_write_risk(target, self.workspace)
+                if risk.requires_approval and risk.level == RiskLevel.DESTRUCTIVE:
+                    return ToolResult(tool_call.id, name, f"Security Violation: {risk.reason}", is_error=True)
+
                 diff_block = args.get("DiffBlock", "")
-                ok, msg = DiffApplier.apply_diff(target, diff_block)
+                ok, msg = DiffApplier.apply_diff(target, diff_block, jail=self.jail)
                 return ToolResult(tool_call.id, name, msg, is_error=not ok)
 
             elif name == "run_command":
                 cmd = args.get("CommandLine") or args.get("command", "")
                 cwd_raw = args.get("Cwd")
-                cwd_path = Path(cwd_raw).resolve() if cwd_raw else self.workspace
+                if cwd_raw:
+                    try:
+                        cwd_path = self.jail.resolve(cwd_raw, for_write=False)
+                    except PathOutsideWorkspace as e:
+                        return ToolResult(tool_call.id, name, f"Security Violation: {e}", is_error=True)
+                    if not cwd_path.is_dir():
+                        return ToolResult(tool_call.id, name, f"Error: Working directory '{cwd_path}' does not exist", is_error=True)
+                else:
+                    cwd_path = self.workspace
+
                 risk = SecurityPolicy.evaluate_command_risk(cmd, cwd_path)
                 if risk.requires_approval and risk.level == RiskLevel.DESTRUCTIVE:
                     return ToolResult(tool_call.id, name, f"Blocked Destructive Command: {risk.reason}", is_error=True)
 
                 wait_ms = int(args.get("WaitMsBeforeAsync", 5000))
-                res = await self.executor.run(cmd, cwd_path, wait_ms_before_async=wait_ms)
+                try:
+                    res = await self.executor.run(cmd, cwd_path, wait_ms_before_async=wait_ms)
+                except Exception as e:
+                    return ToolResult(tool_call.id, name, f"Execution failed: {e}", is_error=True)
+
                 if res.get("is_background"):
                     return ToolResult(tool_call.id, name, res["message"], task_id=res["task_id"])
                 out = res.get("stdout", "")
@@ -641,6 +668,7 @@ and verify your work with test runs.
                 if err:
                     combined += f"\nSTDERR:\n{err}"
                 return ToolResult(tool_call.id, name, combined, is_error=res.get("exit_code") != 0)
+
 
             elif name == "view_skill":
                 skill_name = args.get("SkillName", "")

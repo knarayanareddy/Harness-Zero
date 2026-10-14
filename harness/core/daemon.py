@@ -21,6 +21,7 @@ from typing import Any
 from aiohttp import web
 
 from harness.core.coordinator import AgentCoordinator
+from harness.kernel.jail import PathOutsideWorkspace
 from harness.kernel.validators import validate_safe_filename, validate_session_id
 
 logger = logging.getLogger("harness.daemon")
@@ -551,12 +552,10 @@ class HarnessDaemon:
         if not rel_path:
             return web.json_response({"error": "Missing path parameter"}, status=400)
 
-        target = (self.coordinator.workspace / rel_path).resolve()
-        ws_resolved = self.coordinator.workspace.resolve()
         try:
-            target.relative_to(ws_resolved)
-        except ValueError:
-            return web.json_response({"error": "Access denied: Path outside workspace"}, status=403)
+            target = self.coordinator.jail.resolve(rel_path, for_write=False)
+        except PathOutsideWorkspace as e:
+            return web.json_response({"error": f"Access denied: {e}"}, status=403)
 
         if not target.exists() or not target.is_file():
             return web.json_response({"error": f"File '{rel_path}' not found"}, status=404)
@@ -584,12 +583,10 @@ class HarnessDaemon:
             if not rel_path:
                 return web.json_response({"error": "Missing path parameter"}, status=400)
 
-            target = (self.coordinator.workspace / rel_path).resolve()
-            ws_resolved = self.coordinator.workspace.resolve()
             try:
-                target.relative_to(ws_resolved)
-            except ValueError:
-                return web.json_response({"error": "Access denied: Path outside workspace"}, status=403)
+                target = self.coordinator.jail.resolve(rel_path, for_write=True)
+            except PathOutsideWorkspace as e:
+                return web.json_response({"error": f"Access denied: {e}"}, status=403)
 
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content, encoding="utf-8")

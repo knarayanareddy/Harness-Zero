@@ -1,12 +1,13 @@
 """
 Safe Shell Command Supervisor & Background Task Manager.
-Enforces PAGER=cat, handles execution timeouts, transitions to background tasks
-via WaitMsBeforeAsync, and manages task lifecycle (kill, status, send_input).
+Enforces PAGER=cat, env scrubbing, DEVNULL stdin, chunked stream reading,
+transitions to background tasks via WaitMsBeforeAsync, and manages task lifecycle (kill, status, send_input).
 """
 from __future__ import annotations
 
 import asyncio
 import os
+import re
 import signal
 import uuid
 from collections.abc import Callable
@@ -27,6 +28,7 @@ class BackgroundTask:
     )
     status: str = "running"
     exit_code: int | None = None
+    killed: bool = False
     stdout_chunks: list[str] = field(default_factory=list)
     stderr_chunks: list[str] = field(default_factory=list)
 
@@ -44,25 +46,63 @@ class CommandExecutor:
         self.tasks: dict[str, BackgroundTask] = {}
         self.on_task_completed = on_task_completed
 
+    @staticmethod
+    def _scrubbed_env() -> dict[str, str]:
+        """
+        Creates a sanitized subprocess environment stripping sensitive keys:
+        *_KEY, *_TOKEN, *_SECRET, *_PASSWORD, *_CREDENTIAL, *_PRIVATE_KEY,
+        GITHUB_TOKEN, GH_TOKEN, AWS_*, etc.
+        """
+        sensitive_pattern = re.compile(
+            r"(API_KEY|_TOKEN|SECRET|PASSWORD|CREDENTIAL|PRIVATE_KEY)",
+            re.IGNORECASE,
+        )
+        env = {}
+        for k, v in os.environ.items():
+            if sensitive_pattern.search(k):
+                continue
+            if k in ("GITHUB_TOKEN", "GH_TOKEN") or k.startswith("AWS_"):
+                continue
+            env[k] = v
+
+        env["PAGER"] = "cat"
+        env["GIT_PAGER"] = "cat"
+        env["CI"] = "1"
+        env["HARNESS_AGENT"] = "1"
+        env["TERM"] = "dumb"
+        return env
+
+    def _prune_tasks(self) -> None:
+        """Prunes finished tasks keeping only the last 200 entries."""
+        finished_ids = [
+            tid for tid, t in self.tasks.items()
+            if t.status in ("completed", "failed", "killed")
+        ]
+        if len(finished_ids) > 200:
+            to_remove = finished_ids[: len(finished_ids) - 200]
+            for tid in to_remove:
+                self.tasks.pop(tid, None)
+
     async def run(
         self,
         command: str,
         cwd: Path,
         wait_ms_before_async: int = 5000,
         is_daemon: bool = False,
+        interactive: bool = False,
     ) -> dict[str, Any]:
         """
         Executes a command. If it finishes within wait_ms_before_async, returns
         synchronously with stdout and exit_code. If it continues running, transitions
         into a background task and returns task_id.
         """
-        env = dict(os.environ)
-        env["PAGER"] = "cat"
-        env["GIT_PAGER"] = "cat"
-        env["CI"] = "1"
+        env = self._scrubbed_env()
 
-        cwd = Path(cwd)
-        cwd.mkdir(parents=True, exist_ok=True)
+        cwd = Path(cwd).resolve()
+        if not cwd.is_dir():
+            raise FileNotFoundError(f"Working directory does not exist: {cwd}")
+
+        stdin_mode = asyncio.subprocess.PIPE if interactive else asyncio.subprocess.DEVNULL
 
         proc = await asyncio.create_subprocess_shell(
             command,
@@ -70,8 +110,9 @@ class CommandExecutor:
             env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            stdin=asyncio.subprocess.PIPE,
+            stdin=stdin_mode,
             start_new_session=True,
+            limit=4 * 1024 * 1024,
         )
 
         task_id = f"task_{uuid.uuid4().hex[:8]}"
@@ -92,8 +133,12 @@ class CommandExecutor:
         try:
             exit_code = await asyncio.wait_for(proc.wait(), timeout=wait_seconds)
             bg_task.exit_code = exit_code
-            bg_task.status = "completed" if exit_code == 0 else "failed"
+            if bg_task.killed or bg_task.status == "killed":
+                bg_task.status = "killed"
+            else:
+                bg_task.status = "completed" if exit_code == 0 else "failed"
             await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
+            self._prune_tasks()
 
             return {
                 "status": bg_task.status,
@@ -115,21 +160,29 @@ class CommandExecutor:
             }
 
     async def _read_stream(
-        self, stream: asyncio.StreamReader | None, chunks: list[str], max_chunks: int = 10000
+        self, stream: asyncio.StreamReader | None, chunks: list[str], max_bytes: int = 10 * 1024 * 1024, max_lines: int = 10000
     ) -> None:
         if not stream:
             return
         total_bytes = 0
-        max_bytes = 10 * 1024 * 1024  # 10 MB buffer limit
+        total_lines = 0
+        chunk_size = 65536  # 64 KiB chunks
+        truncated = False
+
         while True:
-            line = await stream.readline()
-            if not line:
+            chunk = await stream.read(chunk_size)
+            if not chunk:
                 break
-            if len(chunks) < max_chunks and total_bytes < max_bytes:
-                chunks.append(line.decode("utf-8", errors="replace"))
-                total_bytes += len(line)
-            elif len(chunks) == max_chunks:
-                chunks.append("\n[OUTPUT TRUNCATED: Stream buffer limit reached]\n")
+            text = chunk.decode("utf-8", errors="replace")
+            lines_in_chunk = text.count("\n")
+            if total_bytes + len(chunk) <= max_bytes and total_lines + lines_in_chunk <= max_lines:
+                chunks.append(text)
+                total_bytes += len(chunk)
+                total_lines += lines_in_chunk
+            else:
+                if not truncated:
+                    chunks.append("\n[OUTPUT TRUNCATED: Stream buffer limit reached]\n")
+                    truncated = True
 
     async def _monitor_background_task(
         self,
@@ -139,8 +192,12 @@ class CommandExecutor:
     ) -> None:
         exit_code = await task.process.wait()
         task.exit_code = exit_code
-        task.status = "completed" if exit_code == 0 else "failed"
+        if task.killed or task.status == "killed":
+            task.status = "killed"
+        else:
+            task.status = "completed" if exit_code == 0 else "failed"
         await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
+        self._prune_tasks()
 
         if self.on_task_completed:
             try:
@@ -169,6 +226,8 @@ class CommandExecutor:
         task = self.tasks.get(task_id)
         if not task or task.status != "running":
             return False
+        task.killed = True
+        task.status = "killed"
         try:
             current_pgrp = os.getpgrp() if hasattr(os, "getpgrp") else -1
             if hasattr(os, "killpg") and task.process.pid:
@@ -196,7 +255,6 @@ class CommandExecutor:
                         task.process.kill()
                 else:
                     task.process.kill()
-            task.status = "killed"
             return True
         except Exception:
             return False
