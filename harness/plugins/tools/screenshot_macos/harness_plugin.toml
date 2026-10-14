@@ -1,0 +1,8 @@
+[plugin]
+name = "tool-screenshot-macos"
+version = "1.0.0"
+api_version = "1"
+summary = "macOS desktop screen capture tool returning ImageBlock"
+provides = ["tool"]
+capabilities = ["fs:read", "exec"]
+entry = "harness.plugins.tools.screenshot_macos.plugin:ScreenshotMacosPlugin"
