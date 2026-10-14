@@ -170,6 +170,11 @@ export class HarnessStudioApp {
       this.updateEconomics(data);
     });
 
+    // Context Assembler Inspector
+    this.events.on('context.assembled', (data) => {
+      this.updateContextInspector(data);
+    });
+
     // Session Switch
     this.events.on('session.switched', (data) => {
       this.activeSessionId = data.session_id;
@@ -506,9 +511,71 @@ export class HarnessStudioApp {
   updateEconomics(spendData) {
     const elem = document.getElementById('economics-indicator');
     if (!elem || !spendData) return;
-    const cap = spendData.spend_cap_usd !== undefined ? `$${spendData.spend_cap_usd.toFixed(2)}` : '$5.00';
-    const total = spendData.totals?.total_cost_usd !== undefined ? `$${spendData.totals.total_cost_usd.toFixed(4)}` : '$0.00';
-    elem.textContent = `${total} / ${cap}`;
+    const cap = spendData.cap_usd !== undefined ? `$${Number(spendData.cap_usd).toFixed(2)}` :
+                spendData.spend_cap_usd !== undefined ? `$${Number(spendData.spend_cap_usd).toFixed(2)}` : '$5.00';
+    let totalVal = 0.0;
+    if (spendData.session_usd !== undefined) {
+      totalVal = Number(spendData.session_usd);
+    } else if (spendData.totals?.total_cost_usd !== undefined) {
+      totalVal = Number(spendData.totals.total_cost_usd);
+    }
+    const total = `$${totalVal.toFixed(4)}`;
+
+    if (spendData.unknown_pricing) {
+      elem.textContent = `${total} / ${cap} (unknown pricing)`;
+      elem.className = 'text-amber-400 font-semibold';
+      elem.title = 'Model pricing unknown - cost estimates unavailable for this provider';
+    } else {
+      elem.textContent = `${total} / ${cap}`;
+      elem.className = 'text-emerald-400';
+      elem.title = 'Session Spend / Cap';
+    }
+  }
+
+  updateContextInspector(contextData) {
+    if (!contextData) return;
+    const badge = document.getElementById('context-tokens-badge');
+    const totalTokElem = document.getElementById('inspector-total-tokens');
+    const histElem = document.getElementById('inspector-history-count');
+    const container = document.getElementById('inspector-blocks');
+
+    const totalTokens = contextData.total_tokens || 0;
+    if (badge) badge.textContent = `${totalTokens} tok`;
+    if (totalTokElem) totalTokElem.textContent = `${totalTokens} tokens`;
+    if (histElem) histElem.textContent = `History: ${contextData.history_messages || 0} msgs`;
+
+    if (!container) return;
+    container.innerHTML = '';
+    const blocks = contextData.blocks || [];
+    if (blocks.length === 0) {
+      container.innerHTML = '<div class="text-xs text-gray-500 italic p-3 text-center">No blocks assembled.</div>';
+      return;
+    }
+
+    for (const b of blocks) {
+      const card = document.createElement('div');
+      card.className = 'context-block-card';
+      const stab = (b.stability || 'turn').toLowerCase();
+      const tokens = b.tokens !== undefined ? `${b.tokens} tok` : '';
+
+      card.innerHTML = `
+        <div class="flex items-center justify-between mb-1">
+          <span class="font-medium text-xs text-white truncate max-w-[180px]" title="${escapeHtml(b.id || '')}">${escapeHtml(b.id || b.source || 'block')}</span>
+          <span class="stability-badge stability-${stab}">${escapeHtml(stab.toUpperCase())}</span>
+        </div>
+        <div class="flex items-center justify-between text-xs text-gray-400">
+          <span>Source: ${escapeHtml(b.source || 'kernel')}</span>
+          <span class="font-mono text-gray-300">${escapeHtml(tokens)}</span>
+        </div>
+      `;
+      container.appendChild(card);
+    }
+  }
+
+  toggleContextInspector() {
+    const inspector = document.getElementById('context-inspector');
+    if (!inspector) return;
+    inspector.classList.toggle('hidden');
   }
 
   async populateModels() {

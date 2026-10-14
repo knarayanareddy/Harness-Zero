@@ -597,5 +597,74 @@ async def test_models_and_strategy_settings(
         await server.stop()
 
 
+@pytest.mark.asyncio
+async def test_context_assembled_and_cost_events(
+    commands: Commands, event_bus: EventBus, workspace_dir: Path
+):
+    server = HarnessWebServer(
+        commands=commands,
+        bus=event_bus,
+        host="127.0.0.1",
+        port=0,
+        sandbox_port=0,
+        workspace=workspace_dir,
+    )
+    await server.start()
+    base_url = f"http://127.0.0.1:{server.port}"
+
+    async def _publish_later():
+        await asyncio.sleep(0.1)
+        evt_ctx = Event(
+            type="context.assembled",
+            data={
+                "blocks": [
+                    {"id": "sys_prompt", "stability": "static", "source": "system", "tokens": 1500},
+                    {"id": "tools", "stability": "session", "source": "tools", "tokens": 800},
+                    {"id": "history", "stability": "turn", "source": "history", "tokens": 400},
+                ],
+                "total_tokens": 2700,
+                "history_messages": 3,
+            },
+            id="evt_ctx_01",
+        )
+        evt_cost = Event(
+            type="cost.updated",
+            data={
+                "turn_usd": 0.0,
+                "session_usd": 0.0,
+                "cap_usd": 5.0,
+                "unknown_pricing": True,
+            },
+            id="evt_cost_01",
+        )
+        event_bus.publish(evt_ctx)
+        event_bus.publish(evt_cost)
+
+    pub_task = asyncio.create_task(_publish_later())
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            async with client.stream(
+                "GET",
+                f"{base_url}/events",
+                headers={"Authorization": f"Bearer {server.auth_token}"},
+            ) as response:
+                assert response.status_code == 200
+                collected = []
+                async for line in response.aiter_lines():
+                    if line.startswith("event: "):
+                        collected.append(line[7:])
+                    if len(collected) >= 2:
+                        break
+
+                assert "context.assembled" in collected
+                assert "cost.updated" in collected
+    finally:
+        await pub_task
+        await server.stop()
+
+
+
+
 
 

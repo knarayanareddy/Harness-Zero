@@ -53,6 +53,12 @@
         <span class="text-gray-400">Spend:</span> <span id="economics-indicator">$0.00 / $5.00</span>
       </div>
 
+      <!-- Context Inspector Trigger -->
+      <button type="button" id="btn-context-inspector" onclick="window.HarnessApp?.toggleContextInspector()" class="px-2 py-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-xs text-gray-300 flex items-center gap-1.5" title="Inspect Assembled Context Blocks">
+        <span>🧠 Context</span>
+        <span id="context-tokens-badge" class="font-mono text-xs px-1.5 py-0.5 bg-blue-900/60 text-blue-300 rounded">0 tok</span>
+      </button>
+
       <!-- Model Picker -->
       <select id="model-select" class="bg-gray-800 text-xs text-white border border-gray-700 rounded px-2 py-1" title="Select LLM Model">
         <option value="">Default Model</option>
@@ -122,6 +128,24 @@
         </form>
       </div>
     </main>
+
+    <!-- Context Inspector Drawer -->
+    <aside id="context-inspector" class="context-inspector hidden">
+      <div class="inspector-header">
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-xs text-white uppercase tracking-wider">Context Assembler</span>
+          <span id="inspector-total-tokens" class="text-xs font-mono bg-blue-900/50 text-blue-300 px-2 py-0.5 rounded border border-blue-800/50">0 tokens</span>
+        </div>
+        <button type="button" onclick="window.HarnessApp?.toggleContextInspector()" class="text-gray-400 hover:text-white text-base leading-none">&times;</button>
+      </div>
+      <div class="inspector-meta">
+        <span id="inspector-history-count" class="text-gray-400">History: 0 msgs</span>
+        <span id="inspector-cache-status" class="text-emerald-400 font-medium">Cache Tier: Invariant</span>
+      </div>
+      <div id="inspector-blocks" class="inspector-blocks">
+        <div class="text-xs text-gray-500 italic p-3 text-center">No turn context assembled yet. Send a prompt to inspect blocks.</div>
+      </div>
+    </aside>
   </div>
 
   <!-- Settings Modal -->
