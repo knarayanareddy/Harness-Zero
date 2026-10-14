@@ -26,18 +26,6 @@ class StepSource(str, Enum):
     SYSTEM = "SYSTEM"
 
 
-class ModelTier(str, Enum):
-    FAST = "fast"
-    BALANCED = "balanced"
-    REASONING = "reasoning"
-
-
-class CircuitState(str, Enum):
-    CLOSED = "closed"
-    OPEN = "open"
-    HALF_OPEN = "half_open"
-
-
 @dataclass
 class ToolCall:
     id: str
