@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from harness.core.concurrency_gate import ConcurrencyGate
+from harness.experimental.concurrency_gate import ConcurrencyGate
 
 
 @pytest.mark.asyncio

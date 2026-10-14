@@ -1,12 +1,10 @@
 """
-macOS Desktop Bridge: Accessibility AXUIElement, ScreenCaptureKit,
-and UI-TARS Visual Grounding Fallback.
+macOS Desktop Bridge: Accessibility AXUIElement and ScreenCaptureKit.
 """
 from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any
 
 
 class MacOSDesktopBridge:
@@ -53,19 +51,3 @@ class MacOSDesktopBridge:
         script = f'tell application "System Events" to keystroke "{key}"{mod_str}'
         ok, _ = await self.run_applescript(script)
         return ok
-
-    async def predict_visual_click(
-        self, screenshot_path: Path, prompt: str
-    ) -> dict[str, Any]:
-        """
-        UI-TARS Fallback: When AXUIElement cannot resolve Canvas / WebGL coordinates.
-        Returns predicted {x, y} coordinate center.
-        """
-        # Standalone heuristic / fallback bounding
-        return {
-            "target": prompt,
-            "x": 640,
-            "y": 480,
-            "confidence": 0.85,
-            "engine": "ui_tars_visual_grounding",
-        }

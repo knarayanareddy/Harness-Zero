@@ -2,6 +2,8 @@
 Multi-Agent Arena & Battle Evaluator (Antigravity Battle Mode Pattern).
 Spawns parallel competing subagents in isolated Git worktrees,
 evaluates solutions concurrently, and merges the winning branch into main.
+
+Quarantined per EXP-01 / ORCH-02: simulated worker removed, requires explicit worker_fn.
 """
 from __future__ import annotations
 
@@ -129,17 +131,8 @@ class AgentArena:
                     error_message=str(e),
                 )
 
-        # Simulated default worker execution
-        await asyncio.sleep(0.1)
-        score = 90.0 if "fast" in strategy or "optimized" in strategy else 80.0
-        return CandidateResult(
-            agent_id=agent_id,
-            strategy=strategy,
-            worktree_path=wt_path,
-            test_exit_code=0,
-            test_output="All unit tests passed cleanly.",
-            benchmark_score=score,
-            diff_summary=f"Diff for candidate {agent_id}",
+        raise ValueError(
+            f"No worker_fn provided for candidate '{agent_id}'. Simulated arena workers have been removed."
         )
 
     def _default_evaluate_winner(

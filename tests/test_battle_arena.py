@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.orchestration.battle_arena import AgentArena, CandidateResult
+from harness.experimental.battle_arena import AgentArena, CandidateResult
 from harness.sandboxing.worktree import WorktreeManager
 
 
@@ -52,3 +52,24 @@ async def test_battle_arena_parallel_evaluation(tmp_path: Path):
 
     # Winning branch should be merged, losing worktree pruned
     assert not (wt.worktree_base / "worker_worker_alpha").exists()
+
+
+@pytest.mark.asyncio
+async def test_battle_arena_rejects_missing_worker_fn(tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-b", "main", str(repo)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "arena@test.com"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Arena Runner"], check=True)
+
+    test_file = repo / "init.txt"
+    test_file.write_text("initial\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "init.txt"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-m", "Initial commit"], check=True)
+
+    wt = WorktreeManager(repo_root=repo)
+    arena = AgentArena(worktree_manager=wt)
+    candidates = [{"id": "worker_gamma", "strategy": "strategy_standard"}]
+
+    with pytest.raises(ValueError, match="Simulated arena workers have been removed"):
+        await arena.run_battle("Solve problem", candidates, worker_fn=None)

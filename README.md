@@ -25,10 +25,10 @@ flowchart TD
     end
 
     subgraph Orchestration ["3. Workflow & Multi-Agent Swarms"]
-        STATE_GRAPH["LangGraph Cyclic StateGraph & Time-Travel Checkpointer"]
+        STATE_GRAPH["Cyclic StateGraph & Time-Travel Checkpointer (Experimental)"]
         HANDOFFS["OpenAI Agents SDK Direct Specialist Handoffs"]
-        SPAWN_TREE["Hermes Hierarchical Spawn Trees & Ledger"]
-        BATTLE["Antigravity Parallel Solution Arena & Battle Mode"]
+        SPAWN_TREE["Hierarchical Spawn Ledger (Experimental)"]
+        BATTLE["Worktree Parallel Arena (Experimental)"]
     end
 
     subgraph Memory ["4. Codebase Intelligence & Memory"]
@@ -40,8 +40,8 @@ flowchart TD
 
     subgraph Automation ["5. Sandboxing & Computer Use"]
         WORKTREES["Antigravity Dynamic Git Worktrees"]
-        DESKTOP["ChatGPT Native @oai/sky macOS Accessibility + UI-TARS Visuals"]
-        BROWSER["Browser-Use + Stagehand CDP Engine (act, observe, extract)"]
+        DESKTOP["macOS Accessibility AXUIElement + ScreenCaptureKit"]
+        BROWSER["CDP Browser Engine (Experimental)"]
         SECURITY["Hermes Tirith Shell Capsule & CIDR Metadata Shield"]
     end
 
@@ -67,10 +67,10 @@ flowchart TD
    * Microsecond $O(1)$ random access to any past conversational turn across weeks of work.
 6. **Whole-Codebase Tree-sitter PageRank Repo Map**:
    * Dense AST symbol graph packing a 100k-line codebase into an ultra-lean 1k-token API map.
-7. **Hybrid Desktop & Browser Computer Use**:
-   * Native macOS Accessibility (`AXUIElement`) + UI-TARS pixel visual grounding fallback + Chrome DevTools Protocol (`act`, `observe`, `extract`).
-8. **Multi-Agent Battle Arena & State Graphs**:
-   * Cyclic LangGraph workflows with time-travel checkpoints, plus Antigravity's Battle Mode for competitive solution ranking.
+7. **Native macOS Desktop Computer Use**:
+   * Native macOS Accessibility (`AXUIElement`) + ScreenCaptureKit screenshot verification.
+8. **Experimental Swarms & Browser CDP**:
+   * Prototype battle arena, spawn ledger, and Chrome DevTools Protocol engines quarantined in `harness/experimental/` pending modular coordinator integrations.
 
 ---
 

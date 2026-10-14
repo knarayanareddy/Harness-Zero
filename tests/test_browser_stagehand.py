@@ -1,6 +1,6 @@
 import pytest
 
-from harness.browser.stagehand_engine import BrowserCDPEngine, InteractiveElement
+from harness.experimental.browser_cdp import BrowserCDPEngine, InteractiveElement
 
 
 @pytest.mark.asyncio
@@ -32,3 +32,12 @@ async def test_browser_cdp_stagehand_primitives():
     extract_res = await browser.extract(schema, "Extract auth details")
     assert extract_res["status"] == "extracted"
     assert "user" in extract_res["data"]
+
+
+@pytest.mark.asyncio
+async def test_browser_cdp_fails_honestly_when_no_cdp():
+    # Use non-existent port to test honest connection failure
+    browser = BrowserCDPEngine(cdp_http_url="http://127.0.0.1:59999")
+    connected = await browser.connect()
+    assert connected is False
+    assert browser.is_connected is False

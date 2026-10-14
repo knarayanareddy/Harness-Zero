@@ -31,7 +31,7 @@ KERNEL_SCHEMA: dict[str, Any] = {
         "strategy": {
             "type": "string",
             "default": "single_loop",
-            "enum": ["single_loop", "architect_editor", "architect", "battle_arena"],
+            "enum": ["single_loop", "architect_editor", "architect"],
         },
         "max_tool_iterations": {"type": "integer", "default": 20, "minimum": 1},
         "security": {

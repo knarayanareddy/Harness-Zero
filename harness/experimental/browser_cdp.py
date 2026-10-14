@@ -1,7 +1,9 @@
 """
-Browser Computer Use & CDP Stagehand Engine.
+Browser Computer Use & CDP Engine.
 Connects directly to Chrome DevTools Protocol (CDP), prunes accessibility trees
-down to interactive indices ([#1] Button, [#2] Input), and provides Stagehand primitives.
+down to interactive indices ([#1] Button, [#2] Input), and provides semantic action primitives.
+
+Quarantined per EXP-01 / SIM-02: Silent mock mode fallback removed in connect().
 """
 from __future__ import annotations
 
@@ -39,11 +41,7 @@ class BrowserCDPEngine:
         self.is_connected = False
         self._mock_mode = False
         self._current_url = "about:blank"
-        self._mock_elements: list[InteractiveElement] = [
-            InteractiveElement(1, "BUTTON", "button", "Submit", {"x": 200, "y": 150, "w": 80, "h": 32}),
-            InteractiveElement(2, "INPUT", "textbox", "Email Address", {"x": 200, "y": 100, "w": 240, "h": 36}),
-            InteractiveElement(3, "A", "link", "Forgot Password?", {"x": 200, "y": 200, "w": 120, "h": 20}),
-        ]
+        self._mock_elements: list[InteractiveElement] = []
 
     def enable_mock_mode(self, elements: list[InteractiveElement] | None = None) -> None:
         """Enables deterministic offline testing without requiring a live Chrome instance."""
@@ -56,6 +54,10 @@ class BrowserCDPEngine:
         ]
 
     async def connect(self) -> bool:
+        """
+        Connects to a live Chrome CDP endpoint.
+        Fails honestly if Chrome CDP is not reachable (no silent fallback).
+        """
         if self._mock_mode:
             self.is_connected = True
             return True
@@ -69,21 +71,26 @@ class BrowserCDPEngine:
                     self.is_connected = True
                     return True
         except Exception:
-            logger.warning("No active Chrome CDP endpoint found at %s. Falling back to mock/offline mode.", self.cdp_http_url)
-            self.enable_mock_mode()
-            return True
+            logger.warning(
+                "No active Chrome CDP endpoint found at %s. Connection failed.",
+                self.cdp_http_url,
+            )
+            self.is_connected = False
+            return False
 
-        self.enable_mock_mode()
-        return True
+        self.is_connected = False
+        return False
 
     async def navigate(self, url: str) -> dict[str, Any]:
         self._current_url = url
-        if self._mock_mode:
-            return {"status": "navigated", "url": url}
+        if not self.is_connected:
+            return {"status": "error", "error": "Not connected to browser"}
         return {"status": "navigated", "url": url}
 
     async def observe(self, instruction: str = "") -> list[InteractiveElement]:
         """Discovers and prunes actionable elements into compact indices."""
+        if not self.is_connected:
+            return []
         if self._mock_mode:
             if instruction:
                 lower = instruction.lower()
@@ -106,6 +113,8 @@ class BrowserCDPEngine:
 
     async def act(self, instruction: str, target_index: int | None = None) -> dict[str, Any]:
         """Executes semantic action (e.g. click, type)."""
+        if not self.is_connected:
+            return {"success": False, "error": "Not connected to browser"}
         elements = await self.observe(instruction)
         target = None
         if target_index is not None:
@@ -132,6 +141,8 @@ class BrowserCDPEngine:
         instruction: str,
     ) -> dict[str, Any]:
         """Extracts schema-validated structured data from current page."""
+        if not self.is_connected:
+            return {"status": "error", "error": "Not connected to browser"}
         return {
             "status": "extracted",
             "instruction": instruction,

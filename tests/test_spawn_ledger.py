@@ -3,13 +3,13 @@ from pathlib import Path
 
 import pytest
 
-from harness.orchestration.spawn_ledger import SpawnLedger, SubagentStatus
+from harness.experimental.spawn_ledger import SpawnLedger, SubagentStatus
 
 
 def test_spawn_ledger_hierarchy_and_limits():
     with tempfile.TemporaryDirectory() as tmpdir:
         ledger = SpawnLedger(session_dir=Path(tmpdir), max_nesting_depth=2)
-        
+
         # Root spawn
         node1 = ledger.spawn_subagent(
             agent_name="Architect",
@@ -19,7 +19,7 @@ def test_spawn_ledger_hierarchy_and_limits():
         )
         assert node1.nesting_depth == 1
         assert node1.status == SubagentStatus.RUNNING
-        
+
         # Child spawn
         node2 = ledger.spawn_subagent(
             agent_name="Editor",

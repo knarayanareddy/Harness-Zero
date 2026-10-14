@@ -1,6 +1,6 @@
 import pytest
 
-from harness.orchestration.state_graph import AgentState, StateGraphEngine
+from harness.experimental.state_graph import AgentState, StateGraphEngine
 
 
 @pytest.mark.asyncio
