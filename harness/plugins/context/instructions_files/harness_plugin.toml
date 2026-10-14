@@ -1,0 +1,8 @@
+[plugin]
+name = "context-instructions"
+version = "1.0.0"
+api_version = "1"
+summary = "Project instruction files reader (AGENTS.md, CLAUDE.md, .harness/INSTRUCTIONS.md)"
+provides = ["context"]
+capabilities = ["fs:read"]
+entry = "harness.plugins.context.instructions_files.plugin:InstructionsFilesPlugin"

@@ -1,0 +1,8 @@
+[plugin]
+name = "context-tool-guidance"
+version = "1.0.0"
+api_version = "1"
+summary = "Tool usage and execution guidance context source"
+provides = ["context"]
+capabilities = []
+entry = "harness.plugins.context.tool_guidance.plugin:ToolGuidancePlugin"

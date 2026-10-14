@@ -1,0 +1,8 @@
+[plugin]
+name = "context-identity"
+version = "1.0.0"
+api_version = "1"
+summary = "Core identity context source for Harness-Zero"
+provides = ["context"]
+capabilities = []
+entry = "harness.plugins.context.identity.plugin:IdentityContextPlugin"
