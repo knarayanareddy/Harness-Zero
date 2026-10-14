@@ -36,7 +36,7 @@ flowchart TD
 
 ## 2. Reverse-Engineered Transcript Schema
 
-Antigravity stores sessions under `~/.gemini/antigravity/brain/<conversation-id>/.system_generated/logs/`:
+Antigravity stores sessions under `~/.harness/brain/<conversation-id>/.system_generated/logs/`:
 * `transcript.jsonl`: Fast, compact log.
 * `transcript_full.jsonl`: Full archive.
 
@@ -58,7 +58,7 @@ Each line in `transcript.jsonl` is a self-contained JSON object:
       "id": "call-091",
       "name": "view_file",
       "arguments": {
-        "AbsolutePath": "/Users/brightech/project/server.py",
+        "AbsolutePath": "/path/to/project/server.py",
         "StartLine": 1,
         "EndLine": 50
       }

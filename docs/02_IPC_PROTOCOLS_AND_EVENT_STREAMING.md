@@ -68,7 +68,7 @@ To avoid proprietary Protobuf schemas while maintaining high speed and simplicit
   "params": {
     "conversation_id": "conv-uuid-42",
     "prompt": "Inspect the repository and refactor the auth middleware",
-    "workspace_path": "/Users/brightech/project",
+    "workspace_path": "/path/to/project",
     "model": "gpt-6.1-sol"
   }
 }
@@ -95,7 +95,7 @@ To avoid proprietary Protobuf schemas while maintaining high speed and simplicit
     "name": "run_command",
     "arguments": {
       "CommandLine": "git status",
-      "Cwd": "/Users/brightech/project"
+      "Cwd": "/path/to/project"
     }
   }
 }

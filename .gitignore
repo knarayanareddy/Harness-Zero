@@ -10,7 +10,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
 parts/
 sdist/
@@ -36,15 +35,19 @@ env/
 *~
 .DS_Store
 
-# Test & coverage
+# Test, lint & coverage
 .pytest_cache/
+.ruff_cache/
 .coverage
 htmlcov/
 
-# Harness dynamic session data
-brain/
-transcripts/
-worktrees/
+# Database artifacts
+*.db-wal
+*.db-shm
+
+# Harness dynamic session data (root-level only)
+/brain/
+/transcripts/
+/worktrees/
 .harness/
-artifacts/
-harness/artifacts/
+/artifacts/

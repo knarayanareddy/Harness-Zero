@@ -5,7 +5,7 @@
 
 ## 1. Hermes Architectural Overview
 
-Inspecting your active installation at [`~/.hermes`](file:///Users/brightech/.hermes) reveals an industrial-grade, long-running agent daemon designed for complex multi-agent workflows and fail-safe security:
+Inspecting your active installation at `~/.hermes` reveals an industrial-grade, long-running agent daemon designed for complex multi-agent workflows and fail-safe security:
 
 ```mermaid
 flowchart TD
@@ -50,7 +50,7 @@ Hermes handles task decomposition using a formal parent-child spawn hierarchy:
   * `verification_evidence`: Cryptographic hashes of tool outputs and test runs.
 
 ### C. Tirith Security & Containment Gateway (`bin/tirith`)
-Located at [`~/.hermes/bin/tirith`](file:///Users/brightech/.hermes/bin/tirith) (32.5 MB Mach-O arm64 binary):
+Located at `~/.hermes/bin/tirith` (32.5 MB Mach-O arm64 binary):
 * **URL & Shell Security Firewall**: Intercepts shell tool invocations before execution.
 * **Blast Radius Preview**: Analyzes shell scripts and predicts file changes before running.
 * **Secret Leak Gating**: Scans terminal outputs, logs, and clipboard for credential patterns (`AWS_SECRET_ACCESS_KEY`, `id_rsa`, tokens) and redacts them in real time.

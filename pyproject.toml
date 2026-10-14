@@ -20,6 +20,10 @@ dependencies = [
 dev = [
     "pytest>=8.2.0",
     "pytest-asyncio>=0.23.6",
+    "ruff>=0.4.0",
+]
+package = [
+    "pyinstaller>=6.0.0",
 ]
 
 [project.scripts]
@@ -36,3 +40,11 @@ packages = ["harness"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"]

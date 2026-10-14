@@ -15,7 +15,17 @@ DMG_PATH="$DIST_DIR/Harness-Zero.dmg"
 mkdir -p "$DIST_DIR"
 
 echo "==> Step 1: Compiling standalone Python engine with PyInstaller..."
-"$REPO_ROOT/.venv/bin/pyinstaller" \
+PYINSTALLER_BIN=""
+if command -v pyinstaller >/dev/null 2>&1; then
+    PYINSTALLER_BIN="pyinstaller"
+elif [ -x "$REPO_ROOT/.venv/bin/pyinstaller" ]; then
+    PYINSTALLER_BIN="$REPO_ROOT/.venv/bin/pyinstaller"
+else
+    echo "Error: PyInstaller not found. Install via: pip install '.[package]'" >&2
+    exit 1
+fi
+
+"$PYINSTALLER_BIN" \
     --name harness-engine \
     --onefile \
     --clean \
@@ -33,10 +43,12 @@ swiftc \
     -o "$DIST_DIR/Harness-Zero-Launcher" \
     launcher/HarnessZeroApp.swift
 
-echo "==> Step 3: Generating Apple AppIcon.icns..."
-swift scripts/generate_icon.swift
-iconutil -c icns AppIcon.iconset -o AppIcon.icns
-rm -rf AppIcon.iconset
+echo "==> Step 3: Apple AppIcon.icns..."
+if [ ! -f "$REPO_ROOT/packaging/macos/AppIcon.icns" ]; then
+    swift scripts/generate_icon.swift
+    iconutil -c icns AppIcon.iconset -o "$REPO_ROOT/packaging/macos/AppIcon.icns"
+    rm -rf AppIcon.iconset
+fi
 
 echo "==> Step 4: Assembling macOS App Bundle..."
 rm -rf "$APP_BUNDLE"
@@ -45,7 +57,7 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 
 cp "$DIST_DIR/Harness-Zero-Launcher" "$APP_BUNDLE/Contents/MacOS/Harness-Zero"
 cp "$DIST_DIR/harness-engine" "$APP_BUNDLE/Contents/Resources/harness-engine"
-cp AppIcon.icns "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
+cp "$REPO_ROOT/packaging/macos/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 chmod +x "$APP_BUNDLE/Contents/MacOS/Harness-Zero" "$APP_BUNDLE/Contents/Resources/harness-engine"
 
 cat << 'EOF' > "$APP_BUNDLE/Contents/Info.plist"

@@ -52,12 +52,12 @@ graph TD
   * Crashes in the agent engine do not crash the user's active editor window.
 
 ### B. OpenAI ChatGPT Desktop Topology (Codex / Owl)
-* **UI Layer**: Custom Chromium build (`Codex Framework.framework` v155) loading an Electron bundle ([`app.asar`](file:///Applications/ChatGPT.app/Contents/Resources/app.asar), 561 MB).
-* **System Integration**: Native macOS Node.js addons (`.node` binaries in [`/Applications/ChatGPT.app/Contents/Resources/native`](file:///Applications/ChatGPT.app/Contents/Resources/native)):
+* **UI Layer**: Custom Chromium build (`Codex Framework.framework` v155) loading an Electron bundle (`app.asar`, 561 MB).
+* **System Integration**: Native macOS Node.js addons (`.node` binaries in `/Applications/Codex.app/Contents/Resources/native`):
   * `bare-modifier-monitor`: Low-level hook listening for Option+Space global hotkey.
   * `sky.node`: Native macOS Accessibility / ScreenCaptureKit bridge.
   * `system-audio-spectrum`: FFT real-time audio visualization.
-* **Tool / REPL Engine**: Dedicated Node.js instance ([`cua_node/bin/node`](file:///Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node) and [`node_repl`](file:///Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl)).
+* **Tool / REPL Engine**: Dedicated Node.js instance (`cua_node/bin/node` and `node_repl`).
 * **Benefits**:
   * Unified JavaScript/TypeScript runtime across UI, plugins, and execution environments.
   * Seamless native module bridging (`N-API`) for macOS system hooks.

@@ -5,7 +5,7 @@
 
 ## 1. Beyond Flat Multi-Agent Loops
 
-While hierarchical spawn trees ([`15_HERMES_MULTI_AGENT_AND_TIRITH_SECURITY.md`](file:///Users/brightech/.gemini/antigravity/scratch/custom-harness-specs/15_HERMES_MULTI_AGENT_AND_TIRITH_SECURITY.md)) manage worker lifecycles, complex production workflows require **Explicit Graph Routing**, **Time-Travel Checkpointing**, and **Specialist Handoffs**:
+While hierarchical spawn trees ([`15_HERMES_MULTI_AGENT_AND_TIRITH_SECURITY.md`](./15_HERMES_MULTI_AGENT_AND_TIRITH_SECURITY.md)) manage worker lifecycles, complex production workflows require **Explicit Graph Routing**, **Time-Travel Checkpointing**, and **Specialist Handoffs**:
 
 ```mermaid
 flowchart TD

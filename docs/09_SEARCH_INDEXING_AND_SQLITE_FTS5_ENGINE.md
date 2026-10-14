@@ -8,7 +8,7 @@
 In multi-day agent operations, an agent needs to recall past conversations, code decisions, and benchmark results without loading gigabytes of past JSON transcripts into LLM context.
 
 Antigravity solves this with an embedded **SQLite FTS5 database** stored at:
-[`~/.gemini/antigravity/conversation_summaries.db`](file:///Users/brightech/.gemini/antigravity/conversation_summaries.db)
+`~/.harness/conversation_summaries.db`
 
 ```mermaid
 flowchart TD

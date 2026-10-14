@@ -203,6 +203,6 @@ if __name__ == "__main__":
 
 ## 4. Next Implementation Steps
 
-1. **Set Active Workspace**: Create your project root under [`/Users/brightech/.gemini/antigravity/scratch/custom-agent-harness`](file:///Users/brightech/.gemini/antigravity/scratch/custom-agent-harness) and set it as your active workspace in your IDE or Hermes.
+1. **Set Active Workspace**: Create your project root under `./workspace` and set it as your active workspace in your IDE or Hermes.
 2. **Add MCP Client Adapter**: Integrate `@modelcontextprotocol/sdk` or Python's `mcp` library to connect standard tool servers (like filesystem, github, rea).
-3. **Connect Desktop Automation**: Import [`mac_desktop_bridge.py`](file:///Users/brightech/.gemini/antigravity/scratch/custom-harness-specs/06_COMPUTER_USE_AND_DESKTOP_INTEGRATION.md) to enable native macOS screen capture and accessibility automation.
+3. **Connect Desktop Automation**: Import [`mac_desktop_bridge.py`](./06_COMPUTER_USE_AND_DESKTOP_INTEGRATION.md) to enable native macOS screen capture and accessibility automation.

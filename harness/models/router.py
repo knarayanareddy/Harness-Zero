@@ -381,7 +381,7 @@ graph TD
                         id="call_write_plan",
                         name="write_to_file",
                         arguments={
-                            "TargetFile": "/Users/brightech/.gemini/antigravity/scratch/Harness-Zero/harness/artifacts/architecture_plan.md",
+                            "TargetFile": "architecture_plan.md",
                             "CodeContent": artifact_content,
                             "ArtifactSummary": f"Architecture plan for: {clean_text[:60]}",
                         }

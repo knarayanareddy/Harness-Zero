@@ -21,7 +21,7 @@ class RipgrepMatch:
 class RipgrepSearcher:
     def __init__(self, workspace_root: Path):
         self.workspace_root = Path(workspace_root)
-        self.rg_bin = shutil.which("rg") or "/Applications/ChatGPT.app/Contents/Resources/rg"
+        self.rg_bin = shutil.which("rg")
 
     async def search(
         self,
@@ -31,7 +31,7 @@ class RipgrepSearcher:
         max_results: int = 50,
     ) -> List[RipgrepMatch]:
         """Runs ripgrep if available, or Python fallback."""
-        if Path(self.rg_bin).exists():
+        if self.rg_bin and Path(self.rg_bin).exists():
             return await self._search_rg(query, glob_filter, case_sensitive, max_results)
         return self._search_fallback(query, glob_filter, case_sensitive, max_results)
 

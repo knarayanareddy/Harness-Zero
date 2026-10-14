@@ -14,7 +14,7 @@ Antigravity solves this with **Git Worktree Isolation**.
 
 ```mermaid
 flowchart TD
-    MAIN_REPO["Main Repository Working Tree<br/>(/Users/brightech/project on 'main')"]
+    MAIN_REPO["Main Repository Working Tree<br/>(/path/to/project on 'main')"]
     GIT_DB[".git Object Database"]
 
     subgraph Worktrees ["Isolated Agent Worktree Sandboxes"]

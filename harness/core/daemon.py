@@ -186,9 +186,9 @@ class HarnessDaemon:
                 "telemetry_enabled": False,
             },
             "account": {
-                "account_id": "eb2ed2bf-f314-4c1d-a782-febe96c771f9",
-                "email": "brightech@local.device",
-                "organization_id": "90abf3fd-1c92-4b4e-8733-809314ab824b",
+                "account_id": "00000000-0000-0000-0000-000000000000",
+                "email": "user@local.device",
+                "organization_id": "00000000-0000-0000-0000-000000000000",
                 "is_signed_in": True,
                 "keyring_status": "unlocked",
             },
@@ -197,7 +197,6 @@ class HarnessDaemon:
                 "cowork_user_files_path": str(self.coordinator.workspace),
                 "trusted_folders": [
                     str(self.coordinator.workspace),
-                    str(Path.home() / "Claude"),
                 ],
                 "bypass_permissions_gate": False,
                 "ble_maker_enabled": False,
@@ -276,10 +275,10 @@ class HarnessDaemon:
                 "code_theme": "dark",
             },
             "system": {
-                "user_files_path": str(Path.home() / "Claude"),
+                "user_files_path": str(self.coordinator.workspace),
                 "permissions_gate": False,
                 "preferred_browser": "built_in",
-                "device_name": "macbook-air-van-brightech-local",
+                "device_name": "local-device",
             },
             "skills": {
                 "docx": {"name": "docx", "enabled": True, "description": "Create, read, edit Word documents (.docx)"},

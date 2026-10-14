@@ -32,7 +32,7 @@ sequenceDiagram
 ## 2. Reverse-Engineered `@oai/sky` API Surface
 
 Extracted directly from ChatGPT's bundled plugin:
-[`/Applications/ChatGPT.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use/skills/computer-use/SKILL.md`](file:///Applications/ChatGPT.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use/skills/computer-use/SKILL.md)
+`/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use/skills/computer-use/SKILL.md`
 
 ### TypeScript Type Contract
 ```typescript
@@ -93,7 +93,7 @@ type AppState = {
 
 ## 3. Persistent REPL Execution Model
 
-ChatGPT runs a dedicated child process: [`cua_node/bin/node_repl`](file:///Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl).
+ChatGPT runs a dedicated child process: `cua_node/bin/node_repl`.
 * State is persistent across turns. Variables defined in turn 1 (`const myDoc = ...`) remain in scope in turn 2.
 * Before executing commands, the environment bootstraps:
   ```javascript

@@ -149,9 +149,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUIDelega
         }
 
         if let execPath = engineExecutable {
-            let home = FileManager.default.homeDirectoryForCurrentUser
-            let defaultWorkspace = home.appendingPathComponent(".gemini/antigravity/scratch/Harness-Zero")
-            let workspaceURL = FileManager.default.fileExists(atPath: defaultWorkspace.path) ? defaultWorkspace : home
+            let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+                .appendingPathComponent("Harness-Zero")
+            let stateFile = appSupport?.appendingPathComponent("state.json")
+
+            var chosenWorkspace: URL? = nil
+            if let sf = stateFile, FileManager.default.fileExists(atPath: sf.path),
+               let data = try? Data(contentsOf: sf),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let lastWs = json["last_workspace"] as? String,
+               FileManager.default.fileExists(atPath: lastWs) {
+                chosenWorkspace = URL(fileURLWithPath: lastWs)
+            }
+
+            let defaultWorkspace = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Harness-Zero")
+            let workspaceURL = chosenWorkspace ?? defaultWorkspace
 
             let proc = Process()
             proc.executableURL = URL(fileURLWithPath: execPath)

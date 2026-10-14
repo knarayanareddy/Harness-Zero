@@ -44,7 +44,7 @@ flowchart TD
 ## 2. Reverse-Engineered Plugin & Skill Schemas
 
 ### A. OpenAI ChatGPT Desktop Plugin Manifest (`plugin.json`)
-Located at [`/Applications/ChatGPT.app/Contents/Resources/plugins/openai-bundled/plugins/*/.codex-plugin/plugin.json`](file:///Applications/ChatGPT.app/Contents/Resources/plugins/openai-bundled/plugins):
+Located at `/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/plugins/*/.codex-plugin/plugin.json`:
 
 ```json
 {

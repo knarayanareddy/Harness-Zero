@@ -46,7 +46,7 @@ flowchart TD
 
 ## 3. How to Wire UI-TARS as a Visual Fallback for Computer Use
 
-When macOS Accessibility ([`06_COMPUTER_USE_AND_DESKTOP_INTEGRATION.md`](file:///Users/brightech/.gemini/antigravity/scratch/custom-harness-specs/06_COMPUTER_USE_AND_DESKTOP_INTEGRATION.md)) encounters a custom Canvas or WebGL element where `element_index` cannot be found:
+When macOS Accessibility ([`06_COMPUTER_USE_AND_DESKTOP_INTEGRATION.md`](./06_COMPUTER_USE_AND_DESKTOP_INTEGRATION.md)) encounters a custom Canvas or WebGL element where `element_index` cannot be found:
 
 ```mermaid
 sequenceDiagram

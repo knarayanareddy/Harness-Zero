@@ -1653,15 +1653,15 @@
             <div style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:6px; margin-top:4px;">
               <div style="display:flex; justify-content:space-between; align-items:center;">
                 <span style="font-size:12px; color:#a1a1aa;">Email:</span>
-                <span style="font-size:12px; font-weight:600; color:#f4f4f5;" id="acc-email">brightech@local.device</span>
+                <span style="font-size:12px; font-weight:600; color:#f4f4f5;" id="acc-email">user@local.device</span>
               </div>
               <div style="display:flex; justify-content:space-between; align-items:center;">
                 <span style="font-size:12px; color:#a1a1aa;">Account UUID:</span>
-                <span style="font-family:var(--font-mono); font-size:11px; color:#38bdf8;" id="acc-uuid">eb2ed2bf-f314-4c1d-a782-febe96c771f9</span>
+                <span style="font-family:var(--font-mono); font-size:11px; color:#38bdf8;" id="acc-uuid">00000000-0000-0000-0000-000000000000</span>
               </div>
               <div style="display:flex; justify-content:space-between; align-items:center;">
                 <span style="font-size:12px; color:#a1a1aa;">Organization:</span>
-                <span style="font-family:var(--font-mono); font-size:11px; color:#a1a1aa;" id="acc-org">90abf3fd-1c92-4b4e-8733-809314ab824b</span>
+                <span style="font-family:var(--font-mono); font-size:11px; color:#a1a1aa;" id="acc-org">00000000-0000-0000-0000-000000000000</span>
               </div>
             </div>
 
@@ -1895,7 +1895,7 @@
                   <button style="background:transparent; border:none; color:#71717a; cursor:pointer;" onclick="this.parentElement.remove()">✕</button>
                 </div>
                 <div style="display:flex; justify-content:space-between; align-items:center; background:#222227; padding:4px 8px; border-radius:4px; font-size:11px;">
-                  <span style="color:#e4e4e7;">💡 Workspace root is /Users/brightech/.gemini/antigravity/scratch/Harness-Zero</span>
+                  <span style="color:#e4e4e7;">💡 Workspace directory is dynamically caged and isolated</span>
                   <button style="background:transparent; border:none; color:#71717a; cursor:pointer;" onclick="this.parentElement.remove()">✕</button>
                 </div>
                 <div style="display:flex; justify-content:space-between; align-items:center; background:#222227; padding:4px 8px; border-radius:4px; font-size:11px;">
@@ -2052,12 +2052,12 @@
 
             <div style="display:flex; flex-direction:column; gap:6px;">
               <label style="font-size:12px; color:#a1a1aa;">Device Name (<code>remoteToolsDeviceName</code>)</label>
-              <input type="text" class="input-field" id="sys-device-name" value="macbook-air-van-brightech-local"/>
+              <input type="text" class="input-field" id="sys-device-name" value="local-device"/>
             </div>
 
             <div style="display:flex; flex-direction:column; gap:6px;">
               <label style="font-size:12px; color:#a1a1aa;">Cowork User Files Path (<code>coworkUserFilesPath</code>)</label>
-              <input type="text" class="input-field" id="cowork-user-files-path" value="/Users/brightech/Claude"/>
+              <input type="text" class="input-field" id="cowork-user-files-path" value="./workspace"/>
             </div>
 
             <div style="display:flex; flex-direction:column; gap:6px;">
@@ -2267,7 +2267,7 @@
 
             <div style="display:flex; flex-direction:column; gap:4px; margin-top:6px;">
               <label style="font-size:11px; color:#a1a1aa;">Custom Skills Workspace Directory</label>
-              <input type="text" class="input-field" id="skills-dir-path" value="/Users/brightech/.gemini/antigravity/builtin/skills"/>
+              <input type="text" class="input-field" id="skills-dir-path" value="./builtin/skills"/>
             </div>
           </div>
 
@@ -3842,7 +3842,7 @@
     }
 
     function addTrustedFolderPrompt() {
-      const p = prompt('Enter folder path to trust for Claude Cowork:', '/Users/brightech/Claude');
+      const p = prompt('Enter folder path to trust for Claude Cowork:', './workspace');
       if (p && p.trim()) {
         trustedFoldersData.push(p.trim());
         renderTrustedFolders(trustedFoldersData);
@@ -3919,7 +3919,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             general: { theme: 'dark', locale: 'en-US', keep_in_background: true, notifications: true, launch_at_login: false, telemetry_enabled: false },
-            cowork: { remote_control_enabled: true, cowork_user_files_path: '/Users/brightech/Claude', bypass_permissions_gate: false, ble_maker_enabled: false },
+            cowork: { remote_control_enabled: true, cowork_user_files_path: './workspace', bypass_permissions_gate: false, ble_maker_enabled: false },
             capabilities: { tool_mode: 'on_demand', connector_search: true, switch_models_flagged: true, artifacts_enabled: true, ai_artifacts_enabled: false, inline_visualizations: true, code_execution_file_creation: true, web_search_enabled: true, browser_tools_enabled: true, preferred_browser: 'built_in', scheduled_tasks_enabled: false },
             models: { auto_fallback: true, temperature: 0.2, max_tool_iterations: 10 },
             security: { default_permission_mode: 'allow', tirith_ssrf_shield: true, destructive_command_blocking: true, ssh_key_shield: true, session_spend_cap_usd: 5.0 }
@@ -4134,11 +4134,11 @@
           telemetry_enabled: document.getElementById('gen-telemetry') ? document.getElementById('gen-telemetry').checked : false
         },
         account: {
-          full_name: document.getElementById('acc-full-name') ? document.getElementById('acc-full-name').value.trim() : 'kiranreddy',
-          display_name: document.getElementById('acc-display-name') ? document.getElementById('acc-display-name').value.trim() : 'kiranreddy',
+          full_name: document.getElementById('acc-full-name') ? document.getElementById('acc-full-name').value.trim() : 'User',
+          display_name: document.getElementById('acc-display-name') ? document.getElementById('acc-display-name').value.trim() : 'user',
           work_type: document.getElementById('acc-work-type') ? document.getElementById('acc-work-type').value : 'engineering',
           custom_instructions: document.getElementById('acc-instructions') ? document.getElementById('acc-instructions').value.trim() : '',
-          email: document.getElementById('acc-email') ? document.getElementById('acc-email').textContent.trim() : 'brightech@local.device'
+          email: document.getElementById('acc-email') ? document.getElementById('acc-email').textContent.trim() : 'user@local.device'
         },
         privacy: {
           location_metadata: document.getElementById('priv-location') ? document.getElementById('priv-location').checked : true,
@@ -4180,15 +4180,15 @@
           code_theme: document.getElementById('cc-code-theme') ? document.getElementById('cc-code-theme').value : 'dark'
         },
         system: {
-          device_name: document.getElementById('sys-device-name') ? document.getElementById('sys-device-name').value.trim() : 'macbook-air-van-brightech-local',
-          user_files_path: document.getElementById('cowork-user-files-path') ? document.getElementById('cowork-user-files-path').value.trim() : '/Users/brightech/Claude',
+          device_name: document.getElementById('sys-device-name') ? document.getElementById('sys-device-name').value.trim() : 'local-device',
+          user_files_path: document.getElementById('cowork-user-files-path') ? document.getElementById('cowork-user-files-path').value.trim() : './workspace',
           trusted_folders: trustedFoldersData,
           permissions_gate: document.getElementById('cowork-bypass-gate') ? document.getElementById('cowork-bypass-gate').checked : false,
           hardware_acceleration: document.getElementById('sys-hw-accel') ? document.getElementById('sys-hw-accel').checked : true
         },
         cowork: {
           remote_control_enabled: true,
-          cowork_user_files_path: document.getElementById('cowork-user-files-path') ? document.getElementById('cowork-user-files-path').value.trim() : '/Users/brightech/Claude',
+          cowork_user_files_path: document.getElementById('cowork-user-files-path') ? document.getElementById('cowork-user-files-path').value.trim() : './workspace',
           trusted_folders: trustedFoldersData,
           bypass_permissions_gate: document.getElementById('cowork-bypass-gate') ? document.getElementById('cowork-bypass-gate').checked : false,
           ble_maker_enabled: false
@@ -4198,7 +4198,7 @@
           unpacked_extensions_enabled: document.getElementById('ext-unpacked') ? document.getElementById('ext-unpacked').checked : true
         },
         skills: {
-          directory_path: document.getElementById('skills-dir-path') ? document.getElementById('skills-dir-path').value.trim() : '/Users/brightech/.gemini/antigravity/builtin/skills'
+          directory_path: document.getElementById('skills-dir-path') ? document.getElementById('skills-dir-path').value.trim() : './builtin/skills'
         },
         models: {
           default_model: document.getElementById('model-selector') ? document.getElementById('model-selector').value : 'deepseek/deepseek-chat',

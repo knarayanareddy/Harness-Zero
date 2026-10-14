@@ -5,7 +5,7 @@
 
 ## 1. Desktop vs. Browser Computer Use
 
-While Desktop Computer Use ([`06_COMPUTER_USE_AND_DESKTOP_INTEGRATION.md`](file:///Users/brightech/.gemini/antigravity/scratch/custom-harness-specs/06_COMPUTER_USE_AND_DESKTOP_INTEGRATION.md)) controls native macOS windows via accessibility APIs and mouse events, **Browser Computer Use** requires direct integration with the web browser runtime:
+While Desktop Computer Use ([`06_COMPUTER_USE_AND_DESKTOP_INTEGRATION.md`](./06_COMPUTER_USE_AND_DESKTOP_INTEGRATION.md)) controls native macOS windows via accessibility APIs and mouse events, **Browser Computer Use** requires direct integration with the web browser runtime:
 
 ```mermaid
 flowchart TD
