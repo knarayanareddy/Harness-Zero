@@ -4,6 +4,7 @@ Plugins receive these interfaces during lifecycle operations and execution turns
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable
 from pathlib import Path
@@ -20,11 +21,15 @@ from harness.sdk.contracts import (
 )
 from harness.sdk.types import (
     Capability,
+    ImageBlock,
     Message,
     ModelRequest,
+    SessionInfo,
+    TaskInfo,
     ToolCall,
     ToolResult,
     ToolSpec,
+    TurnResult,
 )
 
 
@@ -108,11 +113,21 @@ class PolicyContext(Protocol):
 
 @runtime_checkable
 class TurnContext(Protocol):
+    session: SessionInfo
     turn_id: str
-    session_id: str
-    workspace: Path
-    history: list[Message]
-    user_prompt: str
+    prompt: str
+    media: list[ImageBlock]
+    options: dict[str, Any]
+    settings: SettingsView
+    cancel: asyncio.Event
+
+    @property
+    def session_id(self) -> str:
+        ...
+
+    @property
+    def workspace(self) -> Path:
+        ...
 
 
 @runtime_checkable
@@ -123,14 +138,47 @@ class HookContext(Protocol):
 
 @runtime_checkable
 class KernelServices(Protocol):
-    async def call_model(self, req: ModelRequest) -> Any:
+    async def assemble_context(self, *, tools: list[ToolSpec] | None = None) -> ModelRequest:
+        ...
+
+    async def call_model(self, req: ModelRequest) -> Message:
+        ...
+
+    async def execute_tool(self, call: ToolCall) -> ToolResult:
         ...
 
     async def execute_tools(self, calls: list[ToolCall]) -> list[ToolResult]:
         ...
 
+    async def record(self, msg: Message) -> int:
+        ...
+
     async def wait_for_wakeup(self, timeout_s: float = 600.0) -> Any:
+        ...
+
+    def pending_tasks(self) -> list[TaskInfo]:
+        ...
+
+    async def compact_if_needed(self) -> bool:
+        ...
+
+    async def spawn_child(
+        self,
+        *,
+        strategy: str = "single_loop",
+        prompt: str,
+        isolation: str = "none",
+        inherit_history: bool = False,
+    ) -> TurnResult:
+        ...
+
+    async def emit(self, event: Any) -> None:
         ...
 
     def spend_remaining(self) -> float | None:
         ...
+
+    @property
+    def tools(self) -> list[ToolSpec]:
+        ...
+

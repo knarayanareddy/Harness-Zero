@@ -68,7 +68,9 @@ from harness.sdk.types import (
     ProviderNotice,
     RiskClass,
     Role,
+    SessionInfo,
     Stability,
+    TaskInfo,
     TextBlock,
     TextDelta,
     ThinkingBlock,
@@ -142,6 +144,8 @@ __all__ = [
     "HookOutcome",
     "Capability",
     "TurnResult",
+    "SessionInfo",
+    "TaskInfo",
     # Contracts
     "Plugin",
     "Provider",

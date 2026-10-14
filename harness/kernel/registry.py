@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from harness.kernel.bus import EventBus
 from harness.kernel.secrets import Secrets
@@ -35,7 +35,7 @@ from harness.sdk.errors import (
 )
 from harness.sdk.events import Event
 from harness.sdk.manifest import PluginManifest
-from harness.sdk.types import SDK_API_VERSION, Capability, ToolSpec
+from harness.sdk.types import SDK_API_VERSION, Capability, HookEvent, ToolSpec
 
 logger = logging.getLogger(__name__)
 
@@ -259,6 +259,24 @@ class PluginRegistry:
 
     def _register_hook(self, h: Hook, plugin_name: str) -> None:
         self.hooks.append((h, plugin_name))
+
+    def register_tool(self, spec: ToolSpec, handler: Any, plugin_name: str = "builtin") -> None:
+        self._register_tool(spec, handler, plugin_name)
+
+    def register_provider(self, p: Provider, plugin_name: str = "builtin") -> None:
+        self._register_provider(p, plugin_name)
+
+    def register_policy(self, p: Policy, plugin_name: str = "builtin") -> None:
+        self._register_policy(p, plugin_name)
+
+    def register_executor(self, e: Executor, plugin_name: str = "builtin") -> None:
+        self._register_executor(e, plugin_name)
+
+    def register_strategy(self, s: Strategy, plugin_name: str = "builtin") -> None:
+        self._register_strategy(s, plugin_name)
+
+    def register_hook(self, h: Hook, plugin_name: str = "builtin") -> None:
+        self._register_hook(h, plugin_name)
 
     def register_discovered(self, plugin: DiscoveredPlugin) -> None:
         """Registers a discovered plugin manifest, validating API version and naming."""
@@ -557,3 +575,34 @@ class PluginRegistry:
 
     def is_loaded(self, name: str) -> bool:
         return name in self._loaded
+
+    def get_provider(self, name: str) -> Provider | None:
+        """Returns Provider by name if registered."""
+        if name in self.providers:
+            return self.providers[name][0]
+        return None
+
+    def get_all_providers(self) -> list[Provider]:
+        """Returns list of all registered Providers."""
+        return [p for p, _ in self.providers.values()]
+
+    def get_tool_spec(self, name: str) -> ToolSpec | None:
+        """Returns ToolSpec for registered tool by name."""
+        if name in self.tools:
+            return self.tools[name][0]
+        return None
+
+    def get_all_tool_specs(self) -> list[ToolSpec]:
+        """Returns list of all registered ToolSpecs."""
+        return [entry[0] for entry in self.tools.values()]
+
+    def get_strategy(self, name: str) -> Strategy | None:
+        """Returns Strategy by name if registered."""
+        if name in self.strategies:
+            return self.strategies[name][0]
+        return None
+
+    def get_hooks_for_event(self, event: HookEvent) -> list[Hook]:
+        """Returns registered Hooks subscribed to the given HookEvent."""
+        return [h for h, _ in self.hooks if event in getattr(h, "events", set())]
+

@@ -4,6 +4,7 @@ All types are slot dataclasses or string enums, fully serializable to and from d
 """
 from __future__ import annotations
 
+import time
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -817,3 +818,57 @@ class TurnResult:
             error=data.get("error"),
             cards=data.get("cards", []),
         )
+
+
+@dataclass(slots=True)
+class SessionInfo:
+    session_id: str
+    workspace: Path
+    created_at: float = field(default_factory=time.time)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "session_id": self.session_id,
+            "workspace": str(self.workspace),
+            "created_at": self.created_at,
+            "metadata": self.metadata,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SessionInfo:
+        return cls(
+            session_id=data.get("session_id", ""),
+            workspace=Path(data.get("workspace", ".")),
+            created_at=float(data.get("created_at", 0.0)),
+            metadata=data.get("metadata", {}),
+        )
+
+
+@dataclass(slots=True)
+class TaskInfo:
+    id: str
+    label: str
+    running: bool
+    exit_code: int | None = None
+    tail: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "label": self.label,
+            "running": self.running,
+            "exit_code": self.exit_code,
+            "tail": self.tail,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> TaskInfo:
+        return cls(
+            id=data.get("id", ""),
+            label=data.get("label", ""),
+            running=bool(data.get("running", False)),
+            exit_code=data.get("exit_code"),
+            tail=data.get("tail", ""),
+        )
+

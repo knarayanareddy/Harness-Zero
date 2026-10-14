@@ -5,6 +5,7 @@ Foundation primitives for sovereignty, sandboxing, policy enforcement, settings,
 from __future__ import annotations
 
 from harness.kernel.approvals import ApprovalBroker, ApprovalRequest
+from harness.kernel.breaker import CircuitBreaker, CircuitState
 from harness.kernel.bus import EventBus
 from harness.kernel.compaction import (
     COMPACTION_SYSTEM_PROMPT,
@@ -16,6 +17,7 @@ from harness.kernel.context import (
     ContextAssembler,
     HookContextImpl,
     PolicyContextImpl,
+    TurnContextImpl,
     records_to_messages,
 )
 from harness.kernel.gate import (
@@ -24,12 +26,14 @@ from harness.kernel.gate import (
     ToolContextImpl,
     WorkspaceJailPolicy,
 )
+from harness.kernel.inbox import BackgroundInbox, WakeupEvent
 from harness.kernel.jail import WorkspaceJail
 from harness.kernel.registry import (
     PluginRegistry,
     TrustTier,
     clamp_capabilities,
 )
+from harness.kernel.runner import KernelServicesImpl, SingleLoopStrategy, TurnRunner
 from harness.kernel.sanitizer import sanitize_output
 from harness.kernel.secrets import PluginSecretsView, Secrets, migrate_legacy_config
 from harness.kernel.settings import (
@@ -65,6 +69,7 @@ __all__ = [
     "ToolContextImpl",
     "HookContextImpl",
     "PolicyContextImpl",
+    "TurnContextImpl",
     "sanitize_output",
     "ContextAssembler",
     "Compactor",
@@ -72,4 +77,11 @@ __all__ = [
     "estimate_request_tokens",
     "records_to_messages",
     "COMPACTION_SYSTEM_PROMPT",
+    "CircuitBreaker",
+    "CircuitState",
+    "BackgroundInbox",
+    "WakeupEvent",
+    "TurnRunner",
+    "KernelServicesImpl",
+    "SingleLoopStrategy",
 ]

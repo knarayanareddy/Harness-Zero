@@ -236,6 +236,17 @@ class PolicyGate:
         self.jail_policy = WorkspaceJailPolicy(jail)
         self.permission_modes_policy = PermissionModesPolicy(settings)
 
+    @property
+    def specs(self) -> dict[str, ToolSpec]:
+        """Returns map of tool name to ToolSpec for all registered tools."""
+        return {name: entry[0] for name, entry in self.registry.tools.items()}
+
+    def register_tool(
+        self, spec: ToolSpec, handler: Any, plugin_name: str = "builtin"
+    ) -> None:
+        """Helper to register a tool with the underlying registry."""
+        self.registry._register_tool(spec, handler, plugin_name)
+
     async def execute(
         self,
         call: ToolCall,

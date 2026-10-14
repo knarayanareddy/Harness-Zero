@@ -19,6 +19,7 @@ from harness.sdk.types import (
     HookEvent,
     ImageBlock,
     Message,
+    ModelRequest,
     TextBlock,
     ThinkingBlock,
     ToolResultBlock,
@@ -78,10 +79,12 @@ def estimate_tokens(item: str | ContentBlock | Message | list[Any]) -> int:
 
 
 def estimate_request_tokens(
-    system: list[TextBlock], messages: list[Message]
+    system: list[Any] | ModelRequest, messages: list[Message] | None = None
 ) -> int:
-    """Estimates total tokens across system prompt and message history."""
-    return estimate_tokens(system) + estimate_tokens(messages)
+    """Estimates total tokens across system prompt and message history or ModelRequest."""
+    if hasattr(system, "system") and hasattr(system, "messages"):
+        return estimate_tokens(system.system) + estimate_tokens(system.messages)
+    return estimate_tokens(system) + estimate_tokens(messages or [])
 
 
 class Compactor:

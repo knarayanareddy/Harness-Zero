@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +28,7 @@ from harness.sdk.types import (
     ModelRequest,
     ProviderCaps,
     Role,
+    SessionInfo,
     Stability,
     TextBlock,
     ThinkingBlock,
@@ -57,6 +58,32 @@ class PolicyContextImpl:
     """Concrete implementation satisfying the PolicyContext protocol."""
     workspace: Path
     capabilities: frozenset[Capability]
+
+
+@dataclass
+class TurnContextImpl:
+    """Concrete implementation satisfying the TurnContext protocol."""
+    session: SessionInfo
+    turn_id: str
+    prompt: str
+    media: list[ImageBlock] = field(default_factory=list)
+    options: dict[str, Any] = field(default_factory=dict)
+    settings: Any = None
+    cancel: asyncio.Event = field(default_factory=asyncio.Event)
+    history: list[Message] = field(default_factory=list)
+
+    @property
+    def session_id(self) -> str:
+        return self.session.session_id
+
+    @property
+    def workspace(self) -> Path:
+        return self.session.workspace
+
+    @property
+    def user_prompt(self) -> str:
+        return self.prompt
+
 
 
 def records_to_messages(records: list[dict[str, Any]]) -> list[Message]:
