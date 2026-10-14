@@ -81,6 +81,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUIDelega
         appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem)
 
+        // File Menu (Workspace Management)
+        let fileMenuItem = NSMenuItem()
+        let fileMenu = NSMenu(title: "File")
+        fileMenu.addItem(withTitle: "Open Workspace…", action: #selector(openWorkspaceDialog), keyEquivalent: "o")
+        fileMenu.addItem(NSMenuItem.separator())
+        fileMenu.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        fileMenuItem.submenu = fileMenu
+        mainMenu.addItem(fileMenuItem)
+
         // Edit Menu
         let editMenuItem = NSMenuItem()
         let editMenu = NSMenu(title: "Edit")
@@ -130,7 +139,118 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUIDelega
         webView.evaluateJavaScript("console.log('[Harness-Zero] Inspecting...');", completionHandler: nil)
     }
 
-    func startBackendDaemon() {
+    @objc func openWorkspaceDialog() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.title = "Select Project Workspace"
+        panel.message = "Choose an isolated directory for the agent workspace jail (never your home directory)."
+        panel.prompt = "Open Workspace"
+
+        if panel.runModal() == .OK, let selected = panel.url {
+            if selected.path == FileManager.default.homeDirectoryForCurrentUser.path {
+                let alert = NSAlert()
+                alert.messageText = "Invalid Workspace Selection"
+                alert.informativeText = "Harness-Zero enforces strict workspace jail isolation and cannot use your root home directory ($HOME) as a workspace."
+                alert.alertStyle = .critical
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+                return
+            }
+            saveWorkspace(selected)
+            restartBackend(with: selected)
+        }
+    }
+
+    func resolveWorkspace() -> URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("Harness-Zero")
+        let stateFile = appSupport?.appendingPathComponent("state.json")
+
+        // 1. Check remembered workspace
+        if let sf = stateFile, FileManager.default.fileExists(atPath: sf.path),
+           let data = try? Data(contentsOf: sf),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let lastWs = json["last_workspace"] as? String,
+           !lastWs.isEmpty,
+           lastWs != FileManager.default.homeDirectoryForCurrentUser.path,
+           FileManager.default.fileExists(atPath: lastWs) {
+            return URL(fileURLWithPath: lastWs)
+        }
+
+        // 2. Interactive modal picker if running with UI
+        let isHeadless = CommandLine.arguments.contains("--headless") || CommandLine.arguments.contains("-h")
+        if !isHeadless {
+            let panel = NSOpenPanel()
+            panel.canChooseFiles = false
+            panel.canChooseDirectories = true
+            panel.canCreateDirectories = true
+            panel.allowsMultipleSelection = false
+            panel.title = "Select Project Workspace"
+            panel.message = "Choose an isolated directory for the agent workspace jail (never your home directory)."
+            panel.prompt = "Select Workspace"
+
+            if panel.runModal() == .OK, let selected = panel.url {
+                if selected.path != FileManager.default.homeDirectoryForCurrentUser.path {
+                    saveWorkspace(selected)
+                    return selected
+                }
+            }
+        }
+
+        // 3. Fallback: current working directory (if not naked $HOME), else isolated scratch
+        let currentPath = FileManager.default.currentDirectoryPath
+        if currentPath != FileManager.default.homeDirectoryForCurrentUser.path {
+            let currentUrl = URL(fileURLWithPath: currentPath)
+            saveWorkspace(currentUrl)
+            return currentUrl
+        }
+
+        let scratchDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("harness-workspace")
+        try? FileManager.default.createDirectory(at: scratchDir, withIntermediateDirectories: true)
+        saveWorkspace(scratchDir)
+        return scratchDir
+    }
+
+    func saveWorkspace(_ url: URL) {
+        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("Harness-Zero") else { return }
+        try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
+        let stateFile = appSupport.appendingPathComponent("state.json")
+
+        var state: [String: Any] = [:]
+        if FileManager.default.fileExists(atPath: stateFile.path),
+           let data = try? Data(contentsOf: stateFile),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            state = json
+        }
+
+        state["last_workspace"] = url.path
+        var recents = state["recent_workspaces"] as? [String] ?? []
+        recents.removeAll(where: { $0 == url.path })
+        recents.insert(url.path, at: 0)
+        if recents.count > 10 {
+            recents = Array(recents.prefix(10))
+        }
+        state["recent_workspaces"] = recents
+
+        if let data = try? JSONSerialization.data(withJSONObject: state, options: [.prettyPrinted]) {
+            try? data.write(to: stateFile)
+        }
+    }
+
+    func restartBackend(with url: URL) {
+        if let proc = backendProcess, proc.isRunning {
+            proc.interrupt()
+            proc.waitUntilExit()
+            self.backendProcess = nil
+        }
+        startBackendDaemon(withWorkspace: url)
+    }
+
+    func startBackendDaemon(withWorkspace explicitWorkspace: URL? = nil) {
         let bundle = Bundle.main
         var candidates: [String] = []
         if let resPath = bundle.resourcePath {
@@ -149,25 +269,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUIDelega
         }
 
         if let execPath = engineExecutable {
-            let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-                .appendingPathComponent("Harness-Zero")
-            let stateFile = appSupport?.appendingPathComponent("state.json")
+            let workspaceURL = explicitWorkspace ?? resolveWorkspace()
 
-            var chosenWorkspace: URL? = nil
-            if let sf = stateFile, FileManager.default.fileExists(atPath: sf.path),
-               let data = try? Data(contentsOf: sf),
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let lastWs = json["last_workspace"] as? String,
-               FileManager.default.fileExists(atPath: lastWs) {
-                chosenWorkspace = URL(fileURLWithPath: lastWs)
+            var args = ["daemon", "--workspace", workspaceURL.path, "--port", "\(targetPort)", "--sandbox-port", "\(sandboxPort)"]
+
+            // Only pass --allow-host if explicitly provided in launcher arguments
+            if let hostIdx = CommandLine.arguments.firstIndex(of: "--allow-host"), hostIdx + 1 < CommandLine.arguments.count {
+                args.append(contentsOf: ["--allow-host", CommandLine.arguments[hostIdx + 1]])
             }
-
-            let defaultWorkspace = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Harness-Zero")
-            let workspaceURL = chosenWorkspace ?? defaultWorkspace
 
             let proc = Process()
             proc.executableURL = URL(fileURLWithPath: execPath)
-            proc.arguments = ["daemon", "--workspace", workspaceURL.path, "--port", "\(targetPort)", "--sandbox-port", "\(sandboxPort)"]
+            proc.arguments = args
             
             // Set working directory to project workspace
             proc.currentDirectoryURL = workspaceURL
@@ -175,7 +288,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUIDelega
             do {
                 try proc.run()
                 self.backendProcess = proc
-                NSLog("[Harness-Zero Launcher] Successfully launched harness-engine at %@ (PID: %d)", execPath, proc.processIdentifier)
+                NSLog("[Harness-Zero Launcher] Successfully launched harness-engine at %@ (PID: %d) with workspace %@", execPath, proc.processIdentifier, workspaceURL.path)
             } catch {
                 NSLog("[Harness-Zero Launcher] Failed to launch daemon: %@", error.localizedDescription)
             }

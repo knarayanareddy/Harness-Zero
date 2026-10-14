@@ -30,6 +30,7 @@ fi
     --onefile \
     --clean \
     --noconfirm \
+    --add-data "harness/frontends/web/static:harness/frontends/web/static" \
     --add-data "harness/web:harness/web" \
     --add-data "builtin:builtin" \
     harness/engine_main.py
@@ -95,8 +96,6 @@ cat << 'EOF' > "$APP_BUNDLE/Contents/Info.plist"
     <false/>
     <key>NSAppTransportSecurity</key>
     <dict>
-        <key>NSAllowsArbitraryLoads</key>
-        <true/>
         <key>NSAllowsLocalNetworking</key>
         <true/>
     </dict>
