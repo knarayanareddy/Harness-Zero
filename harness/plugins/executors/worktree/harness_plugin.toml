@@ -1,0 +1,8 @@
+[plugin]
+name = "executor-worktree"
+version = "1.0.0"
+api_version = "1"
+summary = "Async git worktree process executor with isolated branching and base commit tracking"
+provides = ["executor"]
+capabilities = ["exec"]
+entry = "harness.plugins.executors.worktree.plugin:WorktreeExecutorPlugin"
