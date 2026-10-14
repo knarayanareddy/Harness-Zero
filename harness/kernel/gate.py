@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 from harness.kernel.approvals import ApprovalBroker
 from harness.kernel.bus import EventBus
+from harness.kernel.context import HookContextImpl, PolicyContextImpl
 from harness.kernel.jail import PathOutsideWorkspace, WorkspaceJail
 from harness.kernel.registry import PluginRegistry
 from harness.kernel.sanitizer import sanitize_output
@@ -207,22 +208,6 @@ class ToolContextImpl(ToolContext):
                 },
             )
             self._bus.publish(evt)
-
-
-class HookContextImpl:
-    """Concrete implementation satisfying the HookContext protocol."""
-
-    def __init__(self, session_id: str, workspace: Path):
-        self.session_id = session_id
-        self.workspace = workspace
-
-
-class PolicyContextImpl:
-    """Concrete implementation satisfying the PolicyContext protocol."""
-
-    def __init__(self, workspace: Path, capabilities: frozenset[Capability]):
-        self.workspace = workspace
-        self.capabilities = capabilities
 
 
 class PolicyGate:

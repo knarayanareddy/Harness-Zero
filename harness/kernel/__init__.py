@@ -1,11 +1,23 @@
 """
 Harness Kernel package.
-Foundation primitives for sovereignty, sandboxing, policy enforcement, settings, secrets, and plugins.
+Foundation primitives for sovereignty, sandboxing, policy enforcement, settings, secrets, context assembly, and compaction.
 """
 from __future__ import annotations
 
 from harness.kernel.approvals import ApprovalBroker, ApprovalRequest
 from harness.kernel.bus import EventBus
+from harness.kernel.compaction import (
+    COMPACTION_SYSTEM_PROMPT,
+    Compactor,
+    estimate_request_tokens,
+    estimate_tokens,
+)
+from harness.kernel.context import (
+    ContextAssembler,
+    HookContextImpl,
+    PolicyContextImpl,
+    records_to_messages,
+)
 from harness.kernel.gate import (
     PermissionModesPolicy,
     PolicyGate,
@@ -51,5 +63,13 @@ __all__ = [
     "WorkspaceJailPolicy",
     "PermissionModesPolicy",
     "ToolContextImpl",
+    "HookContextImpl",
+    "PolicyContextImpl",
     "sanitize_output",
+    "ContextAssembler",
+    "Compactor",
+    "estimate_tokens",
+    "estimate_request_tokens",
+    "records_to_messages",
+    "COMPACTION_SYSTEM_PROMPT",
 ]
