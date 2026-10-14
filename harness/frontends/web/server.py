@@ -225,14 +225,20 @@ class HarnessWebServer:
             self.app.router.add_static("/static/", path=str(self.static_dir), name="static")
 
     async def _handle_index(self, request: web.Request) -> web.Response:
-        """Serves the studio index.html or minimal bootstrap container."""
+        """Serves the studio index.html or minimal bootstrap container with token bootstrap."""
         index_file = self.static_dir / "index.html"
+        token_script = f"<script>window.__HARNESS_TOKEN__ = {json.dumps(self.auth_token)};</script>"
         if index_file.exists():
-            return web.FileResponse(index_file)
+            html = index_file.read_text(encoding="utf-8")
+            if "</head>" in html:
+                html = html.replace("</head>", f"  {token_script}\n</head>", 1)
+            else:
+                html = f"{token_script}\n{html}"
+            return web.Response(text=html, content_type="text/html")
         # Minimal skeleton if static dir is not yet populated
         content = (
             "<!DOCTYPE html>"
-            "<html lang='en'><head><meta charset='UTF-8'><title>Harness Studio</title></head>"
+            f"<html lang='en'><head><meta charset='UTF-8'><title>Harness Studio</title>{token_script}</head>"
             "<body><div id='app'>Harness Studio Loading...</div></body></html>"
         )
         return web.Response(text=content, content_type="text/html")

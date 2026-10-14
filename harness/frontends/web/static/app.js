@@ -231,6 +231,15 @@ export class HarnessStudioApp {
         }
       });
     }
+
+    const settingsModal = document.getElementById('settings-modal');
+    if (settingsModal) {
+      settingsModal.addEventListener('click', (e) => {
+        if (e.target === settingsModal) {
+          this.closeSettings();
+        }
+      });
+    }
   }
 
   appendUserTurn(text) {
@@ -705,13 +714,17 @@ export class HarnessStudioApp {
     const modal = document.getElementById('settings-modal');
     if (modal) {
       modal.classList.remove('hidden');
+      modal.style.display = 'flex';
       this.settingsPanel?.load();
     }
   }
 
   closeSettings() {
     const modal = document.getElementById('settings-modal');
-    if (modal) modal.classList.add('hidden');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.style.display = 'none';
+    }
   }
 }
 

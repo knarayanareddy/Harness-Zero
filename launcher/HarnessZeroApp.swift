@@ -306,7 +306,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUIDelega
             guard let self = self else { return }
             if let httpResp = response as? HTTPURLResponse, httpResp.statusCode == 200 {
                 DispatchQueue.main.async {
-                    let studioUrl = URL(string: "http://127.0.0.1:\(self.targetPort)/")!
+                    var tokenQuery = ""
+                    let ws = self.resolveWorkspace()
+                    let daemonFile = ws.appendingPathComponent(".harness/daemon.json")
+                    if FileManager.default.fileExists(atPath: daemonFile.path),
+                       let data = try? Data(contentsOf: daemonFile),
+                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let token = json["token"] as? String, !token.isEmpty {
+                        tokenQuery = "?token=\(token)"
+                    }
+                    let studioUrl = URL(string: "http://127.0.0.1:\(self.targetPort)/\(tokenQuery)")!
                     self.webView.load(URLRequest(url: studioUrl))
                     NSLog("[Harness-Zero Launcher] Daemon health confirmed. Studio loaded.")
                 }
