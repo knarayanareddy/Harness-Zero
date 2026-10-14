@@ -1,113 +1,88 @@
 # Harness-Zero: The Universal Sovereign Autonomous Agent Engine
 
 > **Reverse-Engineered Blueprints & Engineering Specifications Synthesized from:**
-> Google Antigravity · OpenAI ChatGPT Desktop (Codex) · Anthropic Claude Cowork (Operon) · Hermes · Pi · Aider · LangGraph · Browser-Use · Stagehand · LiteLLM · ByteDance UI-TARS · Alibaba Qwen-Agent
+> Google Antigravity · OpenAI ChatGPT Desktop (Codex) · Anthropic Claude Cowork (Operon) · Hermes · Pi · Aider · LangGraph · LiteLLM · Alibaba Qwen-Agent
 
 ---
 
 ## 1. What is Harness-Zero?
 
-**Harness-Zero** is a next-generation, local-first, universal autonomous coding agent harness. It addresses the fragmentation across proprietary AI applications by extracting and uniting the single greatest engineering superpower from each frontier system:
+**Harness-Zero** is a next-generation, local-first, universal autonomous coding agent harness. It addresses the fragmentation across proprietary AI applications by uniting the greatest engineering superpowers into a modular kernel and SDK architecture:
 
 ```mermaid
 flowchart TD
     subgraph UI ["1. Presentation & Execution Surfaces"]
-        TUI["Pi Minimalist Terminal UI (TUI) & JSON Stream"]
-        WEB["Claude Browser-First Daemon (Port 8000)"]
-        SOP_SANDBOX["Claude Dual-Port SOP Webview Sandbox (Port 8001)"]
+        CLI["Pi Minimalist Terminal CLI (harness interactive / harness run)"]
+        WEB["Claude Modular Studio Web UI (Port 8000)"]
+        SOP_SANDBOX["Dual-Port SOP Webview Sandbox (Port 8001)"]
+        ACP["Agent Client Protocol Server (harness acp)"]
+        MCP_SRV["MCP Stdio Server Bridge (harness mcp)"]
     end
 
-    subgraph Core ["2. Core Agent Engine & Routing"]
+    subgraph Core ["2. Modular Kernel & SDK"]
         PROMPT["Pi <1k Token Minimal Prompt + 5-Tier Prefix Cache (90%+ Hits)"]
-        ROUTER["LiteLLM Pre-Flight Complexity Classifier & Circuit Breakers"]
-        MODELS["Pi-AI Multi-Provider Switching (/model across 15+ LLMs)"]
+        BREAKER["Kernel Circuit Breakers & Failover Engine"]
+        MODELS["Multi-Provider Switching (/model across 15+ LLMs)"]
         BYOK["Local Model Engine (Ollama / vLLM / MLX / Open Weights)"]
+        BUS["Kernel EventBus with Replay Buffer & SSE Stream"]
     end
 
-    subgraph Orchestration ["3. Workflow & Multi-Agent Swarms"]
-        STATE_GRAPH["Cyclic StateGraph & Time-Travel Checkpointer (Experimental)"]
-        HANDOFFS["OpenAI Agents SDK Direct Specialist Handoffs"]
-        SPAWN_TREE["Hierarchical Spawn Ledger (Experimental)"]
-        BATTLE["Worktree Parallel Arena (Experimental)"]
+    subgraph Plugins ["3. Modular Plugin Ecosystem (35 Builtins)"]
+        PROVIDERS["Providers (OpenAI, Anthropic, Gemini, Ollama, Mock)"]
+        TOOLS["Tools (FS, Search, Shell, Memory, Screen, Skills, Artifacts)"]
+        POLICIES["Policies (Jail, Risk Classifier, Tirith, Modes)"]
+        CONTEXT["Context Sources (Identity, Repo Map, Instructions, Memories)"]
+        EXECUTORS["Executors (Local Subprocess, Git Worktrees)"]
+        BRIDGES["Bridges (Shell Hooks, MCP Client, MCP Server, ACP)"]
     end
 
     subgraph Memory ["4. Codebase Intelligence & Memory"]
-        FTS5["Antigravity SQLite FTS5 Byte-Offset O(1) History Seek"]
-        TRANSCRIPT["Antigravity Tiered transcript.jsonl with Pointer Truncation"]
-        REPOMAP["Aider Tree-sitter PageRank Whole-Codebase Map"]
-        DIFF_LOOP["Aider Self-Healing Search/Replace Git Linter Loop"]
+        FTS5["SQLite FTS5 Byte-Offset O(1) History Seek"]
+        TRANSCRIPT["Dual-Log transcript.jsonl with Pointer Truncation"]
+        REPOMAP["Whole-Codebase AST Symbol Outline & PageRank Map"]
+        DIFF_LOOP["Aider Self-Healing Search/Replace Linter Loop"]
     end
 
-    subgraph Automation ["5. Sandboxing & Computer Use"]
-        WORKTREES["Antigravity Dynamic Git Worktrees"]
-        DESKTOP["macOS Accessibility AXUIElement + ScreenCaptureKit"]
-        BROWSER["CDP Browser Engine (Experimental)"]
-        SECURITY["Hermes Tirith Shell Capsule & CIDR Metadata Shield"]
+    subgraph Experimental ["5. Quarantined Experimental Prototypes"]
+        EXP_ARENA["Worktree Competitive Battle Arena (harness/experimental/)"]
+        EXP_SPAWN["Hierarchical Subagent Spawn Ledger (harness/experimental/)"]
+        EXP_GRAPH["Cyclic StateGraph Workflows (harness/experimental/)"]
+        EXP_CDP["Chrome DevTools Protocol Browser Engine (harness/experimental/)"]
     end
 
     UI <--> Core
-    Core <--> Orchestration
-    Orchestration <--> Memory
-    Orchestration <--> Automation
+    Core <--> Plugins
+    Plugins <--> Memory
 ```
 
 ---
 
-## 2. Core Superpowers Unified in Harness-Zero
+## 2. Implementation Status
 
-1. **Universal BYOK & Local-First Freedom**:
-   * Support any cloud API key (OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, GLM) or run 100% offline via **Ollama / vLLM / Apple MLX** (`Qwen-2.5-Coder-32B`, `DeepSeek-R1`).
-2. **Deterministic Prompt Caching (90%+ Hits)**:
-   * 5-tier prefix-invariant prompt layout delivers 3–5x lower latency and up to 90% cost savings.
-3. **Dual-Port Browser SOP Origin Sandbox**:
-   * API on Port 8000, untrusted HTML preview origin on Port 8001, cryptographically preventing prompt-injection XSS.
-4. **Git Worktree Subagent Sandboxing**:
-   * Parallel worker agents operate in zero-collision isolated Git branches (`git worktree add`).
-5. **SQLite FTS5 Byte-Offset Instant Memory Seeking**:
-   * Microsecond $O(1)$ random access to any past conversational turn across weeks of work.
-6. **Whole-Codebase Tree-sitter PageRank Repo Map**:
-   * Dense AST symbol graph packing a 100k-line codebase into an ultra-lean 1k-token API map.
-7. **Native macOS Desktop Computer Use**:
-   * Native macOS Accessibility (`AXUIElement`) + ScreenCaptureKit screenshot verification.
-8. **Experimental Swarms & Browser CDP**:
-   * Prototype battle arena, spawn ledger, and Chrome DevTools Protocol engines quarantined in `harness/experimental/` pending modular coordinator integrations.
-
----
-
-## 3. Complete Specification Suite (`docs/`)
-
-All 22 modular engineering blueprints, protocol schemas, and reference implementations are available in [`docs/`](docs/):
-
-| Document | Topic | Description |
+| Feature / Subsystem | Status | Description |
 | :--- | :--- | :--- |
-| [`00_README_AND_MANIFEST.md`](docs/00_README_AND_MANIFEST.md) | Master Index | System overview, architectural goals, and quick-start roadmap. |
-| [`01_SYSTEM_TOPOLOGY_AND_ENGINE_DESIGN.md`](docs/01_SYSTEM_TOPOLOGY_AND_ENGINE_DESIGN.md) | System Topology | Process separation, Go vs Node vs Rust vs Bun daemons, daemon supervision. |
-| [`02_IPC_PROTOCOLS_AND_EVENT_STREAMING.md`](docs/02_IPC_PROTOCOLS_AND_EVENT_STREAMING.md) | Wire Protocols | ConnectRPC, JSON-RPC 2.0, SSE frames, reactive non-polling wakeup engine. |
-| [`03_CONTEXT_ENGINE_AND_TRANSCRIPT_STORAGE.md`](docs/03_CONTEXT_ENGINE_AND_TRANSCRIPT_STORAGE.md) | Context & Transcripts | `transcript.jsonl` compact schema, pointer truncation, compaction algorithms. |
-| [`04_PROGRESSIVE_SKILLS_AND_PLUGIN_SYSTEM.md`](docs/04_PROGRESSIVE_SKILLS_AND_PLUGIN_SYSTEM.md) | Skills & Plugins | Progressive disclosure via YAML frontmatter, plugin manifests, MCP lifecycle. |
-| [`05_EXECUTION_SANDBOX_AND_GIT_WORKTREES.md`](docs/05_EXECUTION_SANDBOX_AND_GIT_WORKTREES.md) | Sandboxing & Workspaces | Subagent isolation with Git worktrees, terminal virtualization, supervisor loop. |
-| [`06_COMPUTER_USE_AND_DESKTOP_INTEGRATION.md`](docs/06_COMPUTER_USE_AND_DESKTOP_INTEGRATION.md) | Desktop Automation | `@oai/sky` API, macOS Accessibility (`AXUIElement`), ScreenCaptureKit, REPL runner. |
-| [`07_GENERATIVE_UI_AND_ARTIFACT_SYSTEM.md`](docs/07_GENERATIVE_UI_AND_ARTIFACT_SYSTEM.md) | Generative UI & Artifacts | Document versioning, metadata schema, sandboxed iframe rendering, live diffs. |
-| [`08_BUILD_BLUEPRINT_AND_STARTER_IMPLEMENTATION.md`](docs/08_BUILD_BLUEPRINT_AND_STARTER_IMPLEMENTATION.md) | Complete Implementation | Phased roadmap, project layout, and fully functional runnable Python scaffold. |
-| [`09_SEARCH_INDEXING_AND_SQLITE_FTS5_ENGINE.md`](docs/09_SEARCH_INDEXING_AND_SQLITE_FTS5_ENGINE.md) | Long-Term Memory | Embedded SQLite FTS5, byte-offset instant seek into transcripts, BM25 ranking. |
-| [`10_PROMPT_CACHING_AND_PREFIX_INVARIANCE.md`](docs/10_PROMPT_CACHING_AND_PREFIX_INVARIANCE.md) | Token Economics & Speed | Achieving 90%+ prompt cache hit rates via strict deterministic prefix invariants. |
-| [`11_MULTI_AGENT_ARENA_AND_BATTLE_EVALUATOR.md`](docs/11_MULTI_AGENT_ARENA_AND_BATTLE_EVALUATOR.md) | Competitive Exploration | Antigravity Battle Mode, Rust CellActor pattern, automated scoring and merging. |
-| [`12_TOOL_SAFETY_GUARDRAILS_AND_PERMISSIONS.md`](docs/12_TOOL_SAFETY_GUARDRAILS_AND_PERMISSIONS.md) | Security & Permissions | Human-in-the-loop state machine, destructive regex classifiers, path guards. |
-| [`13_CLAUDE_COWORK_OPERON_ARCHITECTURE.md`](docs/13_CLAUDE_COWORK_OPERON_ARCHITECTURE.md) | Claude Cowork (Operon) | Bun compiled daemon, Dual-Port origin separation (Port 8000/8001), CIDR guards. |
-| [`14_THE_ULTIMATE_HYBRID_HARNESS_SYNTHESIS.md`](docs/14_THE_ULTIMATE_HYBRID_HARNESS_SYNTHESIS.md) | Master Omni-Blueprint | Feature mashup matrix combining all engines into one unified architecture. |
-| [`15_HERMES_MULTI_AGENT_AND_TIRITH_SECURITY.md`](docs/15_HERMES_MULTI_AGENT_AND_TIRITH_SECURITY.md) | Hermes Engine | Hierarchical spawn trees, SQLite state machine with WAL, and Tirith security. |
-| [`16_PI_MINIMALIST_AGENT_AND_CHORD_RUNTIME.md`](docs/16_PI_MINIMALIST_AGENT_AND_CHORD_RUNTIME.md) | Pi Engine | Ultra-compact (<1k token) prompt, universal `pi-ai` multi-provider layer, and model switching. |
-| [`17_AIDER_REPOMAP_AND_ARCHITECT_EDITOR_LOOP.md`](docs/17_AIDER_REPOMAP_AND_ARCHITECT_EDITOR_LOOP.md) | Aider Engine | Tree-sitter PageRank repo map, Architect/Editor dual-model pattern, self-healing. |
-| [`18_BROWSER_COMPUTER_USE_AND_CDP_STAGEHAND_ENGINE.md`](docs/18_BROWSER_COMPUTER_USE_AND_CDP_STAGEHAND_ENGINE.md) | Browser Computer Use | Chrome DevTools Protocol (CDP), pruned accessibility trees, Stagehand `act`/`observe`/`extract`. |
-| [`19_STATE_GRAPH_ORCHESTRATION_AND_AGENT_HANDOFFS.md`](docs/19_STATE_GRAPH_ORCHESTRATION_AND_AGENT_HANDOFFS.md) | Graph Workflows | LangGraph cyclic StateGraphs, persistent checkpoints for time-travel, and agent handoffs. |
-| [`20_INTELLIGENT_MODEL_ROUTING_AND_FAILOVER_CIRCUITS.md`](docs/20_INTELLIGENT_MODEL_ROUTING_AND_FAILOVER_CIRCUITS.md) | Model Routing | LiteLLM / OpenRouter pre-flight intent classification, tiered pools, and circuit breakers. |
-| [`21_BYOK_LOCAL_MODELS_AND_OPEN_HARNESS_SYNTHESIS.md`](docs/21_BYOK_LOCAL_MODELS_AND_OPEN_HARNESS_SYNTHESIS.md) | BYOK & Local Models | Ollama/vLLM local inference, UI-TARS visual $(x,y)$ coordinate grounding, and Qwen XML tool adapter. |
+| **Modular Kernel & SDK** | **Implemented** | Strict boundary enforcement (`harness.sdk`), event bus, capability gates. |
+| **Universal BYOK Providers** | **Implemented** | Native streaming, tool calling, and prompt caching for OpenAI, Anthropic, Gemini, Ollama, and Mock. |
+| **5-Tier Prefix-Invariant Caching** | **Implemented** | Static, session, and turn stability layout delivering 90%+ cache hits on Anthropic and OpenAI. |
+| **Dual-Origin Web Studio** | **Implemented** | Port 8000 API, Port 8001 SOP preview iframe, token authentication, card event stream (`harness ui`). |
+| **Tirith Security Capsule & Jail** | **Implemented** | Path jail (Order 10), risk classification (Order 50), secret leak auditing and SSRF protection (Order 60). |
+| **Permission Modes State Machine** | **Implemented** | `plan`, `ask`, `allow`, and `bypass` execution modes with live interactive card approvals. |
+| **Git Worktree Isolation** | **Implemented** | Scratch branch isolation (`git worktree add -b`) preventing collisions across subagents. |
+| **SQLite FTS5 Memory** | **Implemented** | Microsecond $O(1)$ random access into dual-log JSONL transcripts across sessions. |
+| **Codebase Symbol Repo Map** | **Implemented** | AST symbol extraction and ranking packing large repos into compact prompt context. |
+| **Native macOS Computer Use** | **Implemented** | Native macOS Accessibility (`AXUIElement`) + ScreenCaptureKit screenshot verification. |
+| **Claude Code Shell Hooks Bridge** | **Implemented** | HookKit-conformant execution of Claude Code scripts on tool events with stdin JSON. |
+| **MCP Client & Server Bridges** | **Implemented** | Stdio JSON-RPC 2.0 MCP client (auto-discovering tools/resources) and stdio MCP server (`harness mcp`). |
+| **Agent Client Protocol (ACP)** | **Implemented** | Stdio server frontend for editor and IDE integration (`harness acp`). |
+| **Plugin Scaffolding & Doctor** | **Implemented** | `harness plugin new`, `harness plugin test`, and `harness plugin doctor` diagnostic tooling. |
+| **Multi-Agent Battle Arena** | *Experimental* | Competitive worktree evaluation quarantined in `harness/experimental/` pending `spawn_child`. |
+| **Hierarchical Spawn Ledger** | *Experimental* | Subagent spawn tracking quarantined in `harness/experimental/` awaiting subagent spawn tool. |
+| **Cyclic StateGraph Engine** | *Experimental* | State machine with rollback checkpointer quarantined in `harness/experimental/`. |
+| **Browser CDP Engine** | *Experimental* | Chrome DevTools Protocol engine quarantined in `harness/experimental/browser_cdp.py`. |
 
 ---
 
-## 4. Getting Started & Running the Harness
-
-Harness-Zero is implemented as a high-performance Python 3.11+ engine with zero external daemon bloat.
+## 3. Getting Started
 
 ### Installation
 
@@ -116,63 +91,83 @@ Harness-Zero is implemented as a high-performance Python 3.11+ engine with zero 
 git clone https://github.com/knarayanareddy/Harness-Zero.git
 cd Harness-Zero
 
-# Create virtual environment and install with uv
+# Create virtual environment and install in editable mode
 uv venv
 source .venv/bin/activate
 uv pip install -e ".[dev]"
 ```
 
-### Running Autonomous Turns
+### Running the Web Studio (`harness ui`)
+
+Launch the local Sovereign Agent Studio web interface with dual-origin sandbox isolation:
 
 ```bash
-# Run a single turn with your chosen model provider:
-harness run "Analyze repository structure and run test suite" --workspace . --provider mock
-
-# Use cloud BYOK (OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter):
-export ANTHROPIC_API_KEY="sk-ant-..."
-harness run "Refactor database migrations" --provider anthropic --model claude-3-5-sonnet-latest
-
-# Or run 100% offline via local Ollama / vLLM / MLX:
-harness run "Fix unit tests" --provider local --model qwen2.5-coder:32b
+harness ui --port 8000 --sandbox-port 8001
 ```
 
-### Interactive Pair-Programming TUI
+- **Authentication**: Generates a random cryptographic session token written to `.harness/daemon.json` (0600 permissions).
+- **Dual-Origin Security**: Core API and event bus stream on `http://127.0.0.1:8000`; untrusted HTML and SVG artifacts render inside a sandboxed iframe on `http://127.0.0.1:8001`, cryptographically preventing XSS prompt-injection attacks.
+- **Host Header Protection**: Blocks DNS rebinding attacks; add external origins via `--allow-host`.
 
-Start an interactive pair-programming session with full slash command support:
+### Running Interactive CLI Turns
 
 ```bash
+# Start an interactive pair-programming session:
 harness interactive
+
+# Run a single autonomous command:
+harness run "Audit repository dependencies and run tests" --workspace . --provider anthropic --model claude-3-7-sonnet
 ```
 
-Available slash commands within the session:
-* `/skills` - View all progressively discovered skills across Workspace, User, and Builtin tiers.
-* `/model <provider> <model>` - Switch active model dynamically mid-session.
-* `/search <query>` - Instant O(1) byte-offset search through conversation history via SQLite FTS5.
-* `/tasks` - Inspect running background commands and async workers.
-* `/status` - Display active session IDs, memory databases, and transcript logs.
-* `/help` - Show all interactive commands.
-* `/exit` - Terminate session cleanly.
-
-### Running the Daemon IPC Server
-
-Expose Harness-Zero over JSON-RPC 2.0 / REST API for web or external client connections:
+### Protocol Bridges
 
 ```bash
-harness daemon --port 8080 --host 127.0.0.1
+# Run stdio MCP Server (exposing Harness tools to external hosts):
+harness mcp
+
+# Run Agent Client Protocol (ACP) stdio server for IDEs:
+harness acp
 ```
 
-### Running the Test Suite
+### Managing & Testing Plugins
 
 ```bash
-pytest -v
+# Scaffold a new plugin:
+harness plugin new --kind context my_rules
+
+# Run conformance tests on a plugin:
+harness plugin test ./my_rules
+
+# Run conformance tests on all 35 builtin plugins:
+harness plugin test --all
+
+# Run diagnostic health checks on plugins:
+harness plugin doctor --all
 ```
-All 15 modular test suites verify:
-- Progressive skill discovery and YAML frontmatter parsing
-- Tiered `transcript.jsonl` logging and O(1) byte-offset seeking
-- SQLite FTS5 instant memory indexing and BM25 ranking
-- Safe shell execution with `PAGER=cat` and background transitions
-- Tool safety guardrails and destructive command regex gating
-- Aider search/replace surgical diff application
-- Strict 5-tier deterministic prefix-invariant prompt caching
-- End-to-end multi-turn reactive coordinator tool loops
-- Git worktree dynamic subagent sandbox lifecycle
+
+---
+
+## 4. Verification & Testing
+
+Harness-Zero uses hermetic, isolated test fixtures that never pollute `$HOME` or external environments:
+
+```bash
+# Run the complete test suite (56+ test files, 340+ tests):
+export HOME=$(mktemp -d) HARNESS_CONFIG_DIR=$HOME/.harness
+pytest -q
+
+# Run architectural boundary enforcement tests:
+pytest tests/kernel/test_import_boundaries.py tests/kernel/test_no_direct_subprocess.py tests/kernel/test_gate_invariants.py
+
+# Verify code formatting and linting:
+ruff check .
+```
+
+---
+
+## 5. Documentation Suite
+
+- [`docs/PLUGIN_CATALOG.md`](docs/PLUGIN_CATALOG.md): Complete catalog and specification of all 35 builtin plugins.
+- [`docs/PORTING_RECIPES.md`](docs/PORTING_RECIPES.md): Step-by-step developer guide and code recipes for authoring new plugins.
+- [`docs/architecture/CONTRACTS.md`](docs/architecture/CONTRACTS.md): Detailed specification of SDK protocols, domain types, and boundary invariants.
+- [`docs/`](docs/): Complete 22-document reverse-engineered architectural blueprint archive.
