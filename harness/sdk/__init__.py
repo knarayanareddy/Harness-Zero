@@ -41,6 +41,7 @@ from harness.sdk.errors import (
     SettingsValidationError,
     SpendCapExceeded,
     ToolInputError,
+    TurnInProgress,
 )
 from harness.sdk.events import KNOWN_EVENT_TYPES, Event
 from harness.sdk.events import schema as events_schema
@@ -103,6 +104,7 @@ __all__ = [
     "PluginLoadError",
     "IncompatiblePlugin",
     "SettingsValidationError",
+    "TurnInProgress",
     # Manifest
     "PluginManifest",
     # Core Types

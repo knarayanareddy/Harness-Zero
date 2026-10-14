@@ -98,3 +98,13 @@ class SettingsValidationError(HarnessError, ValueError):
     """Raised when a setting value fails schema validation or format requirements."""
     pass
 
+
+class TurnInProgress(HarnessError, RuntimeError):
+    """Raised when submit_turn is called while another turn is already executing in the same session."""
+
+    def __init__(self, session_id: str, message: str = ""):
+        super().__init__(message or f"Turn already in progress for session '{session_id}'")
+        self.session_id = session_id
+        self.status_code = 409
+
+
