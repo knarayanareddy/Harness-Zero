@@ -1,0 +1,8 @@
+[plugin]
+name = "policy-tirith"
+version = "1.0.0"
+api_version = "1"
+summary = "Tirith security capsule policy auditing secret leaks, SSRF network targets, and blast-radius commands"
+provides = ["policy"]
+capabilities = []
+entry = "harness.plugins.policy.tirith.plugin:TirithPolicyPlugin"
