@@ -17,23 +17,32 @@ export class SettingsPanel {
 
   async load() {
     try {
-      // Default schema definition covering core settings groups
-      this.schema = {
-        groups: [
-          'Models & Providers',
-          'Security & Sandboxing',
-          'Execution & Strategies',
-          'Economics & Spend',
-          'Secrets',
-        ],
-        properties: {
-          'kernel.provider.default': {
-            title: 'Default Provider',
-            type: 'string',
-            enum: ['openai_compat', 'anthropic', 'gemini', 'ollama', 'mock'],
-            default: 'openai_compat',
-            'x-ui': { group: 'Models & Providers', widget: 'select' },
-          },
+      try {
+        const remoteSchema = await this.api.command('settings.schema');
+        if (remoteSchema && remoteSchema.properties) {
+          this.schema = remoteSchema;
+        }
+      } catch (err) {
+        console.warn('[SettingsPanel] Remote schema fetch fallback:', err);
+      }
+
+      if (!this.schema) {
+        this.schema = {
+          groups: [
+            'Models & Providers',
+            'Security & Sandboxing',
+            'Execution & Strategies',
+            'Economics & Spend',
+            'Secrets',
+          ],
+          properties: {
+            'kernel.provider': {
+              title: 'Default Provider',
+              type: 'string',
+              enum: ['openai_compat', 'anthropic', 'gemini', 'ollama', 'mock'],
+              default: 'openai_compat',
+              'x-ui': { group: 'Models & Providers', widget: 'select' },
+            },
           'kernel.model.default': {
             title: 'Default Model',
             type: 'string',

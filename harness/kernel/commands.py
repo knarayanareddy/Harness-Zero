@@ -155,13 +155,98 @@ class Commands:
         return session.info.to_dict()
 
     async def settings_get(self, path: str, default: Any = None) -> Any:
-        """Reads namespaced setting value."""
+        """Reads namespaced setting value, or checks secret existence with has_secret."""
+        if path.startswith("has_secret."):
+            secret_key = path.split(".", 1)[1]
+            return self.secrets.has(secret_key)
+        if path.startswith("secrets.has."):
+            secret_key = path.split(".", 2)[2]
+            return self.secrets.has(secret_key)
         return self.settings.get(path, default)
 
     async def settings_set(self, path: str, value: Any) -> dict[str, Any]:
-        """Updates setting value under schema validation."""
+        """Updates setting value under schema validation, routing secrets to Secrets store."""
+        if path.startswith("secrets."):
+            secret_key = path.split(".", 1)[1]
+            self.secrets.set(secret_key, str(value))
+            return {"path": path, "status": "ok", "has": True}
         self.settings.set(path, value)
         return {"path": path, "value": value, "status": "ok"}
+
+    async def settings_schema(self) -> dict[str, Any]:
+        """Returns consolidated schema with x-ui groups and widgets (§11, WEB-05)."""
+        registered = self.settings.get_registered_schemas()
+        kernel_props = registered.get("kernel", {}).get("properties", {})
+        return {
+            "groups": [
+                "Models & Providers",
+                "Security & Sandboxing",
+                "Execution & Strategies",
+                "Economics & Spend",
+                "Secrets",
+            ],
+            "properties": {
+                "kernel.provider": {
+                    "title": "Default Provider",
+                    "type": "string",
+                    "enum": ["openai_compat", "anthropic", "gemini", "ollama", "mock"],
+                    "default": kernel_props.get("provider", {}).get("default", "openai_compat"),
+                    "x-ui": {"group": "Models & Providers", "widget": "select"},
+                },
+                "kernel.model": {
+                    "title": "Default Model",
+                    "type": "string",
+                    "default": kernel_props.get("model", {}).get("default", "gpt-4o"),
+                    "x-ui": {"group": "Models & Providers", "widget": "text"},
+                },
+                "kernel.strategy": {
+                    "title": "Turn Strategy",
+                    "type": "string",
+                    "enum": ["single_loop", "architect_editor"],
+                    "default": kernel_props.get("strategy", {}).get("default", "single_loop"),
+                    "x-ui": {"group": "Execution & Strategies", "widget": "select"},
+                },
+                "kernel.max_tool_iterations": {
+                    "title": "Max Tool Iterations",
+                    "type": "integer",
+                    "default": kernel_props.get("max_tool_iterations", {}).get("default", 20),
+                    "x-ui": {"group": "Execution & Strategies", "widget": "number"},
+                },
+                "kernel.security.spend_cap_usd": {
+                    "title": "Spend Cap (USD)",
+                    "type": "number",
+                    "default": 5.0,
+                    "minimum": 0.0,
+                    "x-ui": {"group": "Economics & Spend", "widget": "number"},
+                },
+                "kernel.security.jail_enabled": {
+                    "title": "Workspace Jail Enforcement",
+                    "type": "boolean",
+                    "default": True,
+                    "x-ui": {"group": "Security & Sandboxing", "widget": "boolean"},
+                },
+                "secrets.OPENAI_API_KEY": {
+                    "title": "OpenAI API Key",
+                    "type": "string",
+                    "x-ui": {"group": "Secrets", "widget": "secret"},
+                },
+                "secrets.ANTHROPIC_API_KEY": {
+                    "title": "Anthropic API Key",
+                    "type": "string",
+                    "x-ui": {"group": "Secrets", "widget": "secret"},
+                },
+                "secrets.GEMINI_API_KEY": {
+                    "title": "Gemini API Key",
+                    "type": "string",
+                    "x-ui": {"group": "Secrets", "widget": "secret"},
+                },
+                "secrets.TIRITH_API_KEY": {
+                    "title": "Tirith Security Key",
+                    "type": "string",
+                    "x-ui": {"group": "Secrets", "widget": "secret"},
+                },
+            },
+        }
 
     async def models_list(self) -> list[dict[str, Any]]:
         """Aggregates models supported across all registered providers."""
@@ -336,6 +421,7 @@ class Commands:
             "sessions.switch": self.sessions_switch,
             "settings.get": self.settings_get,
             "settings.set": self.settings_set,
+            "settings.schema": self.settings_schema,
             "models.list": self.models_list,
             "files.read": self.files_read,
             "files.write": self.files_write,

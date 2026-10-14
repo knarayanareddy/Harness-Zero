@@ -475,3 +475,70 @@ async def test_interactive_subscriber_flag(
         await server.stop()
 
 
+@pytest.mark.asyncio
+async def test_settings_schema_and_secret_masking(
+    commands: Commands, event_bus: EventBus, workspace_dir: Path
+):
+    server = HarnessWebServer(
+        commands=commands,
+        bus=event_bus,
+        host="127.0.0.1",
+        port=0,
+        sandbox_port=0,
+        workspace=workspace_dir,
+    )
+    await server.start()
+    base_url = f"http://127.0.0.1:{server.port}"
+
+    try:
+        async with httpx.AsyncClient() as client:
+            # 1. Fetch settings schema
+            res_schema = await client.post(
+                f"{base_url}/commands/settings.schema",
+                json={},
+                headers={"Authorization": f"Bearer {server.auth_token}"},
+            )
+            assert res_schema.status_code == 200
+            schema_data = res_schema.json()["result"]
+            assert "groups" in schema_data
+            assert "Models & Providers" in schema_data["groups"]
+            assert "Secrets" in schema_data["groups"]
+            assert "properties" in schema_data
+
+            # Check x-ui annotations
+            prop = schema_data["properties"]["kernel.provider"]
+            assert prop["x-ui"]["group"] == "Models & Providers"
+            assert prop["x-ui"]["widget"] == "select"
+
+            # 2. Secret masking test: set secret
+            res_set = await client.post(
+                f"{base_url}/commands/settings.set",
+                json={"path": "secrets.OPENAI_API_KEY", "value": "sk-super-secret-key-xyz"},
+                headers={"Authorization": f"Bearer {server.auth_token}"},
+            )
+            assert res_set.status_code == 200
+            set_result = res_set.json()["result"]
+            assert set_result["has"] is True
+            assert "sk-super-secret-key-xyz" not in json.dumps(set_result)
+
+            # 3. Query has_secret status
+            res_has = await client.post(
+                f"{base_url}/commands/settings.get",
+                json={"path": "has_secret.OPENAI_API_KEY"},
+                headers={"Authorization": f"Bearer {server.auth_token}"},
+            )
+            assert res_has.status_code == 200
+            assert res_has.json()["result"] is True
+
+            res_has_missing = await client.post(
+                f"{base_url}/commands/settings.get",
+                json={"path": "has_secret.NON_EXISTENT_KEY"},
+                headers={"Authorization": f"Bearer {server.auth_token}"},
+            )
+            assert res_has_missing.status_code == 200
+            assert res_has_missing.json()["result"] is False
+    finally:
+        await server.stop()
+
+
+
