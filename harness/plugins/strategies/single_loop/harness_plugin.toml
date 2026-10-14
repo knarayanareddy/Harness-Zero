@@ -1,0 +1,8 @@
+[plugin]
+name = "strategy-single-loop"
+version = "1.0.0"
+api_version = "1"
+summary = "Default single loop agent strategy with reactive background wakeups and STOP hook re-entry"
+provides = ["strategy"]
+capabilities = []
+entry = "harness.plugins.strategies.single_loop.plugin:SingleLoopStrategyPlugin"
