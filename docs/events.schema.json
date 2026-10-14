@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HarnessZeroEventEnvelope",
+  "type": "object",
+  "required": [
+    "type",
+    "id",
+    "ts",
+    "data"
+  ],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "approval.required",
+        "approval.resolved",
+        "compaction.completed",
+        "compaction.started",
+        "context.assembled",
+        "cost.updated",
+        "hook.fired",
+        "log",
+        "model.completed",
+        "model.notice",
+        "model.started",
+        "model.text.delta",
+        "model.thinking.delta",
+        "model.tool_call",
+        "plugin.error",
+        "plugin.loaded",
+        "session.started",
+        "session.switched",
+        "settings.changed",
+        "task.completed",
+        "task.started",
+        "tool.call",
+        "tool.decision",
+        "tool.output.delta",
+        "tool.result",
+        "turn.cancelled",
+        "turn.completed",
+        "turn.error",
+        "turn.started",
+        "ui.card"
+      ],
+      "description": "Event topic identifier"
+    },
+    "id": {
+      "type": "string",
+      "description": "Unique event identifier"
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp of event creation"
+    },
+    "session_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Session identifier if correlated"
+    },
+    "turn_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Turn identifier if correlated"
+    },
+    "data": {
+      "type": "object",
+      "description": "Event-specific payload"
+    }
+  }
+}

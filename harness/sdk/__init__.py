@@ -1,9 +1,35 @@
 """
 Harness-Zero Plugin & Kernel SDK.
-Universal contracts, domain types, error classes, and manifest definitions.
+Universal contracts, domain types, error classes, cards, events, and manifest definitions.
 """
 from __future__ import annotations
 
+from harness.sdk.cards import Card, fallback, validate_card
+from harness.sdk.context import (
+    HookContext,
+    KernelServices,
+    PluginContext,
+    PolicyContext,
+    SecretsView,
+    SettingsView,
+    ToolContext,
+    TurnContext,
+)
+from harness.sdk.contracts import (
+    ArtifactStore,
+    ContextSource,
+    CostLedger,
+    Executor,
+    Hook,
+    Plugin,
+    Policy,
+    Process,
+    Provider,
+    SearchIndex,
+    Strategy,
+    ToolHandler,
+    TranscriptStore,
+)
 from harness.sdk.errors import (
     ApprovalDenied,
     CapabilityDenied,
@@ -15,6 +41,8 @@ from harness.sdk.errors import (
     SpendCapExceeded,
     ToolInputError,
 )
+from harness.sdk.events import KNOWN_EVENT_TYPES, Event
+from harness.sdk.events import schema as events_schema
 from harness.sdk.manifest import PluginManifest
 from harness.sdk.types import (
     RISK_ORDER,
@@ -112,4 +140,35 @@ __all__ = [
     "HookOutcome",
     "Capability",
     "TurnResult",
+    # Contracts
+    "Plugin",
+    "Provider",
+    "ToolHandler",
+    "Policy",
+    "Executor",
+    "Process",
+    "ContextSource",
+    "TranscriptStore",
+    "SearchIndex",
+    "ArtifactStore",
+    "CostLedger",
+    "Strategy",
+    "Hook",
+    # Context
+    "SettingsView",
+    "SecretsView",
+    "PluginContext",
+    "ToolContext",
+    "PolicyContext",
+    "TurnContext",
+    "HookContext",
+    "KernelServices",
+    # Cards
+    "Card",
+    "validate_card",
+    "fallback",
+    # Events
+    "Event",
+    "KNOWN_EVENT_TYPES",
+    "events_schema",
 ]

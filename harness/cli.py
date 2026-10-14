@@ -320,5 +320,18 @@ async def _run_ui(
         await sandbox_runner.cleanup()
 
 
+@main.group()
+def events():
+    """Event bus schemas and inspection."""
+    pass
+
+
+@events.command(name="schema")
+def events_schema():
+    """Output JSON schema for Harness-Zero event envelopes."""
+    from harness.sdk.events import schema
+    click.echo(json.dumps(schema(), indent=2))
+
+
 if __name__ == "__main__":
     main()
