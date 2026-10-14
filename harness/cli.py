@@ -5,6 +5,9 @@ Supports interactive pair programming, one-shot turns, slash commands, and daemo
 from __future__ import annotations
 
 import asyncio
+import json
+import os
+import sys
 from pathlib import Path
 
 import click
@@ -195,41 +198,66 @@ async def _run_interactive(workspace: Path, initial_provider: str, initial_model
 @click.option("--port", "-p", default=8000, help="HTTP port")
 @click.option("--sandbox-port", "-s", default=8001, help="Sandbox port")
 @click.option("--host", "-h", default="127.0.0.1", help="HTTP host")
-def daemon(workspace: str, port: int, sandbox_port: int, host: str):
+@click.option("--allow-host", "-a", multiple=True, help="Allowed Host header hostnames (repeatable)")
+def daemon(workspace: str, port: int, sandbox_port: int, host: str, allow_host: tuple[str, ...]):
     """Run the background daemon IPC server."""
-    asyncio.run(_run_daemon(Path(workspace), host, port, sandbox_port))
+    asyncio.run(_run_daemon(Path(workspace), host, port, sandbox_port, list(allow_host)))
 
 
-async def _run_daemon(workspace: Path, host: str, port: int, sandbox_port: int = 8001):
+async def _run_daemon(
+    workspace: Path,
+    host: str,
+    port: int,
+    sandbox_port: int = 8001,
+    allowed_hosts: list[str] | None = None,
+):
     coordinator = AgentCoordinator(workspace=workspace)
-    d = HarnessDaemon(coordinator=coordinator, host=host, port=port, sandbox_port=sandbox_port)
-    console.print(f"[bold green]Starting Harness-Zero daemon on http://{host}:{port}...[/bold green]")
+    d = HarnessDaemon(
+        coordinator=coordinator,
+        host=host,
+        port=port,
+        sandbox_port=sandbox_port,
+        allowed_hosts=allowed_hosts,
+    )
     api_runner, sandbox_runner = await d.start()
+    console.print(f"[bold green]Starting Harness-Zero daemon on http://{host}:{d.port}...[/bold green]")
     try:
         while True:
             await asyncio.sleep(3600)
     except (KeyboardInterrupt, asyncio.CancelledError):
         console.print("[yellow]Stopping daemon...[/yellow]")
+        d.cleanup_daemon_json()
         await api_runner.cleanup()
         await sandbox_runner.cleanup()
 
 
-
 @main.command()
 @click.option("--workspace", "-w", default=".", help="Workspace path")
-@click.option("--port", "-p", default=8000, help="HTTP port")
-@click.option("--host", "-h", default="127.0.0.1", help="HTTP host")
-def url(workspace: str, port: int, host: str):
-    """Generate a single-use 3-minute login link (Claude Cowork pattern)."""
-    coordinator = AgentCoordinator(workspace=Path(workspace))
-    d = HarnessDaemon(coordinator=coordinator, host=host, port=port)
-    login_url = d.generate_login_url()
-    console.print(Panel(
-        f"[bold green]Single-Use Remote Login Link:[/bold green]\n{login_url}\n\n"
-        "[yellow]Link expires in 3 minutes. Paste into browser to connect over SSH / remote session.[/yellow]",
-        title="[bold cyan]Harness-Zero Remote Access[/bold cyan]",
-        border_style="green",
-    ))
+def url(workspace: str):
+    """Print the daemon URL with embedded auth token from .harness/daemon.json."""
+    daemon_file = Path(workspace).resolve() / ".harness" / "daemon.json"
+    if not daemon_file.exists():
+        console.print("[bold red]Error: Daemon is not running or .harness/daemon.json not found.[/bold red]")
+        sys.exit(1)
+    try:
+        data = json.loads(daemon_file.read_text(encoding="utf-8"))
+        port = data.get("port", 8000)
+        token = data.get("token", "")
+        pid = data.get("pid")
+        if pid:
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                console.print(f"[yellow]Warning: Daemon PID {pid} is not running.[/yellow]")
+        login_url = f"http://127.0.0.1:{port}/?token={token}"
+        console.print(Panel(
+            f"[bold green]Harness-Zero Web UI URL:[/bold green]\n{login_url}\n",
+            title="[bold cyan]Harness-Zero Remote Access[/bold cyan]",
+            border_style="green",
+        ))
+    except Exception as e:
+        console.print(f"[bold red]Failed to read daemon metadata: {e}[/bold red]")
+        sys.exit(1)
 
 
 @main.command()
@@ -237,32 +265,47 @@ def url(workspace: str, port: int, host: str):
 @click.option("--port", "-p", default=8000, help="HTTP port")
 @click.option("--sandbox-port", "-s", default=8001, help="Sandbox port")
 @click.option("--host", "-h", default="127.0.0.1", help="HTTP host")
+@click.option("--allow-host", "-a", multiple=True, help="Allowed Host header hostnames (repeatable)")
 @click.option("--no-open", is_flag=True, help="Don't open browser automatically")
-def ui(workspace: str, port: int, sandbox_port: int, host: str, no_open: bool):
+def ui(workspace: str, port: int, sandbox_port: int, host: str, allow_host: tuple[str, ...], no_open: bool):
     """Launch the full-featured Sovereign Agent Studio Web UI."""
-    asyncio.run(_run_ui(Path(workspace), host, port, sandbox_port, not no_open))
+    asyncio.run(_run_ui(Path(workspace), host, port, sandbox_port, list(allow_host), not no_open))
 
 
-async def _run_ui(workspace: Path, host: str, port: int, sandbox_port: int, open_browser: bool):
+async def _run_ui(
+    workspace: Path,
+    host: str,
+    port: int,
+    sandbox_port: int,
+    allowed_hosts: list[str] | None,
+    open_browser: bool,
+):
     import webbrowser
     coordinator = AgentCoordinator(workspace=workspace)
-    d = HarnessDaemon(coordinator=coordinator, host=host, port=port, sandbox_port=sandbox_port)
+    d = HarnessDaemon(
+        coordinator=coordinator,
+        host=host,
+        port=port,
+        sandbox_port=sandbox_port,
+        allowed_hosts=allowed_hosts,
+    )
+    api_runner, sandbox_runner = await d.start()
     console.print(Panel(
         f"[bold green]Harness-Zero Sovereign Agent Studio[/bold green]\n\n"
-        f"• Core UI & API: [bold cyan]http://{host}:{port}/[/bold cyan]\n"
-        f"• SOP Preview Sandbox: [bold magenta]http://{host}:{sandbox_port}/[/bold magenta]\n"
+        f"• Core UI & API: [bold cyan]http://{host}:{d.port}/[/bold cyan]\n"
+        f"• SOP Preview Sandbox: [bold magenta]http://{host}:{d.sandbox_port}/[/bold magenta]\n"
         f"• Workspace: [yellow]{coordinator.workspace}[/yellow]\n",
         title="[bold green]UI Online[/bold green]",
         border_style="green",
     ))
-    api_runner, sandbox_runner = await d.start()
     if open_browser:
-        webbrowser.open(f"http://{host}:{port}/")
+        webbrowser.open(f"http://{host}:{d.port}/")
     try:
         while True:
             await asyncio.sleep(3600)
     except (KeyboardInterrupt, asyncio.CancelledError):
         console.print("[yellow]Stopping UI Studio...[/yellow]")
+        d.cleanup_daemon_json()
         await api_runner.cleanup()
         await sandbox_runner.cleanup()
 

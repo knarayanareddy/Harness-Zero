@@ -7,9 +7,14 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hmac
 import json
 import logging
+import os
+import secrets
+import time
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -28,31 +33,140 @@ class HarnessDaemon:
         port: int = 8000,
         sandbox_port: int = 8001,
         socket_path: Path | None = None,
+        auth_token: str | None = None,
+        allowed_hosts: list[str] | None = None,
     ):
         self.coordinator = coordinator
         self.host = host
         self.port = port
         self.sandbox_port = sandbox_port
         self.socket_path = socket_path
+        self.auth_token = auth_token or os.environ.get("HARNESS_AUTH_TOKEN") or secrets.token_urlsafe(32)
+        self.allowed_hosts = set(allowed_hosts or [])
 
         self._login_tokens: dict[str, float] = {}
         self._active_turn_tasks: dict[str, asyncio.Task] = {}
 
-        # Dual-Port Isolation Applications
-        self.app = web.Application()
-        self.sandbox_app = web.Application()
+        # Dual-Port Isolation Applications with Security Middlewares
+        self.app = web.Application(
+            middlewares=[self._host_guard, self._auth_guard],
+            client_max_size=25 * 1024 * 1024,
+        )
+        self.sandbox_app = web.Application(
+            middlewares=[self._host_guard],
+        )
 
         self._setup_api_routes()
         self._setup_sandbox_routes()
+
+    @web.middleware
+    async def _host_guard(self, request: web.Request, handler: Callable) -> web.Response:
+        host_header = request.headers.get("Host", "")
+        if not host_header:
+            return web.json_response({"error": "Missing Host header"}, status=421)
+        if host_header.startswith("["):
+            hostname = host_header.split("]")[0] + "]"
+        else:
+            hostname = host_header.split(":")[0].strip().lower()
+        allowed = {"127.0.0.1", "localhost", "::1", "[::1]", self.host.lower()} | {h.lower() for h in self.allowed_hosts}
+        if hostname not in allowed:
+            return web.json_response({"error": f"Misdirected Request: host '{host_header}' not allowed"}, status=421)
+        return await handler(request)
+
+    @web.middleware
+    async def _auth_guard(self, request: web.Request, handler: Callable) -> web.Response:
+        path = request.path
+        method = request.method
+
+        # Public endpoints (no token required)
+        is_public = (
+            (method == "GET" and path in ("/", "/ui", "/health", "/favicon.ico"))
+            or path.startswith("/assets/")
+        )
+
+        if not is_public:
+            # 1. Bearer / X-Harness-Token check
+            token = request.headers.get("X-Harness-Token")
+            if not token:
+                auth_header = request.headers.get("Authorization", "")
+                if auth_header.startswith("Bearer "):
+                    token = auth_header[7:].strip()
+
+            if not token or not hmac.compare_digest(token, self.auth_token):
+                return web.json_response({"error": "unauthorized"}, status=401)
+
+            # 2. Content-Type and CSRF / Origin checks for mutating requests
+            if method not in ("GET", "HEAD", "OPTIONS"):
+                ct = request.headers.get("Content-Type", "")
+                is_empty_body = (request.content_length == 0 or not request.can_read_body) and not ct
+                if not is_empty_body:
+                    if path == "/media/upload":
+                        if not (ct.startswith("multipart/form-data") or ct.startswith("application/json")):
+                            return web.json_response(
+                                {"error": "Unsupported Media Type: expected multipart/form-data or application/json"},
+                                status=415,
+                            )
+                    else:
+                        if not ct.startswith("application/json"):
+                            return web.json_response(
+                                {"error": "Unsupported Media Type: expected application/json"},
+                                status=415,
+                            )
+
+                origin = request.headers.get("Origin")
+                if origin:
+                    allowed_origins = {
+                        f"http://127.0.0.1:{self.port}",
+                        f"http://localhost:{self.port}",
+                    }
+                    if self.port == 0:
+                        allowed_origins.add("http://127.0.0.1")
+                        allowed_origins.add("http://localhost")
+                    origin_allowed = (origin in allowed_origins) or (
+                        self.port == 0 and (origin.startswith("http://127.0.0.1:") or origin.startswith("http://localhost:"))
+                    )
+                    if not origin_allowed:
+                        return web.json_response({"error": "Cross-Origin forbidden"}, status=403)
+
+                fetch_site = request.headers.get("Sec-Fetch-Site")
+                if fetch_site == "cross-site":
+                    return web.json_response({"error": "Cross-Site requests forbidden"}, status=403)
+
+        return await handler(request)
+
+    def write_daemon_json(self) -> Path:
+        harness_dir = self.coordinator.workspace / ".harness"
+        harness_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(harness_dir, 0o700)
+        except Exception:
+            pass
+        daemon_file = harness_dir / "daemon.json"
+        data = {
+            "port": self.port,
+            "sandbox_port": self.sandbox_port,
+            "token": self.auth_token,
+            "pid": os.getpid(),
+        }
+        content = json.dumps(data, indent=2).encode("utf-8")
+        fd = os.open(daemon_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with open(fd, "wb") as f:
+            f.write(content)
+        return daemon_file
+
+    def cleanup_daemon_json(self) -> None:
+        daemon_file = self.coordinator.workspace / ".harness" / "daemon.json"
+        try:
+            if daemon_file.exists():
+                daemon_file.unlink()
+        except Exception:
+            pass
 
     def generate_login_url(self) -> str:
         """
         Generates a cryptographically random, single-use 3-minute login link.
         Synthesized from Claude Cowork's 'claude-science url' remote SSH access pattern.
         """
-        import secrets
-        import time
-
         token = secrets.token_urlsafe(32)
         # Valid for 180 seconds (3 minutes)
         self._login_tokens[token] = time.time() + 180.0
@@ -123,9 +237,28 @@ class HarnessDaemon:
 
     async def _handle_index(self, request: web.Request) -> web.Response:
         web_file = Path(__file__).resolve().parent.parent / "web" / "index.html"
-        if web_file.exists():
-            return web.Response(text=web_file.read_text(encoding="utf-8"), content_type="text/html")
-        return web.Response(text="<h1>Harness-Zero Web UI not found</h1>", content_type="text/html", status=404)
+        if not web_file.exists():
+            return web.Response(text="<h1>Harness-Zero Web UI not found</h1>", content_type="text/html", status=404)
+        html = web_file.read_text(encoding="utf-8")
+        html = html.replace("__HARNESS_TOKEN__", self.auth_token)
+        html = html.replace("__SANDBOX_PORT__", str(self.sandbox_port))
+
+        headers = {
+            "Content-Security-Policy": (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: blob:; "
+                "connect-src 'self'; "
+                f"frame-src http://127.0.0.1:{self.sandbox_port} http://localhost:{self.sandbox_port}; "
+                "frame-ancestors 'none'; "
+                "base-uri 'none'; "
+                "form-action 'none'"
+            ),
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "no-referrer",
+        }
+        return web.Response(text=html, content_type="text/html", headers=headers)
 
     async def _handle_artifacts_list(self, request: web.Request) -> web.Response:
         manifest = self.coordinator.artifacts.load_manifest()
@@ -638,7 +771,18 @@ class HarnessDaemon:
     <div id="artifacts-list">{items_html}</div>
 </body>
 </html>"""
-        return web.Response(text=page_html, content_type="text/html")
+        sandbox_headers = {
+            "Content-Security-Policy": (
+                "default-src 'none'; "
+                "script-src 'unsafe-inline'; "
+                "style-src 'unsafe-inline'; "
+                "img-src data: blob:; "
+                "connect-src 'none'; "
+                f"frame-ancestors http://127.0.0.1:{self.port} http://localhost:{self.port}"
+            ),
+            "X-Content-Type-Options": "nosniff",
+        }
+        return web.Response(text=page_html, content_type="text/html", headers=sandbox_headers)
 
     async def _handle_health(self, request: web.Request) -> web.Response:
         return web.json_response({
@@ -646,6 +790,7 @@ class HarnessDaemon:
             "workspace": str(self.coordinator.workspace),
             "session_id": self.coordinator.session_id,
             "skills_count": len(self.coordinator.skills.skills),
+            "port": self.port,
             "sandbox_port": self.sandbox_port,
         })
 
@@ -658,12 +803,23 @@ class HarnessDaemon:
         if content is None:
             return web.Response(text="Artifact not found", status=404)
 
+        headers = {
+            "Content-Security-Policy": (
+                "default-src 'none'; "
+                "script-src 'unsafe-inline'; "
+                "style-src 'unsafe-inline'; "
+                "img-src data: blob:; "
+                "connect-src 'none'; "
+                f"frame-ancestors http://127.0.0.1:{self.port} http://localhost:{self.port}"
+            ),
+            "X-Content-Type-Options": "nosniff",
+        }
         if filename.endswith(".html"):
             sandboxed_html = self.coordinator.artifacts.render_sandboxed_html(content, title=filename)
-            return web.Response(text=sandboxed_html, content_type="text/html")
+            return web.Response(text=sandboxed_html, content_type="text/html", headers=headers)
         elif filename.endswith(".json"):
-            return web.Response(text=content, content_type="application/json")
-        return web.Response(text=content, content_type="text/plain")
+            return web.Response(text=content, content_type="application/json", headers=headers)
+        return web.Response(text=content, content_type="text/plain", headers=headers)
 
     async def _handle_skills(self, request: web.Request) -> web.Response:
         skills_data = [
@@ -917,6 +1073,13 @@ class HarnessDaemon:
         await sandbox_runner.setup()
         sandbox_site = web.TCPSite(sandbox_runner, host=self.host, port=self.sandbox_port)
         await sandbox_site.start()
+
+        if api_runner.addresses and len(api_runner.addresses[0]) >= 2:
+            self.port = api_runner.addresses[0][1]
+        if sandbox_runner.addresses and len(sandbox_runner.addresses[0]) >= 2:
+            self.sandbox_port = sandbox_runner.addresses[0][1]
+
+        self.write_daemon_json()
 
         logger.info(f"Harness-Zero Core API online at http://{self.host}:{self.port}")
         logger.info(f"Harness-Zero SOP Sandbox Preview online at http://{self.host}:{self.sandbox_port}")

@@ -29,7 +29,7 @@ async def test_ui_and_studio_endpoints(tmp_path: Path):
     base_url = f"http://127.0.0.1:{port}"
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(headers={"X-Harness-Token": daemon.auth_token}) as client:
             # 1. Test Web UI index.html at GET / and GET /ui
             res = await client.get(f"{base_url}/")
             assert res.status_code == 200

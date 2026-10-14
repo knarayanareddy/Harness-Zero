@@ -45,9 +45,16 @@ async def test_daemon_dual_port_endpoints(tmp_path: Path):
             assert res_api.status_code == 200
             assert res_api.json()["status"] == "online"
 
-            # 2. JSON-RPC Call
+            # 2. JSON-RPC Call (unauthenticated -> 401, authenticated -> 200)
             rpc_payload = {"jsonrpc": "2.0", "method": "turn.submit", "params": {"prompt": "Hello"}, "id": 1}
-            res_rpc = await client.post(f"http://127.0.0.1:{api_port}/rpc", json=rpc_payload)
+            res_unauth = await client.post(f"http://127.0.0.1:{api_port}/rpc", json=rpc_payload)
+            assert res_unauth.status_code == 401
+
+            res_rpc = await client.post(
+                f"http://127.0.0.1:{api_port}/rpc",
+                json=rpc_payload,
+                headers={"X-Harness-Token": daemon.auth_token},
+            )
             assert res_rpc.status_code == 200
             assert "result" in res_rpc.json()
 

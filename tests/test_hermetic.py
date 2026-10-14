@@ -37,6 +37,7 @@ async def test_no_home_writes(tmp_path: Path):
                     "system": {"device_name": "test-box"},
                     "time_focus": {"focus_interval_minutes": 25},
                 },
+                headers={"X-Harness-Token": daemon.auth_token},
             )
             assert res.status_code == 200
             assert not real_home_harness.exists()

@@ -4,12 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>Harness-Zero | Sovereign Agent Studio</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <meta name="harness-token" content="__HARNESS_TOKEN__">
+  <meta name="harness-sandbox-port" content="__SANDBOX_PORT__">
   <link rel="stylesheet" href="/assets/jetbox.css">
   <link rel="stylesheet" href="/assets/compiled_tailwind.css">
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="/assets/marked.min.js"></script>
+  <script src="/assets/purify.min.js"></script>
   <style>
     :root {
       --vscode-editor-background: #1e1e1e;
@@ -2516,6 +2516,52 @@
 
   <script src="/assets/prism_bundle.js"></script>
   <script>
+    // Transport Security: Embedded token, URL token & CSRF injection
+    const _urlParams = new URLSearchParams(window.location.search);
+    const _urlToken = _urlParams.get('token');
+    const _metaToken = document.querySelector('meta[name="harness-token"]')?.getAttribute('content') || '';
+    const HARNESS_TOKEN = (_urlToken && !_urlToken.startsWith('__'))
+      ? _urlToken
+      : ((_metaToken && !_metaToken.startsWith('__')) ? _metaToken : (sessionStorage.getItem('harness_token') || ''));
+    if (_urlToken) {
+      try {
+        sessionStorage.setItem('harness_token', _urlToken);
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } catch (e) {}
+    }
+    const HARNESS_SANDBOX_PORT = document.querySelector('meta[name="harness-sandbox-port"]')?.getAttribute('content') || '';
+
+    const _originalFetch = window.fetch;
+    window.fetch = function(url, options = {}) {
+      options = options || {};
+      options.headers = options.headers || {};
+      if (options.headers instanceof Headers) {
+        if (!options.headers.has('X-Harness-Token') && HARNESS_TOKEN && !HARNESS_TOKEN.startsWith('__')) {
+          options.headers.set('X-Harness-Token', HARNESS_TOKEN);
+        }
+      } else {
+        if (!options.headers['X-Harness-Token'] && HARNESS_TOKEN && !HARNESS_TOKEN.startsWith('__')) {
+          options.headers['X-Harness-Token'] = HARNESS_TOKEN;
+        }
+      }
+      return _originalFetch(url, options);
+    };
+
+    // SEC-04: Sanitized Markdown rendering via DOMPurify
+    function renderMarkdown(md) {
+      if (!md) return '';
+      const parsed = typeof marked !== 'undefined' ? marked.parse(md) : md;
+      if (typeof DOMPurify !== 'undefined') {
+        return DOMPurify.sanitize(parsed, {
+          USE_PROFILES: { html: true },
+          FORBID_TAGS: ["style", "iframe", "object", "embed", "form", "input", "button", "svg", "math"],
+          FORBID_ATTR: ["style"],
+          ALLOW_UNKNOWN_PROTOCOLS: false
+        });
+      }
+      return parsed;
+    }
+
     let currentStudioTab = 'artifact';
     let latestArtifactName = '';
     let currentOpenFilePath = '';
@@ -2746,7 +2792,7 @@
                     `;
                   } else if (evt.type === 'text_delta') {
                     proseText += evt.delta;
-                    proseArea.innerHTML = marked.parse(proseText);
+                    proseArea.innerHTML = renderMarkdown(proseText);
                     document.getElementById('timeline').scrollTop = document.getElementById('timeline').scrollHeight;
                   } else if (evt.type === 'tool_call') {
                     toolCalls.push(evt);
@@ -2903,7 +2949,7 @@
       }
 
       // 3. Formatted Markdown Prose
-      html += `<div class="markdown-body">${marked.parse(outputText)}</div>`;
+      html += `<div class="markdown-body">${renderMarkdown(outputText)}</div>`;
 
       row.innerHTML = html;
       document.getElementById('timeline').scrollTop = document.getElementById('timeline').scrollHeight;
@@ -2941,9 +2987,17 @@
           document.getElementById('banner-artifact-desc').textContent = item.summary || 'Architecture plan generated.';
           document.getElementById('tab-artifact-label').textContent = latestArtifactName;
 
-          const contentRes = await fetch(`/artifacts/${latestArtifactName}`);
+          const contentRes = await fetch(`/artifacts/${encodeURIComponent(latestArtifactName)}`);
           const text = await contentRes.text();
-          document.getElementById('studio-content-area').innerHTML = marked.parse(text);
+          if (latestArtifactName.endsWith('.html')) {
+            const sandboxPort = (HARNESS_SANDBOX_PORT && !HARNESS_SANDBOX_PORT.startsWith('__'))
+              ? HARNESS_SANDBOX_PORT
+              : (window.location.port ? parseInt(window.location.port, 10) + 1 : 8001);
+            const sandboxUrl = `${window.location.protocol}//${window.location.hostname}:${sandboxPort}/artifacts/${encodeURIComponent(latestArtifactName)}`;
+            document.getElementById('studio-content-area').innerHTML = `<iframe src="${sandboxUrl}" sandbox="allow-scripts" style="width:100%; height:100%; min-height:500px; border:none; background:#ffffff; border-radius:4px;"></iframe>`;
+          } else {
+            document.getElementById('studio-content-area').innerHTML = renderMarkdown(text);
+          }
 
           if (window.Prism) window.Prism.highlightAllUnder(document.getElementById('studio-content-area'));
         }
@@ -3568,7 +3622,7 @@
             <h2 style="font-size:16px; color:#f4f4f5; margin:0 0 6px 0;">Playbook: <code style="color:#38bdf8;">${escapeHtml(name)}</code></h2>
           </div>
           <div class="markdown-body">
-            ${marked.parse(data.playbook || 'No playbook markdown found.')}
+            ${renderMarkdown(data.playbook || 'No playbook markdown found.')}
           </div>
         `;
       } catch (err) {
