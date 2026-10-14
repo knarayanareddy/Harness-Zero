@@ -1,0 +1,8 @@
+[plugin]
+name = "tool-skills"
+version = "1.0.0"
+api_version = "1"
+summary = "Tool to inspect progressive skill playbooks on demand"
+provides = ["tool"]
+capabilities = []
+entry = "harness.plugins.tools.skills.plugin:SkillsToolPlugin"

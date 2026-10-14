@@ -1,0 +1,8 @@
+[plugin]
+name = "context-skills-catalog"
+version = "1.0.0"
+api_version = "1"
+summary = "Progressive skills catalog context source for prompt assembly"
+provides = ["context"]
+capabilities = []
+entry = "harness.plugins.context.skills_catalog.plugin:SkillsCatalogPlugin"
