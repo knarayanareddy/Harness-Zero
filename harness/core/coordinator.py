@@ -28,7 +28,7 @@ from harness.kernel.validators import validate_session_id
 from harness.memory.fts5_index import FTS5MemoryIndex
 from harness.models.circuits import IntelligentModelRouter
 from harness.models.prefix_cache import PromptCacheBuilder, PromptTiers
-from harness.models.router import ModelRouter
+from harness.models.router import ModelRouter, ProviderError
 from harness.sandboxing.diff_applier import DiffApplier
 from harness.sandboxing.executor import BackgroundTask, CommandExecutor
 from harness.sandboxing.guardrails import RiskLevel, SecurityPolicy
@@ -139,6 +139,30 @@ class AgentCoordinator:
 Operate with precision, inspect files before modifying them, use surgical search/replace edits,
 and verify your work with test runs.
 """.strip()
+
+        # Ensure .harness is excluded in git repository
+        self._ensure_git_exclude()
+
+    def _ensure_git_exclude(self) -> None:
+        """Idempotently appends /.harness/ to .git/info/exclude if git repo exists."""
+        try:
+            git_dir = self.workspace / ".git"
+            if not git_dir.is_dir():
+                return
+            info_dir = git_dir / "info"
+            info_dir.mkdir(parents=True, exist_ok=True)
+            exclude_file = info_dir / "exclude"
+            existing = ""
+            if exclude_file.exists():
+                existing = exclude_file.read_text(encoding="utf-8")
+            lines = [line.strip() for line in existing.splitlines()]
+            if "/.harness/" not in lines and ".harness/" not in lines and ".harness" not in lines:
+                with open(exclude_file, "a", encoding="utf-8") as f:
+                    if existing and not existing.endswith("\n"):
+                        f.write("\n")
+                    f.write("/.harness/\n")
+        except Exception:
+            pass
 
     def list_sessions(self) -> list[dict[str, Any]]:
         """Scans workspace sessions directory and returns historical sessions metadata."""
@@ -430,13 +454,13 @@ and verify your work with test runs.
 
             # Determine target provider & model
             endpoint = None
-            if self.router._mock_responses:
+            if provider:
+                target_provider = provider
+                target_model = model or ("mock-model" if provider == "mock" else "default")
+            elif self.router._mock_responses:
                 target_provider = "mock"
                 target_model = "mock-model"
-            elif provider and provider != "mock":
-                target_provider = provider
-                target_model = model or "default"
-            elif self.router.default_provider != "mock":
+            elif self.router.default_provider:
                 target_provider = self.router.default_provider
                 target_model = self.router.default_model
             else:
@@ -453,10 +477,33 @@ and verify your work with test runs.
                 )
                 if endpoint:
                     endpoint.record_success()
+            except ProviderError as e:
+                err_msg = f"Provider Error ({e.provider}/{e.model}): {e.message}"
+                self.transcripts.append_step(
+                    source=StepSource.SYSTEM,
+                    step_type=StepType.SYSTEM_NOTIFICATION,
+                    content=err_msg,
+                )
+                return TurnResult(
+                    output=err_msg,
+                    session_id=self.session_id,
+                    error=str(e),
+                )
             except Exception as e:
                 if endpoint:
                     endpoint.record_failure()
-                raise e
+                err_msg = f"Turn execution error: {e}"
+                self.transcripts.append_step(
+                    source=StepSource.SYSTEM,
+                    step_type=StepType.SYSTEM_NOTIFICATION,
+                    content=err_msg,
+                )
+                return TurnResult(
+                    output=err_msg,
+                    session_id=self.session_id,
+                    error=str(e),
+                )
+
 
             # Log Model Response
             serialized_tool_calls = [tc.to_dict() for tc in response.tool_calls]

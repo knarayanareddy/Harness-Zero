@@ -60,7 +60,7 @@ class ArchitectEditorLoop:
         target_files: list[Path],
         test_command: str | None = None,
         max_retries: int = 3,
-        auto_commit: bool = True,
+        auto_commit: bool = False,
     ) -> ArchitectEditorResult:
         """
         Step 1: Architect Model formulates design plan.
@@ -139,8 +139,8 @@ Files:
                     EditIteration(attempt, diff_text, applied_any, 0, "No test command specified.")
                 )
                 commit_sha = None
-                if auto_commit:
-                    commit_sha = self._git_commit(f"refactor: {task_prompt[:50]}")
+                if auto_commit and applied_any:
+                    commit_sha = self._git_commit(f"refactor: {task_prompt[:50]}", files=target_files)
                 return ArchitectEditorResult(
                     success=applied_any,
                     plan=plan,
@@ -164,8 +164,8 @@ Files:
 
                 # Git Auto-Commit
                 commit_sha = None
-                if auto_commit:
-                    commit_sha = self._git_commit(f"refactor: {task_prompt[:50]}")
+                if auto_commit and applied_any:
+                    commit_sha = self._git_commit(f"refactor: {task_prompt[:50]}", files=target_files)
 
                 return ArchitectEditorResult(
                     success=True,
@@ -188,11 +188,43 @@ Files:
             final_message=f"Failed to pass tests after {max_retries} attempts.",
         )
 
-    def _git_commit(self, message: str) -> str | None:
+    def _git_commit(self, message: str, files: list[Path] | None = None) -> str | None:
+        if not files:
+            return None
         try:
-            subprocess.run(["git", "-C", str(self.workspace_root), "add", "-A"], capture_output=True, check=True)
-            subprocess.run(["git", "-C", str(self.workspace_root), "commit", "-m", message], capture_output=True, text=True, check=True)
-            sha_res = subprocess.run(["git", "-C", str(self.workspace_root), "rev-parse", "HEAD"], capture_output=True, text=True, check=True)
+            # Check for pre-existing staged changes
+            st_res = subprocess.run(
+                ["git", "-C", str(self.workspace_root), "diff", "--cached", "--name-only"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            if st_res.stdout.strip():
+                logger.warning("[Architect/Editor] Git index not clean (pre-existing staged changes). Refusing commit.")
+                return None
+
+            file_args = [str(p.resolve()) for p in files if p.exists()]
+            if not file_args:
+                return None
+
+            subprocess.run(
+                ["git", "-C", str(self.workspace_root), "add", "--"] + file_args,
+                capture_output=True,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(self.workspace_root), "commit", "-m", message],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            sha_res = subprocess.run(
+                ["git", "-C", str(self.workspace_root), "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
             return sha_res.stdout.strip()
-        except Exception:
+        except Exception as e:
+            logger.warning(f"[Architect/Editor] Git commit failed: {e}")
             return None

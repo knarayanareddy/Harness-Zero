@@ -36,15 +36,20 @@ def main(ctx: click.Context):
 @main.command()
 @click.argument("prompt")
 @click.option("--workspace", "-w", default=".", help="Workspace path")
-@click.option("--provider", "-p", default="mock", help="Model provider (openai, anthropic, gemini, local, mock)")
-@click.option("--model", "-m", default="mock-model", help="Model name")
-def run(prompt: str, workspace: str, provider: str, model: str):
+@click.option("--provider", "-p", default=None, help="Model provider (openai, anthropic, gemini, local, mock)")
+@click.option("--model", "-m", default=None, help="Model name")
+def run(prompt: str, workspace: str, provider: str | None, model: str | None):
     """Execute a single autonomous turn."""
     asyncio.run(_run_single_turn(prompt, Path(workspace), provider, model))
 
 
-async def _run_single_turn(prompt: str, workspace: Path, provider: str, model: str):
-    router = ModelRouter(default_provider=provider, default_model=model)
+async def _run_single_turn(prompt: str, workspace: Path, provider: str | None, model: str | None):
+    kwargs = {}
+    if provider is not None:
+        kwargs["default_provider"] = provider
+    if model is not None:
+        kwargs["default_model"] = model
+    router = ModelRouter(**kwargs)
     coordinator = AgentCoordinator(workspace=workspace, router=router)
 
     console.print(
@@ -63,17 +68,22 @@ async def _run_single_turn(prompt: str, workspace: Path, provider: str, model: s
 
 @main.command()
 @click.option("--workspace", "-w", default=".", help="Workspace path")
-@click.option("--provider", "-p", default="mock", help="Model provider")
-@click.option("--model", "-m", default="mock-model", help="Model name")
-def interactive(workspace: str, provider: str, model: str):
+@click.option("--provider", "-p", default=None, help="Model provider")
+@click.option("--model", "-m", default=None, help="Model name")
+def interactive(workspace: str, provider: str | None, model: str | None):
     """Start an interactive pair-programming session with slash commands."""
     asyncio.run(_run_interactive(Path(workspace), provider, model))
 
 
-async def _run_interactive(workspace: Path, initial_provider: str, initial_model: str):
-    current_provider = initial_provider
-    current_model = initial_model
-    router = ModelRouter(default_provider=current_provider, default_model=current_model)
+async def _run_interactive(workspace: Path, initial_provider: str | None, initial_model: str | None):
+    kwargs = {}
+    if initial_provider is not None:
+        kwargs["default_provider"] = initial_provider
+    if initial_model is not None:
+        kwargs["default_model"] = initial_model
+    router = ModelRouter(**kwargs)
+    current_provider = router.default_provider
+    current_model = router.default_model
     coordinator = AgentCoordinator(workspace=workspace, router=router)
 
     console.print(
