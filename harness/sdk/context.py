@@ -46,7 +46,7 @@ class SettingsView(Protocol):
 
 @runtime_checkable
 class SecretsView(Protocol):
-    def get(self, name: str) -> str | None:
+    def get(self, name: str, default: str | None = None) -> str | None:
         """Retrieves secret by name. Requires Capability.SECRETS."""
         ...
 

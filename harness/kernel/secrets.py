@@ -113,7 +113,7 @@ class Secrets:
         """
         return self.get(name) is not None
 
-    def get(self, name: str) -> str | None:
+    def get(self, name: str, default: str | None = None) -> str | None:
         """
         Retrieves a secret by name or alias, resolving between file and env.
         """
@@ -137,12 +137,14 @@ class Secrets:
             val = _from_env()
             if val is not None:
                 return val
-            return _from_file()
+            res = _from_file()
+            return res if res is not None else default
         else:
             val = _from_file()
             if val is not None:
                 return val
-            return _from_env()
+            res = _from_env()
+            return res if res is not None else default
 
     def set(self, name: str, value: str) -> None:
         """Stores a secret to disk with atomic 0600 permissions."""
@@ -206,7 +208,7 @@ class PluginSecretsView:
         """Checks existence of secret without returning value. Allowed for all."""
         return self._secrets.has(name)
 
-    def get(self, name: str) -> str | None:
+    def get(self, name: str, default: str | None = None) -> str | None:
         """
         Retrieves secret value. Requires Capability.SECRETS.
         Raises CapabilityDenied if caller lacks SECRETS capability.
@@ -217,7 +219,7 @@ class PluginSecretsView:
                 plugin=self._plugin_name,
                 message=f"Plugin '{self._plugin_name}' lacks Capability.SECRETS to access '{name}'",
             )
-        return self._secrets.get(name)
+        return self._secrets.get(name, default=default)
 
 
 def migrate_legacy_config(

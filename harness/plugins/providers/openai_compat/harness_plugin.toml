@@ -1,0 +1,8 @@
+[plugin]
+name = "openai-compat"
+version = "1.0.0"
+api_version = "1"
+summary = "Universal OpenAI-compatible LLM Provider (OpenAI, OpenRouter, DeepSeek, Ollama, vLLM)"
+provides = ["provider"]
+capabilities = ["net", "secrets"]
+entry = "harness.plugins.providers.openai_compat.plugin:OpenAICompatPlugin"

@@ -301,28 +301,25 @@ class PluginRegistry:
         self._discovered[name] = plugin
 
     def discover_directory(self, root: Path, tier: TrustTier) -> list[DiscoveredPlugin]:
-        """Discovers plugins in subdirectories containing harness_plugin.toml."""
+        """Discovers plugins in directory or subdirectories containing harness_plugin.toml."""
         found: list[DiscoveredPlugin] = []
         if not root.exists() or not root.is_dir():
             return found
 
-        for entry in root.iterdir():
-            if entry.is_dir():
-                manifest_file = entry / "harness_plugin.toml"
-                if manifest_file.exists():
-                    try:
-                        manifest = PluginManifest.load(manifest_file)
-                        dp = DiscoveredPlugin(
-                            manifest=manifest,
-                            tier=tier,
-                            origin=str(manifest_file),
-                            manifest_path=manifest_file,
-                        )
-                        self.register_discovered(dp)
-                        found.append(dp)
-                    except Exception as err:
-                        logger.warning(f"Failed to load plugin manifest at {manifest_file}: {err}")
-                        raise
+        for manifest_file in sorted(root.rglob("harness_plugin.toml")):
+            try:
+                manifest = PluginManifest.load(manifest_file)
+                dp = DiscoveredPlugin(
+                    manifest=manifest,
+                    tier=tier,
+                    origin=str(manifest_file),
+                    manifest_path=manifest_file,
+                )
+                self.register_discovered(dp)
+                found.append(dp)
+            except Exception as err:
+                logger.warning(f"Failed to load plugin manifest at {manifest_file}: {err}")
+                raise
         return found
 
     def discover_entry_points(self, group: str = "harness.plugins") -> list[DiscoveredPlugin]:

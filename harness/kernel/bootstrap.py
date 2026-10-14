@@ -76,7 +76,9 @@ async def bootstrap_kernel(
         secrets=secrets,
         bus=bus,
     )
+    builtin_dir = Path(__file__).resolve().parents[1] / "plugins"
     registry.discover_all(
+        builtin_dir=builtin_dir,
         local_dir=conf / "plugins",
         workspace_dir=ws / ".harness" / "plugins",
     )
