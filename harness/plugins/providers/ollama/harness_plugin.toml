@@ -1,0 +1,8 @@
+[plugin]
+name = "provider-ollama"
+version = "1.0.0"
+api_version = "1"
+summary = "Local Ollama provider with native tool calling and XML fallback protocol"
+provides = ["provider"]
+capabilities = ["net"]
+entry = "harness.plugins.providers.ollama.plugin:OllamaProviderPlugin"
