@@ -1,0 +1,8 @@
+[plugin]
+name = "search-tools"
+version = "1.0.0"
+api_version = "1"
+summary = "High-performance codebase regex search tool with ripgrep and Python fallback"
+provides = ["tool"]
+capabilities = ["fs:read", "exec"]
+entry = "harness.plugins.tools.search.plugin:SearchToolsPlugin"
