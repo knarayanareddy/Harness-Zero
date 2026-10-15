@@ -332,6 +332,123 @@ export class HarnessStudioApp {
         }
       });
     }
+
+    // Interactive event delegation for studio tabs, activities, and suggestion chips
+    document.addEventListener('click', (e) => {
+      const promptChip = e.target.closest('[data-prompt]');
+      if (promptChip) {
+        const text = promptChip.getAttribute('data-prompt');
+        const input = document.getElementById('composer-input');
+        if (input) {
+          input.value = text;
+          input.focus();
+          const form = document.getElementById('composer-form');
+          if (form) form.dispatchEvent(new Event('submit', { cancelable: true }));
+        }
+        return;
+      }
+
+      const tabBtn = e.target.closest('[data-tab]');
+      if (tabBtn) {
+        const tabName = tabBtn.getAttribute('data-tab');
+        this.switchStudioTab(tabName);
+        return;
+      }
+
+      const actBtn = e.target.closest('[data-act]');
+      if (actBtn) {
+        const actName = actBtn.getAttribute('data-act');
+        this.switchActivity(actName);
+        return;
+      }
+
+      const modeBtn = e.target.closest('[data-mode]');
+      if (modeBtn) {
+        document.querySelectorAll('.mode-segment-btn').forEach((b) => b.classList.remove('active'));
+        modeBtn.classList.add('active');
+        return;
+      }
+
+      const slashItem = e.target.closest('[data-slash]');
+      if (slashItem) {
+        const cmd = slashItem.getAttribute('data-slash');
+        const input = document.getElementById('composer-input');
+        if (input) {
+          input.value = cmd + ' ';
+          input.focus();
+        }
+        const slashMenu = document.getElementById('slash-menu');
+        if (slashMenu) slashMenu.style.display = 'none';
+        return;
+      }
+
+      const noticeBtn = e.target.closest('[data-notice]');
+      if (noticeBtn) {
+        this.appendNotice(noticeBtn.getAttribute('data-notice'), 'info');
+        return;
+      }
+
+      const stabBtn = e.target.closest('[data-stab]');
+      if (stabBtn) {
+        document.querySelectorAll('.settings-tab-btn').forEach((b) => b.classList.remove('active'));
+        stabBtn.classList.add('active');
+        const targetPage = stabBtn.getAttribute('data-stab');
+        document.querySelectorAll('.settings-page').forEach((p) => p.classList.remove('active'));
+        const pageElem = document.getElementById(`spage-${targetPage}`);
+        if (pageElem) pageElem.classList.add('active');
+        return;
+      }
+
+      const toggleBtn = e.target.closest('[data-action="toggle-active"]');
+      if (toggleBtn) {
+        toggleBtn.classList.toggle('active');
+        return;
+      }
+    });
+
+    // Slash menu trigger on composer input
+    if (input) {
+      input.addEventListener('input', () => {
+        const slashMenu = document.getElementById('slash-menu');
+        if (slashMenu) {
+          if (input.value.startsWith('/')) {
+            slashMenu.style.display = 'block';
+          } else {
+            slashMenu.style.display = 'none';
+          }
+        }
+      });
+    }
+
+    // Settings search filtering
+    const searchInput = document.getElementById('settings-search-input');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        const q = e.target.value.toLowerCase().trim();
+        document.querySelectorAll('.settings-tab-btn').forEach((btn) => {
+          const label = (btn.getAttribute('data-label') || btn.textContent).toLowerCase();
+          btn.style.display = label.includes(q) ? 'flex' : 'none';
+        });
+      });
+    }
+  }
+
+  switchStudioTab(tabName) {
+    document.querySelectorAll('.studio-tab').forEach((t) => t.classList.remove('active'));
+    const activeTab = document.querySelector(`.studio-tab[data-tab="${tabName}"]`);
+    if (activeTab) activeTab.classList.add('active');
+  }
+
+  switchActivity(actName) {
+    document.querySelectorAll('.activity-item').forEach((a) => a.classList.remove('active'));
+    const activeAct = document.querySelector(`.activity-item[data-act="${actName}"]`);
+    if (activeAct) activeAct.classList.add('active');
+    if (actName === 'chat') {
+      const input = document.getElementById('composer-input');
+      if (input) input.focus();
+    } else if (['files', 'search', 'skills', 'tree'].includes(actName)) {
+      this.switchStudioTab(actName);
+    }
   }
 
   appendUserTurn(text) {
