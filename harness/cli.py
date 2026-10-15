@@ -68,15 +68,19 @@ async def _run_kernel_turn(
     log_file: str | None,
 ):
     try:
+        overrides: dict[str, Any] = {}
+        if mock_script:
+            overrides["providers.mock.script_file"] = mock_script
+            os.environ["HARNESS_MOCK_SCRIPT"] = mock_script
+            if not provider:
+                provider = "mock"
+
         runtime = await bootstrap_kernel(
             workspace=workspace,
             log_file=Path(log_file) if log_file else None,
             verbose=verbose,
+            overrides=overrides,
         )
-        if mock_script:
-            runtime.settings.set("providers.mock.script_file", mock_script)
-            if not provider:
-                provider = "mock"
 
         app = CliApp(commands=runtime.commands, bus=runtime.bus, interactive=False)
         options: dict[str, Any] = {}

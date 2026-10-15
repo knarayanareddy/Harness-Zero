@@ -1,12 +1,28 @@
 # -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
 
+# Collect all plugin modules for hiddenimports dynamically
+plugin_dir = Path("harness/plugins")
+plugin_hidden_imports = []
+if plugin_dir.exists():
+    for py_file in plugin_dir.rglob("*.py"):
+        rel_parts = list(py_file.with_suffix("").parts)
+        mod_name = ".".join(rel_parts)
+        plugin_hidden_imports.append(mod_name)
+
+datas = [
+    ('harness/frontends/web/static', 'harness/frontends/web/static'),
+    ('harness/plugins', 'harness/plugins'),
+]
+if Path("builtin").exists():
+    datas.append(('builtin', 'builtin'))
 
 a = Analysis(
     ['harness/engine_main.py'],
     pathex=[],
     binaries=[],
-    datas=[('harness/web', 'harness/web'), ('builtin', 'builtin')],
-    hiddenimports=[],
+    datas=datas,
+    hiddenimports=plugin_hidden_imports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

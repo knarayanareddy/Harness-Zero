@@ -61,6 +61,7 @@ async def test_send_input(executor: LocalExecutor, tmp_path: Path):
         command=[sys.executable, "-c", "import sys; data = sys.stdin.readline().strip(); print(f'ECHO_{data}')"],
         cwd=tmp_path,
         shell=False,
+        interactive=True,
     )
     proc = await executor.start(req)
     await proc.send_input("message_to_stdin\n")

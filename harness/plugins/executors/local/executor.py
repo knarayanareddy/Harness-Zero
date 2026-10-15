@@ -163,7 +163,11 @@ class LocalExecutor:
         self.default_cwd = default_cwd or Path.cwd()
 
     def _build_env(self, env_overlay: dict[str, str]) -> dict[str, str]:
-        env: dict[str, str] = {}
+        env: dict[str, str] = {
+            "GIT_PAGER": "cat",
+            "GIT_TERMINAL_PROMPT": "0",
+            "PAGER": "cat",
+        }
         for k in SAFE_ENV_KEYS:
             if k in os.environ:
                 env[k] = os.environ[k]
@@ -179,6 +183,7 @@ class LocalExecutor:
         process_id = f"proc_{uuid.uuid4().hex[:12]}"
 
         start_time = time.time()
+        stdin_mode = asyncio.subprocess.PIPE if req.interactive else asyncio.subprocess.DEVNULL
 
         if req.shell or isinstance(cmd, str):
             cmd_str = cmd if isinstance(cmd, str) else " ".join(cmd)
@@ -186,7 +191,7 @@ class LocalExecutor:
                 cmd_str,
                 cwd=str(cwd),
                 env=env,
-                stdin=asyncio.subprocess.PIPE,
+                stdin=stdin_mode,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 preexec_fn=os.setsid,
@@ -197,7 +202,7 @@ class LocalExecutor:
                 *cmd[1:],
                 cwd=str(cwd),
                 env=env,
-                stdin=asyncio.subprocess.PIPE,
+                stdin=stdin_mode,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 preexec_fn=os.setsid,

@@ -7,6 +7,7 @@ import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from harness.kernel.approvals import ApprovalBroker
 from harness.kernel.bus import EventBus
@@ -42,6 +43,7 @@ async def bootstrap_kernel(
     config_dir: Path | str | None = None,
     log_file: Path | str | None = None,
     verbose: bool = False,
+    overrides: dict[str, Any] | None = None,
 ) -> KernelRuntime:
     """
     Initializes and boots all kernel services:
@@ -72,6 +74,9 @@ async def bootstrap_kernel(
 
     bus = EventBus()
     settings = SettingsStore(path=conf)
+    if overrides:
+        for k, v in overrides.items():
+            settings.set_override(k, v)
     secrets = Secrets(path=conf)
     jail = WorkspaceJail(ws)
     registry = PluginRegistry(

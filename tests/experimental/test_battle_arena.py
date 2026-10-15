@@ -3,8 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.experimental.battle_arena import AgentArena, CandidateResult
-from harness.sandboxing.worktree import WorktreeManager
+from harness.experimental.battle_arena import AgentArena, CandidateResult, WorktreeManager
 
 
 @pytest.mark.asyncio

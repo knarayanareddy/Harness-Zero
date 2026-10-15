@@ -123,12 +123,18 @@ class PluginContextImpl:
     ):
         self.name = name
         self.workspace = workspace
-        self.data_dir = data_dir
+        self._data_dir = data_dir
         self.settings = settings
         self.secrets = secrets
         self.capabilities = capabilities
         self.log = logging.getLogger(f"harness.plugins.{name}")
         self._registry = registry
+
+    @property
+    def data_dir(self) -> Path:
+        """Lazily creates and returns the plugin data directory on first use."""
+        self._data_dir.mkdir(parents=True, exist_ok=True)
+        return self._data_dir
 
     def register_tool(self, spec: ToolSpec, handler: ToolHandler) -> None:
         """Registers a tool provided by this plugin, checking collisions and capabilities."""
@@ -495,7 +501,6 @@ class PluginRegistry:
 
                 # Build context
                 plugin_data_dir = self.data_dir / "plugins" / name
-                plugin_data_dir.mkdir(parents=True, exist_ok=True)
                 settings_view = self.settings.get_view(f"plugins.{name}")
                 secrets_view = self.secrets.get_view(effective_caps, plugin_name=name)
 

@@ -192,6 +192,7 @@ class SettingsStore:
         self._subscribers: list[tuple[str, Callable[[list[str]], None]]] = []
         self._migrations: dict[tuple[int, int], Callable[[dict[str, Any]], dict[str, Any]]] = {}
         self._data: dict[str, Any] = {}
+        self._overrides: dict[str, Any] = {}
 
         # Register standard kernel schema
         self.register_schema("kernel", KERNEL_SCHEMA)
@@ -271,11 +272,18 @@ class SettingsStore:
                 return None, True
         return curr, True
 
+    def set_override(self, path: str, value: Any) -> None:
+        """Sets an in-memory override that takes precedence and does not persist to disk."""
+        self._overrides[path] = copy.deepcopy(value)
+
     def get(self, path: str, default: Any = None) -> Any:
         """
         Reads a namespaced setting by dot-notation (e.g. 'kernel.max_tool_iterations').
         Returns schema default or user default if unset.
         """
+        if hasattr(self, "_overrides") and path in self._overrides:
+            return copy.deepcopy(self._overrides[path])
+
         parts = path.split(".")
         curr = self._data
         found = True
