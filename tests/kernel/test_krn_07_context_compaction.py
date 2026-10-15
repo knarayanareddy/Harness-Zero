@@ -269,8 +269,8 @@ def test_records_to_messages_with_tool_use_and_results():
     assert tool_use.id == "call_123"
     assert tool_use.name == "view_file"
 
-    # Tool result message
-    assert messages[2].role == Role.TOOL
+    # Tool result message (standardized as Role.USER)
+    assert messages[2].role == Role.USER
     tool_res = messages[2].content[0]
     assert isinstance(tool_res, ToolResultBlock)
     assert tool_res.tool_use_id == "call_123"

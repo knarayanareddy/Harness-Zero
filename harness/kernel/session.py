@@ -25,101 +25,48 @@ from harness.sdk.types import HookEvent, SessionInfo
 logger = logging.getLogger(__name__)
 
 
-class JsonlTranscriptStore:
-    """
-    Concrete TranscriptStore implementation backed by append-only JSONL files:
-    - transcript.jsonl: compact chronological trajectory
-    - transcript_full.jsonl: full un-truncated records
-    Tolerates truncated or corrupt trailing lines.
-    """
+class _NullTranscriptStore:
+    """Fallback transcript store when no transcript store plugin is registered."""
 
-    def __init__(self, session_dir: Path) -> None:
-        self.session_dir = Path(session_dir)
-        self.session_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self, session_dir: Path | str | None = None) -> None:
+        self.session_dir = Path(session_dir) if session_dir else Path(".")
         self.compact_path = self.session_dir / "transcript.jsonl"
         self.full_path = self.session_dir / "transcript_full.jsonl"
-        self._lock = asyncio.Lock()
-        self._step_counter = 0
-        self._init_counter()
+        self._records: list[dict[str, Any]] = []
 
-    def _init_counter(self) -> None:
-        """Counts existing records, tolerating trailing bad lines."""
-        if not self.compact_path.exists():
-            self._step_counter = 0
-            return
-
-        count = 0
-        try:
-            with open(self.compact_path, encoding="utf-8", errors="replace") as f:
-                for line in f:
-                    if line.strip():
-                        count += 1
-        except Exception as e:
-            logger.warning(f"Error reading transcript index for {self.session_dir}: {e}")
-        self._step_counter = count
-
-    async def append(self, record: dict[str, Any]) -> int:
-        """Appends record to compact and full JSONL logs. Returns step_index."""
-        async with self._lock:
-            self._step_counter += 1
-            step_idx = self._step_counter
-            rec_copy = dict(record)
-            rec_copy["step_index"] = step_idx
-            rec_copy.setdefault("timestamp", time.time())
-
-            line = json.dumps(rec_copy) + "\n"
-
-            def _write():
-                with open(self.compact_path, "a", encoding="utf-8") as f:
-                    f.write(line)
-                    f.flush()
-                with open(self.full_path, "a", encoding="utf-8") as f:
-                    f.write(line)
-                    f.flush()
-
-            await asyncio.to_thread(_write)
-            return step_idx
+    async def append(self, record: dict[str, Any] | Any) -> int:
+        rec = dict(record.to_dict() if hasattr(record, "to_dict") else record)
+        rec["step_index"] = len(self._records) + 1
+        self._records.append(rec)
+        if self.session_dir:
+            self.session_dir.mkdir(parents=True, exist_ok=True)
+            line = json.dumps(rec) + "\n"
+            with open(self.compact_path, "a", encoding="utf-8") as f:
+                f.write(line)
+            with open(self.full_path, "a", encoding="utf-8") as f:
+                f.write(line)
+        return rec["step_index"]
 
     async def read(self, since_step: int = 0, compact: bool = True) -> list[dict[str, Any]]:
-        """Reads transcript records, tolerating corrupt lines."""
-        target_path = self.compact_path if compact else self.full_path
-        if not target_path.exists():
-            return []
-
-        def _read():
-            records = []
-            with open(target_path, encoding="utf-8", errors="replace") as f:
+        path = self.compact_path if compact else self.full_path
+        if path.exists():
+            records: list[dict[str, Any]] = []
+            with open(path, encoding="utf-8") as f:
                 for line in f:
-                    line_str = line.strip()
-                    if not line_str:
-                        continue
-                    try:
-                        rec = json.loads(line_str)
-                        if rec.get("step_index", 0) >= since_step:
-                            records.append(rec)
-                    except json.JSONDecodeError:
-                        # Tolerate corrupt line (crash recovery)
-                        logger.warning(f"Skipping corrupt transcript line in {target_path}")
-            return records
-
-        return await asyncio.to_thread(_read)
+                    line = line.strip()
+                    if line:
+                        records.append(json.loads(line))
+            return [r for r in records if r.get("step_index", 0) >= since_step]
+        return [r for r in self._records if r.get("step_index", 0) >= since_step]
 
     async def last_compaction(self) -> dict[str, Any] | None:
-        """Searches backwards for the latest COMPACTION_SUMMARY record."""
-        records = await self.read(compact=True)
-        for r in reversed(records):
-            if str(r.get("type", "")).upper() == "COMPACTION_SUMMARY":
-                return r
-            if r.get("metadata", {}).get("compaction_summary"):
-                return r
         return None
 
     async def list_sessions(self) -> list[dict[str, Any]]:
-        """Returns metadata for this session."""
-        return [{
-            "session_dir": str(self.session_dir),
-            "step_count": self._step_counter,
-        }]
+        return []
+
+    def for_session(self, session_dir: Path | str) -> _NullTranscriptStore:
+        return _NullTranscriptStore(session_dir)
 
 
 class Session:
@@ -149,7 +96,16 @@ class Session:
         self.session_dir = self.workspace / ".harness" / "sessions" / self.session_id
         self.session_dir.mkdir(parents=True, exist_ok=True)
 
-        self.transcript = JsonlTranscriptStore(self.session_dir)
+        transcript_store = None
+        if self.registry and hasattr(self.registry, "stores") and "transcript" in self.registry.stores:
+            reg_store = self.registry.stores["transcript"][0]
+            if hasattr(reg_store, "for_session"):
+                transcript_store = reg_store.for_session(self.session_dir)
+            elif callable(reg_store):
+                transcript_store = reg_store(self.session_dir)
+            else:
+                transcript_store = reg_store
+        self.transcript = transcript_store or _NullTranscriptStore(self.session_dir)
 
         # Concurrency control: one turn per session
         self._lock = asyncio.Lock()
@@ -197,6 +153,10 @@ class Session:
             self._busy = False
             if self._lock.locked():
                 self._lock.release()
+
+    async def get_history(self, since_step: int = 0) -> list[dict[str, Any]]:
+        """Returns transcript records for this session."""
+        return await self.transcript.read(since_step=since_step, compact=False)
 
     def ensure_git_exclude(self) -> None:
         """Writes /.harness/ to .git/info/exclude if applicable (§5.1)."""

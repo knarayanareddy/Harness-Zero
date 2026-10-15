@@ -50,7 +50,11 @@ class JsonlTranscriptStore:
             logger.warning(f"Error reading transcript index for {self.session_dir}: {err}")
         self._step_counter = count
 
-    async def append(self, record: dict[str, Any]) -> int:
+    def for_session(self, session_dir: Path | str) -> JsonlTranscriptStore:
+        """Returns a JsonlTranscriptStore scoped to the specified session directory."""
+        return JsonlTranscriptStore(session_dir)
+
+    async def append(self, record: dict[str, Any] | Any) -> int:
         """
         Appends record to both full and compact logs.
         Enriches records with call_id/tool_name/is_error metadata and byte offsets.
@@ -59,8 +63,11 @@ class JsonlTranscriptStore:
             self._step_counter += 1
             step_idx = self._step_counter
 
-            # Deep copy and enrich record
-            full_rec = dict(record)
+            # Convert to dict if TranscriptRecord or object with to_dict
+            if hasattr(record, "to_dict"):
+                full_rec = record.to_dict()
+            else:
+                full_rec = dict(record)
             full_rec["step_index"] = step_idx
             full_rec.setdefault("timestamp", time.time())
 

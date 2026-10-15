@@ -196,6 +196,88 @@ class Message:
         )
 
 
+@dataclass(slots=True)
+class TranscriptRecord:
+    role: str  # "user", "assistant", "system"
+    content: str = ""
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    tool_results: list[dict[str, Any]] = field(default_factory=list)
+    thinking: str | None = None
+    media: list[dict[str, Any]] = field(default_factory=list)
+    timestamp: float = field(default_factory=time.time)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    step_index: int | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "role": self.role,
+            "content": self.content,
+            "timestamp": self.timestamp,
+        }
+        if self.step_index is not None:
+            d["step_index"] = self.step_index
+        if self.tool_calls:
+            d["tool_calls"] = self.tool_calls
+        if self.tool_results:
+            d["tool_results"] = self.tool_results
+        if self.thinking is not None:
+            d["thinking"] = self.thinking
+        if self.media:
+            d["media"] = self.media
+        if self.metadata:
+            d["metadata"] = self.metadata
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> TranscriptRecord:
+        role = data.get("role")
+        if not role:
+            # Legacy v1 mapping
+            source = str(data.get("source", "")).upper()
+            typ = str(data.get("type", "")).upper()
+            if source == "USER" or typ in ("USER", "USER_INPUT"):
+                role = "user"
+            elif source in ("MODEL", "ASSISTANT") or typ in ("MODEL", "ASSISTANT", "PLANNER_RESPONSE"):
+                role = "assistant"
+            elif source == "TOOL" or typ in ("TOOL", "TOOL_RESULT"):
+                role = "user"
+            else:
+                role = "user"
+
+        content = data.get("content", "")
+        if isinstance(content, list):
+            text_parts = [b.get("text", "") if isinstance(b, dict) else str(b) for b in content]
+            content = "".join(text_parts)
+
+        tool_calls = list(data.get("tool_calls", []))
+        tool_results = list(data.get("tool_results", []))
+
+        # Handle legacy tool_calls / tool_result shapes
+        if not tool_results and (data.get("tool_use_id") or data.get("call_id")):
+            tool_results.append({
+                "tool_use_id": data.get("tool_use_id") or data.get("call_id") or data.get("id", ""),
+                "content": [{"type": "text", "text": data.get("content", "")}],
+                "is_error": bool(data.get("is_error", False)),
+            })
+
+        metadata = dict(data.get("metadata", {}))
+        typ = str(data.get("type", "")).upper()
+        if typ == "COMPACTION_SUMMARY":
+            metadata["compaction_summary"] = True
+
+        return cls(
+            role=role,
+            content=str(content or ""),
+            tool_calls=tool_calls,
+            tool_results=tool_results,
+            thinking=data.get("thinking"),
+            media=list(data.get("media", [])),
+            timestamp=float(data.get("timestamp", time.time())),
+            metadata=metadata,
+            step_index=data.get("step_index"),
+        )
+
+
 class RiskClass(str, Enum):
     READ = "read"
     WRITE = "write"

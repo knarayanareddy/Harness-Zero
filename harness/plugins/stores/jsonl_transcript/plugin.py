@@ -16,7 +16,8 @@ class JsonlTranscriptPlugin:
         self.manifest = manifest
 
     async def setup(self, ctx: PluginContext) -> None:
-        store = JsonlTranscriptStore(ctx.data_dir / "transcripts")
+        sessions_dir = ctx.workspace / ".harness" / "sessions"
+        store = JsonlTranscriptStore(sessions_dir)
         ctx.register_store("transcript", store)
 
     async def teardown(self) -> None:

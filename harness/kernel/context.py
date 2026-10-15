@@ -35,6 +35,7 @@ from harness.sdk.types import (
     ToolResultBlock,
     ToolSpec,
     ToolUseBlock,
+    TranscriptRecord,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,10 +87,11 @@ class TurnContextImpl:
 
 
 
-def records_to_messages(records: list[dict[str, Any]]) -> list[Message]:
+def records_to_messages(records: list[dict[str, Any] | TranscriptRecord]) -> list[Message]:
     """
     Converts transcript records to SDK Message dataclasses.
     Preserves ToolUseBlock and ToolResultBlock structures.
+    Standardizes tool results into USER role messages with ToolResultBlocks.
     Slices history starting from the latest COMPACTION_SUMMARY boundary.
     """
     if not records:
@@ -98,8 +100,9 @@ def records_to_messages(records: list[dict[str, Any]]) -> list[Message]:
     # Find latest compaction boundary
     last_compaction_idx = -1
     for idx, r in enumerate(records):
-        rec_type = str(r.get("type", "")).upper()
-        if rec_type == "COMPACTION_SUMMARY" or r.get("metadata", {}).get("compaction_summary"):
+        r_dict = r.to_dict() if hasattr(r, "to_dict") else r
+        rec_type = str(r_dict.get("type", "")).upper()
+        if rec_type == "COMPACTION_SUMMARY" or r_dict.get("metadata", {}).get("compaction_summary"):
             last_compaction_idx = idx
 
     if last_compaction_idx >= 0:
@@ -109,59 +112,77 @@ def records_to_messages(records: list[dict[str, Any]]) -> list[Message]:
 
     messages: list[Message] = []
     for r in sliced_records:
-        rec_type = str(r.get("type", "")).upper()
-        rec_source = str(r.get("source", "")).upper()
+        rec = r if isinstance(r, TranscriptRecord) else TranscriptRecord.from_dict(r)
 
-        if rec_type == "COMPACTION_SUMMARY":
-            content_text = r.get("content", "")
+        if rec.metadata.get("compaction_summary"):
             msg = Message(
                 role=Role.USER,
-                content=[TextBlock(text=f"## Previous Conversation Summary\n\n{content_text}")],
+                content=[TextBlock(text=f"## Previous Conversation Summary\n\n{rec.content}")],
                 metadata={"compaction_summary": True},
             )
             messages.append(msg)
             continue
 
-        if rec_source == "USER" or rec_type in ("USER", "USER_INPUT"):
-            content_blocks: list[ContentBlock] = [TextBlock(text=r.get("content", ""))]
-            if "media" in r and isinstance(r["media"], list):
-                for m in r["media"]:
+        if rec.role == "assistant":
+            blocks: list[ContentBlock] = []
+            if rec.thinking:
+                blocks.append(ThinkingBlock(text=rec.thinking))
+            if rec.content:
+                blocks.append(TextBlock(text=rec.content))
+            if rec.tool_calls:
+                for tc in rec.tool_calls:
+                    tc_id = tc.get("id") or tc.get("call_id", "")
+                    tc_name = tc.get("name", "")
+                    tc_args = tc.get("arguments") or tc.get("input", {})
+                    blocks.append(ToolUseBlock(id=tc_id, name=tc_name, input=tc_args))
+            messages.append(Message(role=Role.ASSISTANT, content=blocks, metadata=rec.metadata))
+            continue
+
+        if rec.role in ("user", "tool"):
+            blocks: list[ContentBlock] = []
+            # Tool results standardized as USER role blocks per §4.1 #4
+            if rec.tool_results:
+                for tr in rec.tool_results:
+                    use_id = tr.get("tool_use_id") or tr.get("call_id") or tr.get("id", "")
+                    tr_content = tr.get("content", [])
+                    parsed_content: list[TextBlock | ImageBlock] = []
+                    if isinstance(tr_content, str):
+                        parsed_content.append(TextBlock(text=tr_content))
+                    elif isinstance(tr_content, list):
+                        for c in tr_content:
+                            if isinstance(c, dict):
+                                if c.get("type") == "image":
+                                    parsed_content.append(ImageBlock.from_dict(c))
+                                else:
+                                    parsed_content.append(TextBlock.from_dict(c))
+                            elif isinstance(c, str):
+                                parsed_content.append(TextBlock(text=c))
+                    blocks.append(
+                        ToolResultBlock(
+                            tool_use_id=use_id,
+                            content=parsed_content,
+                            is_error=bool(tr.get("is_error", False)),
+                        )
+                    )
+
+            if rec.content:
+                blocks.append(TextBlock(text=rec.content))
+
+            if rec.media:
+                for m in rec.media:
                     if isinstance(m, dict):
-                        content_blocks.append(
+                        blocks.append(
                             ImageBlock(
                                 media_type=m.get("media_type", "image/png"),
                                 data_b64=m.get("data_b64"),
                                 url=m.get("url"),
                             )
                         )
-            messages.append(Message(role=Role.USER, content=content_blocks))
-            continue
+                    elif isinstance(m, ImageBlock):
+                        blocks.append(m)
 
-        if rec_source in ("MODEL", "ASSISTANT") or rec_type in ("MODEL", "ASSISTANT", "PLANNER_RESPONSE"):
-            blocks: list[ContentBlock] = []
-            if r.get("thinking"):
-                blocks.append(ThinkingBlock(text=r["thinking"]))
-            if r.get("content"):
-                blocks.append(TextBlock(text=r["content"]))
-            if r.get("tool_calls"):
-                for tc in r["tool_calls"]:
-                    tc_id = tc.get("id") or tc.get("call_id", "")
-                    tc_name = tc.get("name", "")
-                    tc_args = tc.get("arguments") or tc.get("input", {})
-                    blocks.append(ToolUseBlock(id=tc_id, name=tc_name, input=tc_args))
-            messages.append(Message(role=Role.ASSISTANT, content=blocks))
-            continue
-
-        if rec_source == "TOOL" or rec_type in ("TOOL", "TOOL_RESULT"):
-            use_id = r.get("tool_use_id") or r.get("call_id") or r.get("id", "")
-            text = r.get("content", "")
-            is_err = bool(r.get("is_error", False))
-            block = ToolResultBlock(
-                tool_use_id=use_id,
-                content=[TextBlock(text=text)],
-                is_error=is_err,
-            )
-            messages.append(Message(role=Role.TOOL, content=[block]))
+            if blocks:
+                messages.append(Message(role=Role.USER, content=blocks, metadata=rec.metadata))
             continue
 
     return messages
@@ -284,12 +305,29 @@ class ContextAssembler:
                 )
                 assembled_messages.append(ephemeral_msg)
 
-        # 7. Latest user prompt message
-        user_content: list[ContentBlock] = [TextBlock(text=actual_prompt)]
-        if media:
-            user_content.extend(media)
-        latest_user_msg = Message(role=Role.USER, content=user_content)
-        assembled_messages.append(latest_user_msg)
+        # 7. Latest user prompt message (only if not already in history)
+        has_prompt_in_history = False
+        if history_messages:
+            last_msg = history_messages[-1]
+            if last_msg.role == Role.USER and last_msg.text() == actual_prompt:
+                has_prompt_in_history = True
+            elif any(isinstance(b, ToolResultBlock) for b in last_msg.content):
+                has_prompt_in_history = True
+            else:
+                for m in reversed(history_messages):
+                    if m.role == Role.USER and m.text() == actual_prompt:
+                        has_prompt_in_history = True
+                        break
+                    if m.role == Role.ASSISTANT:
+                        break
+
+        if not has_prompt_in_history and (actual_prompt or media):
+            user_content: list[ContentBlock] = []
+            if actual_prompt:
+                user_content.append(TextBlock(text=actual_prompt))
+            if media:
+                user_content.extend(media)
+            assembled_messages.append(Message(role=Role.USER, content=user_content))
 
         # 8. Available tools
         if tools is not None:

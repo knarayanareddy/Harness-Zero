@@ -37,7 +37,7 @@ from harness.kernel.registry import (
 from harness.kernel.runner import KernelServicesImpl, SingleLoopStrategy, TurnRunner
 from harness.kernel.sanitizer import sanitize_output
 from harness.kernel.secrets import PluginSecretsView, Secrets, migrate_legacy_config
-from harness.kernel.session import JsonlTranscriptStore, Session, SessionManager
+from harness.kernel.session import Session, SessionManager
 from harness.kernel.settings import (
     CURRENT_SCHEMA_VERSION,
     KERNEL_SCHEMA,
@@ -89,5 +89,4 @@ __all__ = [
     "Commands",
     "Session",
     "SessionManager",
-    "JsonlTranscriptStore",
 ]

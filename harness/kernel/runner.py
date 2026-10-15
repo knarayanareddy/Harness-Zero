@@ -43,6 +43,7 @@ from harness.sdk.types import (
     ToolResultBlock,
     ToolSpec,
     ToolUseBlock,
+    TranscriptRecord,
     TurnResult,
     Usage,
     UsageEvent,
@@ -179,9 +180,26 @@ class KernelServicesImpl:
         self.inbox = runner.inbox
         self.assembler = runner.assembler
         self.compactor = runner.compactor
-        self.transcript_store = runner.transcript_store
-        self.search_index = runner.search_index
-        self.cost_ledger = runner.cost_ledger
+
+        # Resolve stores and indices for session
+        self.session_dir = self.session.workspace / ".harness" / "sessions" / self.session.session_id
+        t_store = runner.transcript_store
+        if t_store is None and hasattr(self.registry, "stores") and "transcript" in self.registry.stores:
+            t_store = self.registry.stores["transcript"][0]
+        if t_store is not None and hasattr(t_store, "for_session"):
+            self.transcript_store = t_store.for_session(self.session_dir)
+        else:
+            self.transcript_store = t_store
+
+        s_index = runner.search_index
+        if s_index is None and hasattr(self.registry, "stores") and "search" in self.registry.stores:
+            s_index = self.registry.stores["search"][0]
+        self.search_index = s_index
+
+        c_ledger = runner.cost_ledger
+        if c_ledger is None and hasattr(self.registry, "stores") and "cost" in self.registry.stores:
+            c_ledger = self.registry.stores["cost"][0]
+        self.cost_ledger = c_ledger
 
         # Turn state
         self.turn_cost_usd: float = 0.0
@@ -530,26 +548,30 @@ class KernelServicesImpl:
 
     async def record(self, msg: Message) -> int:
         """Records message in transcript store and search index."""
-        rec: dict[str, Any] = {
-            "role": msg.role.value,
-            "content": msg.text(),
-            "timestamp": time.time(),
-            "metadata": msg.metadata,
-        }
-        # Add tool use / result markers if present
+        tool_calls: list[dict[str, Any]] = []
+        tool_results: list[dict[str, Any]] = []
         for b in msg.content:
             if isinstance(b, ToolUseBlock):
-                rec.setdefault("tool_calls", []).append({
+                tool_calls.append({
                     "id": b.id,
                     "name": b.name,
                     "arguments": b.input,
                 })
             elif isinstance(b, ToolResultBlock):
-                rec.setdefault("tool_results", []).append({
+                tool_results.append({
                     "tool_use_id": b.tool_use_id,
                     "content": [c.to_dict() for c in b.content],
                     "is_error": b.is_error,
                 })
+
+        rec = TranscriptRecord(
+            role=msg.role.value,
+            content=msg.text(),
+            timestamp=time.time(),
+            tool_calls=tool_calls,
+            tool_results=tool_results,
+            metadata=msg.metadata,
+        ).to_dict()
 
         self.transcript_records.append(rec)
         step_idx = len(self.transcript_records)
@@ -727,6 +749,15 @@ class TurnRunner:
             cancel=cancel,
             depth=depth,
         )
+
+        # Load existing session transcript records into KernelServices
+        if services.transcript_store:
+            try:
+                existing = await services.transcript_store.read(compact=False)
+                services.transcript_records = list(existing or [])
+            except Exception as e:
+                logger.warning(f"Could not load session transcript history: {e}")
+                services.transcript_records = []
 
         turn_ctx = TurnContextImpl(
             session=session,
