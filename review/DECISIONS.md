@@ -126,7 +126,12 @@ Legend — **Affects:** item IDs in `REMEDIATION_PLAN.md` (v2) / `REMEDIATION_FI
 - **Options:** (a) Python entry points (`pip install harness-<name>`) + plugin directories (`~/.harness/plugins/`, `<workspace>/.harness/plugins/`), catalogue as a Markdown file · (b) also a hosted registry/index service · (c) git-URL installer (`harness plugin install <git-url>`) in addition to (a).
 - **Default:** **(a).** (c) is a reasonable later addition.
 - **Affects:** KRN-05, SDK-01/02/03.
-- **Decision:** ______
+### D17 · Global vs Workspace Settings Location
+- **Question:** Where should user-configured settings, LLM provider options, and secrets live?
+- **Options:** (a) Global user settings in `~/.harness/settings.json` (0600, schema-validated, honoring `HARNESS_CONFIG_DIR`) and secrets in `~/.harness/secrets.json` (0600); workspace `.harness/` reserved for transient session transcripts, artifacts, and local databases; CLI flags like `--mock-script` applied in-memory via runtime overrides without persisting · (b) All settings in `<workspace>/.harness/settings.json` · (c) Plain environment variables only.
+- **Default:** **(a).** Prevents secret leakage into git-tracked workspaces, keeps config hermetic, and allows multi-workspace usage with a single user configuration.
+- **Affects:** KRN-04, WEB-05, SEC-07, CLI.
+- **Decision:** **(a) Global user settings at `~/.harness/settings.json` + `~/.harness/secrets.json` (mode 0600) with in-memory CLI overrides and masked secrets.**
 
 ---
 
@@ -150,3 +155,4 @@ Legend — **Affects:** item IDs in `REMEDIATION_PLAN.md` (v2) / `REMEDIATION_FI
 | D14 | Web transport | aiohttp | |
 | D15 | Legacy cutover | hard cutover | |
 | D16 | Tool names | keep current; alias map in hooks bridge | |
+| D17 | Settings location | global ~/.harness/ (0600) + in-memory overrides | (a) |

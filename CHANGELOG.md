@@ -7,89 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.2.0] - 2026-10-14
+## [0.2.0] - 2026-10-15
 
-### Major Milestone: Modular Architecture & Remediation
+### Major Milestone: Modular Microkernel Architecture & Remediation
 
-Release `0.2.0` represents a complete architectural overhaul of Harness-Zero, transitioning from an experimental prototype monolith to an extensible, microkernel-and-plugin architecture with strict boundary enforcement, dual-origin web sandboxing, and developer SDK tooling.
+Release `0.2.0` represents a complete architectural overhaul and remediation of Harness-Zero, transitioning from an experimental monolith to a resilient, microkernel-and-plugin architecture with strict boundary enforcement, dual-origin web sandboxing, and developer SDK tooling.
 
 ---
 
 ### Added
 
-#### Core Kernel & SDK (`KRN-01` – `KRN-12`)
-- **Microkernel Core**: Modular kernel (`harness.kernel`) decoupling the session runner, event bus, context engine, tool dispatcher, approval store, and storage engine.
-- **`harness.sdk` API**: Stable, typed abstract base classes and testing kits for 8 component kinds:
-  - `BaseTool` & `ToolKit`
-  - `BaseProvider` & `ProviderKit`
-  - `BaseContextEngine` & `ContextKit`
-  - `BasePolicy` & `PolicyKit`
-  - `BaseExecutor` & `ExecutorKit`
-  - `BaseStrategy` & `StrategyKit`
-  - `BaseBridge` & `BridgeKit`
-  - `BaseStore` & `StoreKit`
-- **Testing Kits**: Built-in validation suites in `harness.sdk.testing` allowing plugins to test streaming deltas, AST invariance, boundary checks, and execution idempotency.
-- **Import Boundary Verification**: Kernel tests enforcing that plugins only import `harness.sdk`, the SDK imports no external harness modules, and the kernel imports no plugins.
+#### Core Microkernel & SDK (`KRN-01` – `KRN-12`)
+- **Microkernel Core (`harness.kernel`)**: Decoupled core runtime containing:
+  - `TurnRunner` & `KernelServices`: Standardized agent turn loop supporting multi-turn memory, tool execution, and reactive background inbox wakeups.
+  - `PolicyGate` & `WorkspaceJail`: Ordered security gates (Order 10: Workspace Jail, Order 50: Risk Classifier, Order 60: Tirith Security, Order 900: Permission Modes).
+  - `ContextAssembler`: Multi-tier prefix-invariant context assembler with token estimation and compaction support.
+  - `SettingsStore` & `Secrets`: Schema-validated settings store at `~/.harness/settings.json` (mode 0600) with in-memory CLI overrides (`set_override`) and secure credential management via `Secrets` (mode 0600).
+  - `SessionManager`: Thread-safe session lifecycle and transcript storage tracking turns, model calls, and tool executions.
+  - `EventBus`: Central pub/sub message bus with a 500-event ring buffer and `Last-Event-ID` replay.
+- **Typed `harness.sdk`**:
+  - `Protocol` interfaces: `Tool`, `Provider`, `ContextSource`, `Policy`, `Executor`, `Strategy`, `Bridge`, `Store`.
+  - Testing kits in `harness.sdk.testing`: `ToolKit`, `ProviderKit`, `ContextKit`, `PolicyKit`, `ExecutorKit`, `StrategyKit`, `BridgeKit`, `StoreKit`, `HookKit`.
+  - Conformance test runners validating streaming deltas, AST invariance, boundary checks, and execution idempotency.
+- **Boundary Verification**: Automated tests and doctor audits enforcing that plugins only import `harness.sdk` and standard library, and the kernel imports no plugins.
 
-#### Plugin Ecosystem (`PLG-01` – `PLG-22`)
-- **35 Builtin Plugins**: Sliced and standardized into `builtin/plugins/` across 8 component categories:
-  - **Providers**: Claude, OpenAI, Ollama, OpenRouter, Mock, VLLM.
-  - **Tools**: Bash, File System, Search (FTS5/grep), Git, Browser, Desktop.
-  - **Context**: RepoMap, AST, Sliding Window, Sticky Notes, Summarizer.
-  - **Policies**: Approval Policy, Tirith Security Capsule, Rate Limiting.
-  - **Executors**: Local Subprocess, Sandboxed Executor.
-  - **Strategies**: ReAct Loop, CodeAct Loop, Architect-Editor Pair.
-  - **Bridges**: Aider CLI, OpenDevin, MCP Server, Cowork Operon.
-  - **Stores**: SQLite FTS5 Event Store, In-Memory Ephemeral Store.
-- **Plugin Manifests**: Strict schema validation (`manifest.json`) verifying declared capabilities against the `Capability` enum (`approval`, `approval:bypass`, `exec`, `fs:read`, `fs:write`, `net`, `secrets`, `ui`).
+#### Plugin Ecosystem (35 Built-in Plugins)
+- Standardized under `harness/plugins/` across 8 component categories:
+  - **Providers (5)**: `openai-compat` (universal OpenAI/DeepSeek/vLLM/OpenRouter), `provider-anthropic` (Messages API with prompt caching & thinking blocks), `provider-gemini` (Google Gemini with native tool calling), `provider-ollama` (local models with native tool calling), `provider-mock` (deterministic `ScriptedProvider`).
+  - **Tools (7)**: `fs-tools` (`view_file`, `write_to_file`, `edit_file`), `search-tools` (`search_codebase` via ripgrep and python fallback), `shell-tools` (`run_command`, `manage_task`), `tool-artifacts` (`create_artifact`), `tool-memory` (`remember`, `search_memory`), `tool-skills` (`view_skill`), `tool-screenshot-macos` (`capture_screen`).
+  - **Policies (4)**: `policy-workspace-jail` (path traversal guard), `policy-risk-classifier` (risk classes: READ, WRITE, EXEC, DESTRUCTIVE), `policy-tirith` (secret leak, SSRF, and destructive command auditing), `policy-permission-modes` (`plan`, `ask`, `allow`, `bypass`).
+  - **Context Sources (6)**: `context-identity`, `context-instructions` (`AGENTS.md`, `CLAUDE.md`, etc.), `context-tool-guidance`, `context-skills-catalog`, `context-repo-map` (AST symbol outline), `context-memories`.
+  - **Executors (2)**: `local-executor` (process group isolation, `DEVNULL` stdin, pager configuration, streaming stdout/stderr), `executor-worktree` (git worktree isolation for collision-free parallel edits).
+  - **Stores (4)**: `store-jsonl-transcript` (append-only JSONL dual transcript store), `store-fts5-search` (SQLite FTS5 full-text index), `store-fs-artifacts` (isolated filesystem artifact storage), `store-cost-ledger` (per-model token economics and spend tracking).
+  - **Strategies (2)**: `strategy-single-loop` (standard reactive autonomous loop), `strategy-architect-editor` (two-phase architect/editor coding with diff evaluation).
+  - **Hooks & Bridges (5)**: `hook-checkpoints` (shadow git snapshots before mutating tools), `bridge-shell-hooks` (Claude Code-compatible shell hooks), `bridge-mcp-client` (stdio JSON-RPC MCP client), `bridge-mcp-server` (`harness mcp` stdio server), `bridge-acp` (`harness acp` Agent Client Protocol stdio server).
+- **Plugin Manifests**: Each plugin configured via `harness_plugin.toml` with declared capabilities, settings schemas, and dependencies.
 
-#### Web Frontend & Dual-Origin Sandbox (`WEB-01` – `WEB-08`)
+#### Web Studio & Dual-Origin Sandbox (`harness/frontends/web`)
+- **Modular Frontend Architecture**: Built on vanilla ES modules (`app.js`, `api.js`, `events.js`, `cards.js`, `settings.js`, `styles.css`) with zero build step and zero external CDN dependencies.
+- **Strict Content Security Policy (CSP)**: `default-src 'self'`, `script-src 'self'` (zero `'unsafe-inline'`, zero `'unsafe-eval'`), and frame isolation.
 - **Dual-Origin SOP Sandbox**:
-  - Control Daemon running on `http://127.0.0.1:8000` (API, WebSocket, Admin UI).
-  - Artifact Sandbox running on `http://127.0.0.1:8001` (`/sandbox/` rendering user/agent HTML/SVG/JS with zero access to admin tokens or local storage).
-- **Security Middleware**: Bearer token authentication, Host header enforcement, Origin checking, and single-use WebSocket authentication tickets.
-- **Interactive UI**:
-  - Chat composer with streaming markdown, code syntax highlighting, and cancel execution button.
-  - Human-in-the-loop modal dialogs for tool approval requests.
-  - Dynamic plugin management tabs (System, Extensions, Developer, Skills, Connectors, Plugins).
-  - Interactive search and filter controls.
+  - Control & API Daemon on `:8000` (`/commands/*`, `/events`, `/health`).
+  - Artifact Sandbox on `:8001` (`/artifacts/*`) enforcing `default-src 'none'; script-src 'none'` to isolate agent-generated HTML/SVG from tokens and local storage.
+- **Secure Authentication & CSRF Protection**:
+  - Bearer token / `X-Harness-Token` authentication for API calls.
+  - `HttpOnly` session cookie and short-lived single-use tickets (`POST /auth/ticket`) for EventSource SSE streaming (no tokens in query strings).
+  - Host header rebinding validation (HTTP 421) and Origin / Sec-Fetch-Site checking (HTTP 403).
+- **Interactive UI Cards & Streaming**:
+  - Delegated event handling for interactive tool approval cards, forms, and proceed banners.
+  - Streaming character markdown and reasoning thinking blocks.
+  - Schema-driven settings panel reading kernel configurations with secrets masked.
+  - Real-time token economics tracker and context assembler inspector.
 
-#### Developer Tooling & CLI (`SDK-01`, `SDK-02`)
-- **Scaffolding Tooling (`harness plugin new`)**: Generates fully tested starter packages for any of the 8 component kinds with manifests, entrypoints, and automated SDK test kits.
-- **Doctor & Diagnostic Tooling (`harness plugin doctor`)**: Audits plugin manifests, capability validity, and enforces zero kernel import boundary violations across all registered plugins.
-- **Test Runner (`harness plugin test`)**: Invokes component-specific SDK test kits for single plugins or the full catalog (`--all`).
-
-#### Protocol Bridges (`BRG-01` – `BRG-04`)
-- Standardized bridge abstractions (`harness.bridges`) for Aider, OpenDevin, MCP, and Cowork Operon runtimes.
-
-#### Documentation (`SDK-03`, `DOC-01`, `DOC-02`, `DOC-03`)
-- **Porting Recipes (`docs/PORTING_RECIPES.md`)**: Comprehensive guide for porting legacy tools, providers, and loops to modern SDK plugins.
-- **Plugin Catalog (`docs/PLUGIN_CATALOG.md`)**: Full inventory of all 35 builtin plugins with capabilities, settings, and lifecycle statuses.
-- **Architecture Contracts (`docs/architecture/CONTRACTS.md`)**: Detailed API specifications for all 8 SDK base classes and test kits.
-- **Security Policy (`SECURITY.md`)**: Threat model, trust boundaries, dual-origin architecture, Tirith rules, and disclosure policy.
-- **README Overhaul**: Implementation status matrix (Implemented vs Experimental vs Planned), quickstart, and test count corrections.
+#### Developer Tooling & CLI (`harness/cli.py`)
+- **CLI Commands**:
+  - `harness run`: Single autonomous turn execution with `--provider`, `--model`, and `--mock-script` (applied in-memory before plugin boot).
+  - `harness ui`: Web studio server daemon launcher.
+  - `harness mcp` & `harness acp`: Stdio protocol bridges for external hosts and editor integration.
+  - `harness plugin new`: Scaffolding generator for any of the 8 component kinds.
+  - `harness plugin doctor`: Comprehensive manifest, boundary, and capability audit across plugins (`--all`).
+  - `harness plugin test`: Conformance test kit runner.
+  - `harness events schema`: JSON Schema exporter for the unified event protocol.
 
 ---
 
 ### Changed
-- **Config Hermeticity**: Configuration and state directories honor `HARNESS_CONFIG_DIR`, defaulting cleanly to `$HOME/.harness` with zero cross-test pollution.
-- **Workspace Jail**: Path operations strictly validated using `safe_path()` to prevent directory traversal and symlink escapes.
-- **CLI Commands**: Unified under modern subcommands (`harness run`, `harness ui`, `harness plugin`, `harness events`, `harness session`).
+- **Config & Workspace Hermeticity**: Configuration cleanly honors `HARNESS_CONFIG_DIR`, defaulting to `$HOME/.harness` with 0600 file permissions and 0700 directory permissions.
+- **Lazy Plugin Data Directories**: Kernel creates `.harness/plugins/<name>/` lazily on first access rather than generating 35 empty directories on startup.
+- **Executor Hardening**: Local executor sets `GIT_PAGER=cat`, `GIT_TERMINAL_PROMPT=0`, `PAGER=cat`, and defaults non-interactive stdin to `DEVNULL` to prevent command hangs.
+- **Turn Result Serialization**: Commands dispatch serialization cleanly handles nested dataclasses (`TurnResult`, `ExecResult`).
 
 ---
 
-### Quarantined & Removed (`EXP-01`, `EXP-02`)
-- **Quarantined**:
-  - `battle_arena.py` (multi-agent battle evaluator) moved to `harness/experimental/`.
-  - `spawn_ledger.py` (agent hierarchy spawn tracker) moved to `harness/experimental/`.
-  - `state_graph.py` (state-graph workflow executor) moved to `harness/experimental/`.
-  - `concurrency_gate.py` (cross-process mutex lock) moved to `harness/experimental/`.
-  - `browser_cdp.py` (Stagehand/CDP browser engine with mock fallbacks removed) moved to `harness/experimental/`.
-- **Removed**:
-  - Legacy monolithic `harness/web/` directory (superseded by `harness/web/`).
-  - Unused `harness/models/circuits.py` (dead router with hardcoded model lists).
-  - Obsolete test verification script `scripts/comprehensive_features_verification.py`.
-  - Unimplemented visual click predictor references from macOS bridge and skills.
+### Removed & Quarantined
+- **Deleted Dead v1 Monolith**:
+  - Deleted obsolete packages: `harness/core/`, `harness/memory/`, `harness/models/`, `harness/sandboxing/`, `harness/skills/`, `harness/artifacts/`, and `harness/desktop/`.
+  - Deleted 10 legacy root-level test files that existed solely to cover obsolete v1 code.
+  - Removed superseded monolithic `harness/experimental/architect_editor.py`.
+- **Quarantined in `harness/experimental/`**:
+  - `battle_arena.py`: Multi-agent git worktree battle evaluator with self-contained `WorktreeManager`.
+  - `spawn_ledger.py`: Hierarchical subagent spawn tracking prototype.
+  - `state_graph.py`: Cyclic state graph workflow engine.
+  - `concurrency_gate.py`: Concurrent task slot gate prototype.
+  - `browser_cdp.py`: Chrome DevTools Protocol engine prototype.
 
 ---
 

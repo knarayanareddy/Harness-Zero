@@ -24,7 +24,7 @@ Harness-Zero is designed as a **local, single-user agent daemon**. It is **not**
    |  | Web UI & REST API      |        | Kernel Security Layers         |  |
    |  | - Token Auth           |        | - Path Traversal Sandbox       |  |
    |  | - Host/Origin Check    |------->| - Environment Sanitization     |  |
-   |  | - Ticket-auth WS       |        | - Tirith Policy & AST Capsule  |  |
+   |  | - Ticket/Cookie Auth   |        | - Tirith Policy & AST Capsule  |  |
    |  +------------------------+        | - Approval Policy Engine       |  |
    |                                    +--------------------------------+  |
    |                                                     |                  |
@@ -56,13 +56,13 @@ Harness-Zero is designed as a **local, single-user agent daemon**. It is **not**
 
 ### 2.1 Dual-Origin Web Architecture (SOP Sandbox)
 To eliminate Cross-Site Scripting (XSS) and cross-origin token theft from agent-generated web artifacts, Harness-Zero runs two distinct HTTP origins:
-- **Admin & Control Daemon (`http://127.0.0.1:8000`)**: Serves the Harness web UI and control API (`/v1/sessions`, `/v1/events`, `/v1/tools`). Requests are guarded by token auth and origin checking.
-- **Artifact Sandbox (`http://127.0.0.1:8001`)**: Serves static HTML/JS/SVG artifacts generated during sessions (`/sandbox/`). By operating on port `8001`, the browser enforces strict Same-Origin Policy (SOP): scripts executing inside generated artifacts cannot read credentials, tokens, or WebSocket streams from port `8000`.
+- **Admin & Control Daemon (`http://127.0.0.1:8000`)**: Serves the Harness web UI and control API (`/commands/*`, `/events`, `/health`). Requests are guarded by token auth and origin checking.
+- **Artifact Sandbox (`http://127.0.0.1:8001`)**: Serves static HTML/JS/SVG artifacts generated during sessions (`/artifacts/*`). By operating on port `8001`, the browser enforces strict Same-Origin Policy (SOP): scripts executing inside generated artifacts cannot read credentials, tokens, or event streams from port `8000`.
 
 ### 2.2 CSRF, Origin, and Host Validation
-- **Host Header Enforcement**: The daemon validates that the `Host` header strictly matches `localhost`, `127.0.0.1`, or explicit allowed loopback addresses, blocking DNS rebinding attacks.
-- **Origin Header Check**: Cross-origin requests from external web pages are rejected by FastAPI middleware unless explicitly allowlisted.
-- **WebSocket Single-Use Tickets**: Browser clients cannot pass `Authorization: Bearer <token>` in native WebSocket constructors. Instead, they obtain a short-lived (60s), single-use ticket via an authenticated POST request, which is validated and burned upon WebSocket handshake.
+- **Host Header Enforcement**: The daemon validates that the `Host` header strictly matches `localhost`, `127.0.0.1`, or explicit allowed loopback addresses, blocking DNS rebinding attacks with HTTP 421.
+- **Origin Header Check**: Mutating requests check `Origin` and `Sec-Fetch-Site`. Cross-origin or cross-site requests are rejected with HTTP 403.
+- **Single-Use SSE Tickets & HttpOnly Cookies**: Native browser `EventSource` cannot pass custom Authorization headers. Instead, authentication is supported via `HttpOnly` session cookies set on `/`, or short-lived (60s) single-use tickets acquired via `POST /auth/ticket` and burned upon the `/events` handshake. Master tokens in query parameters are strictly forbidden.
 
 ### 2.3 Workspace Boundary & Path Traversal Jail
 - All filesystem tools (`read_file`, `write_file`, `list_files`, `edit_file`) resolve paths through `safe_path()`.
@@ -89,7 +89,7 @@ To eliminate Cross-Site Scripting (XSS) and cross-origin token theft from agent-
 Harness-Zero plugins run **in-process** inside the Python runtime for maximum performance and low-latency event processing. Because in-process code has access to the Python interpreter, isolation is enforced through static boundaries, manifest declarations, and runtime doctor audits:
 
 ### 3.1 Capability Declarations
-Every plugin must define a `manifest.json` declaring exactly which capabilities it requires from the `Capability` enum:
+Every plugin must define a `harness_plugin.toml` manifest declaring exactly which capabilities it requires from the `Capability` enum:
 
 | Capability | Description | Risk Level |
 |---|---|---|
@@ -106,8 +106,8 @@ Unregistered or arbitrary capability strings are rejected at manifest load time.
 
 ### 3.2 Import Boundary Enforcement
 - Plugins are strictly prohibited from importing internal kernel modules (`harness.kernel.*`, `harness.web.*`, `harness.cli.*`).
-- Plugins may **only** import from `harness.sdk` or third-party libraries.
-- The SDK exposes typed, stable interfaces (`BaseTool`, `BaseProvider`, `BaseContextEngine`, `BasePolicy`, `BaseExecutor`, `BaseStrategy`, `BaseBridge`, `BaseStore`).
+- Plugins may **only** import from `harness.sdk` or standard library / approved third-party dependencies.
+- The SDK exposes typed, stable `Protocol` interfaces (`Tool`, `Provider`, `ContextSource`, `Policy`, `Executor`, `Strategy`, `Bridge`, `Store`).
 - Architectural boundary tests (`test_import_boundaries.py`) and `harness plugin doctor` verify compliance before release.
 
 ### 3.3 What is NOT Provided (Out of Scope)

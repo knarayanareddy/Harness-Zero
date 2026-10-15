@@ -68,9 +68,9 @@ flowchart TD
 | **Tirith Security Capsule & Jail** | **Implemented** | Path jail (Order 10), risk classification (Order 50), secret leak auditing and SSRF protection (Order 60). |
 | **Permission Modes State Machine** | **Implemented** | `plan`, `ask`, `allow`, and `bypass` execution modes with live interactive card approvals. |
 | **Git Worktree Isolation** | **Implemented** | Scratch branch isolation (`git worktree add -b`) preventing collisions across subagents. |
-| **SQLite FTS5 Memory** | **Implemented** | Microsecond $O(1)$ random access into dual-log JSONL transcripts across sessions. |
+| **SQLite FTS5 Memory** | *Partial* | FTS5 search store and memory recall tools implemented; automated transcript indexing wired via store plugins. |
 | **Codebase Symbol Repo Map** | **Implemented** | AST symbol extraction and ranking packing large repos into compact prompt context. |
-| **Native macOS Computer Use** | **Implemented** | Native macOS Accessibility (`AXUIElement`) + ScreenCaptureKit screenshot verification. |
+| **Native macOS Computer Use** | *Partial* | Screen capture tool via macOS `screencapture` implemented; native `AXUIElement` accessibility automation planned for desktop bridge. |
 | **Claude Code Shell Hooks Bridge** | **Implemented** | HookKit-conformant execution of Claude Code scripts on tool events with stdin JSON. |
 | **MCP Client & Server Bridges** | **Implemented** | Stdio JSON-RPC 2.0 MCP client (auto-discovering tools/resources) and stdio MCP server (`harness mcp`). |
 | **Agent Client Protocol (ACP)** | **Implemented** | Stdio server frontend for editor and IDE integration (`harness acp`). |
