@@ -2,9 +2,13 @@
 
 Everything in this folder was produced by an end-to-end review of the repository at commit `a0afc75` (branch `arena/4bab20a8-harness-zero`), plus a follow-up review of the v0.2.0 rebuild (`7185083`). **No source files were changed.** The folder is self-contained: documents reference each other by bare filename and reference repository files by their path from the repo root.
 
-## Latest: `CODE_REVIEW_v0.2.0.md` (review of the rebuild)
+## Latest: `CODE_REVIEW_v0.2.1.md` (third pass, after the §9 remediation)
 
-After the v2 plan was executed (69 commits, tag `v0.2.0`), the repository was re-reviewed end to end with the same method. Short version: the kernel/SDK/plugin skeleton, boundaries, policy gate, daemon hardening and bridges are real and verified; but the agent loop never feeds tool results or history back to the model (record-schema mismatch + unwired stores), the shipped web page mixes an orphaned modular client with a legacy inline script whose chat endpoint fails on every request, and the legacy `/settings` route re-introduces plaintext API keys and fabricated state. It contains a claim fact-check, a plan-item closure matrix, a duplicate/legacy map, and a prioritised sequence to make the tree cohesive. **Read it first if you are picking up the codebase now.**
+The v0.2.0 review's six remediation steps were executed (8 commits, tag `v0.2.1`). Backend: every P0 is fixed and verified (loop memory, persistence, resume, `submit_turn`, previews, approvals, secrets, SSE tickets, strict CSP, dead tree deleted). Frontend: still does not work in a browser — the client only listens for unnamed SSE messages while the server sends named events, so no kernel event has ever reached `app.js`; the model dropdown causes a 500; a fresh daemon has no session; and the final commit pasted the v0.1 mockup back in with its handlers replaced by fake confirmations and `noop` buttons (16 of 131 interactive elements are wired). The review includes a headless DOM reproduction (`tools/ui_smoke.mjs`), a demonstration that a 3-line client fix makes the chat work, a placeholder inventory, a trend table across all three reviews, and a short ordered fix list. **Read this first.**
+
+## Previous: `CODE_REVIEW_v0.2.0.md` (review of the rebuild)
+
+After the v2 plan was executed (69 commits, tag `v0.2.0`), the repository was re-reviewed end to end with the same method. Short version: the kernel/SDK/plugin skeleton, boundaries, policy gate, daemon hardening and bridges are real and verified; but the agent loop never feeds tool results or history back to the model (record-schema mismatch + unwired stores), the shipped web page mixes an orphaned modular client with a legacy inline script whose chat endpoint fails on every request, and the legacy `/settings` route re-introduces plaintext API keys and fabricated state. It contains a claim fact-check, a plan-item closure matrix, a duplicate/legacy map, and a prioritised sequence to make the tree cohesive. Superseded by the v0.2.1 review; still the reference for the v0.2.0 closure matrix and the duplicate/legacy map.
 
 ## Start here (original review set)
 
