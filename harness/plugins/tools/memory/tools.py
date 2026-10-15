@@ -11,13 +11,14 @@ from typing import Any
 
 from harness.sdk.cards import Card
 from harness.sdk.context import ToolContext
+from harness.sdk.paths import memory_db_path
 from harness.sdk.types import RiskClass, TextBlock, ToolResult, ToolSpec
 
 logger = logging.getLogger(__name__)
 
 SEARCH_MEMORY_SPEC = ToolSpec(
     name="search_memory",
-    description="Searches previous session turns, transcripts, and conversations using full-text search.",
+    description="Searches remembered facts and previous session turns/transcripts using full-text search.",
     input_schema={
         "type": "object",
         "properties": {
@@ -72,6 +73,27 @@ def _safe_query(query: str) -> str:
     return " ".join(f'"{t}"' for t in tokens) if tokens else ""
 
 
+def _search_facts(cursor: sqlite3.Cursor, query: str, limit: int) -> list[tuple[int, str, str]]:
+    """Case-insensitive token match over `remembered_facts` (all tokens must appear in key or text)."""
+    tokens = [t.lower() for t in re.findall(r"\w+", query)]
+    if not tokens:
+        return []
+    where = " AND ".join("(lower(text) LIKE ? OR lower(key) LIKE ?)" for _ in tokens)
+    params: list[Any] = []
+    for t in tokens:
+        params.extend([f"%{t}%", f"%{t}%"])
+    params.append(limit)
+    try:
+        cursor.execute(
+            f"SELECT id, key, text FROM remembered_facts WHERE {where} ORDER BY id DESC LIMIT ?",
+            params,
+        )
+        return [(int(r[0]), str(r[1]), str(r[2])) for r in cursor.fetchall()]
+    except sqlite3.OperationalError:
+        # Table absent: database created by the FTS store before any `remember`.
+        return []
+
+
 class SearchMemoryHandler:
     """Handles search_memory tool execution."""
 
@@ -83,7 +105,9 @@ class SearchMemoryHandler:
         if not query:
             return ToolResult(content=[TextBlock(text="Error: query parameter cannot be empty")], is_error=True)
 
-        db_path = ctx.data_dir / "memory.db"
+        # Shared workspace memory database (harness.sdk.paths), NOT the
+        # tool-private data_dir: `remember` and the FTS5 store write here.
+        db_path = memory_db_path(ctx.workspace)
         if not db_path.exists():
             return ToolResult(content=[TextBlock(text=f"No memories or transcripts found matching '{query}'.")])
 
@@ -92,8 +116,10 @@ class SearchMemoryHandler:
             return ToolResult(content=[TextBlock(text=f"No results found for query '{query}'.")])
 
         conn = sqlite3.connect(str(db_path))
+        facts: list[tuple[int, str, str]] = []
         try:
             cursor = conn.cursor()
+            facts = _search_facts(cursor, query, limit)
             if scope == "session" and hasattr(ctx, "session_id") and ctx.session_id:
                 cursor.execute(
                     """
@@ -121,15 +147,22 @@ class SearchMemoryHandler:
             rows = cursor.fetchall()
         except sqlite3.OperationalError as e:
             logger.debug("FTS search error: %s", e)
-            return ToolResult(content=[TextBlock(text=f"No results found for query '{query}'.")])
+            rows = []
         finally:
             conn.close()
 
-        if not rows:
+        if not rows and not facts:
             return ToolResult(content=[TextBlock(text=f"No results found for query '{query}'.")])
 
-        lines = [f"Found {len(rows)} matches for '{query}':\n"]
+        lines = [f"Found {len(facts) + len(rows)} matches for '{query}':\n"]
         table_rows = []
+        for fact_id, key, text in facts:
+            # No square brackets around the key: the CLI renders previews with
+            # rich markup, which would swallow `[codename]` as a style tag.
+            label = f"fact #{fact_id}"
+            body = f"{key}: {text}" if key else text
+            lines.append(f"- {label}: {body}")
+            table_rows.append([label, "remember", body])
         for r in rows:
             conv_id, step_idx, source, _, snippet, _ = r
             lines.append(f"- [{conv_id} step {step_idx}] {snippet}")
@@ -157,7 +190,9 @@ class RememberHandler:
         if not text:
             return ToolResult(content=[TextBlock(text="Error: text parameter cannot be empty")], is_error=True)
 
-        db_path = ctx.data_dir / "memory.db"
+        # Shared workspace memory database (harness.sdk.paths) so that
+        # `search_memory` and the `memories` context source can read it back.
+        db_path = memory_db_path(ctx.workspace)
         db_path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(db_path))
         try:

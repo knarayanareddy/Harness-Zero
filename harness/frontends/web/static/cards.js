@@ -276,8 +276,8 @@ export class CardRenderer {
   }
 
   renderApproval(payload, _context) {
-    const reqId = escapeHtml(payload.request_id || payload.id || '');
-    const action = escapeHtml(payload.action || payload.tool || payload.command || 'Action');
+    const reqId = escapeHtml(payload.approval_id || payload.request_id || payload.id || '');
+    const action = escapeHtml(payload.summary || payload.action || payload.tool || payload.command || 'Action');
     const risk = escapeHtml(payload.risk_class || payload.risk || 'HIGH');
     const details = payload.details || payload.arguments ? JSON.stringify(payload.details || payload.arguments, null, 2) : '';
 
@@ -317,7 +317,7 @@ export class CardRenderer {
           <span class="px-2 py-0.5 rounded text-xs font-mono uppercase bg-blue-900/40 text-blue-300 border border-blue-800/50">${escapeHtml(decision)}</span>
         </div>
         ${argsStr ? `<details class="mt-2 text-xs"><summary class="text-gray-400 cursor-pointer font-mono">Arguments</summary><pre class="p-2 mt-1 bg-gray-900/80 rounded border border-gray-800 text-gray-300 font-mono overflow-x-auto">${argsStr}</pre></details>` : ''}
-        ${resultStr ? `<div class="mt-2 text-xs"><div class="text-gray-400 font-mono font-medium mb-1">Output:</div><pre class="p-2 bg-gray-950/90 rounded border border-gray-800 text-emerald-300 font-mono overflow-x-auto max-h-48">${resultStr}</pre></div>` : ''}
+        ${resultStr ? `<div class="mt-2 text-xs tool-output"><div class="text-gray-400 font-mono font-medium mb-1">Output:</div><pre class="p-2 bg-gray-950/90 rounded border border-gray-800 text-emerald-300 font-mono overflow-x-auto max-h-48">${resultStr}</pre></div>` : ''}
       </div>
     `;
   }

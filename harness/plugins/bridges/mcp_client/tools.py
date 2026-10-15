@@ -8,7 +8,7 @@ from collections.abc import Callable
 from typing import Any
 
 from harness.sdk.context import ToolContext
-from harness.sdk.contracts import ToolCall, ToolSpec
+from harness.sdk.contracts import ToolSpec
 from harness.sdk.types import Capability, RiskClass, TextBlock, ToolResult
 
 from .client import MCPClient
@@ -16,22 +16,33 @@ from .client import MCPClient
 logger = logging.getLogger(__name__)
 
 
+def _flag(annotations: dict[str, Any], *names: str) -> bool:
+    """True if any of the given annotation keys is explicitly truthy."""
+    return any(bool(annotations.get(n)) for n in names)
+
+
 def derive_risk_class(annotations: dict[str, Any] | None) -> RiskClass:
     """
-    Maps MCP tool annotations to Harness RiskClass (§10):
-    - readOnly -> READ
-    - destructive -> DESTRUCTIVE
-    - openWorld -> NETWORK
-    - else -> WRITE
+    Maps MCP tool annotations to Harness RiskClass (§10).
+
+    The MCP specification names these ``readOnlyHint`` / ``destructiveHint`` /
+    ``openWorldHint`` (ToolAnnotations); the un-suffixed and snake_case spellings
+    are accepted for servers that predate the spec. Unannotated tools are WRITE
+    so they go through approval in ``ask`` mode.
+
+    - readOnlyHint   -> READ
+    - destructiveHint -> DESTRUCTIVE
+    - openWorldHint  -> NETWORK
+    - else           -> WRITE
     """
     if not annotations:
         return RiskClass.WRITE
 
-    if annotations.get("readOnly") or annotations.get("read_only"):
+    if _flag(annotations, "readOnlyHint", "readOnly", "read_only"):
         return RiskClass.READ
-    if annotations.get("destructive"):
+    if _flag(annotations, "destructiveHint", "destructive"):
         return RiskClass.DESTRUCTIVE
-    if annotations.get("openWorld") or annotations.get("open_world"):
+    if _flag(annotations, "openWorldHint", "openWorld", "open_world"):
         return RiskClass.NETWORK
 
     return RiskClass.WRITE
@@ -63,12 +74,18 @@ def create_mcp_tool_spec(server_name: str, mcp_tool: dict[str, Any]) -> ToolSpec
 
 def create_mcp_tool_handler(
     client: MCPClient, original_tool_name: str
-) -> Callable[[ToolCall, ToolContext], Any]:
-    """Generates an async tool execution handler bridging to MCP client.call_tool()."""
+) -> Callable[[dict[str, Any], ToolContext], Any]:
+    """
+    Generates an async tool execution handler bridging to MCP client.call_tool().
 
-    async def _handler(call: ToolCall, ctx: ToolContext) -> ToolResult:
+    Signature is the kernel's tool-handler contract: ``handler(args: dict, ctx)``
+    (see ``ToolGate`` -> ``handler(current_args, tool_ctx)``), the same as every
+    built-in tool. It must NOT take a ``ToolCall``.
+    """
+
+    async def _handler(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
         try:
-            res = await client.call_tool(original_tool_name, call.arguments)
+            res = await client.call_tool(original_tool_name, dict(args or {}))
             content_items = res.get("content", [])
             text_blocks: list[TextBlock] = []
 
@@ -120,15 +137,16 @@ READ_RESOURCE_SPEC = ToolSpec(
 
 def create_read_resource_handler(
     clients: dict[str, MCPClient]
-) -> Callable[[ToolCall, ToolContext], Any]:
-    """Handler for read_resource tool querying active MCP clients."""
+) -> Callable[[dict[str, Any], ToolContext], Any]:
+    """Handler for read_resource tool querying active MCP clients (``handler(args, ctx)`` contract)."""
 
-    async def _handler(call: ToolCall, ctx: ToolContext) -> ToolResult:
-        uri = call.arguments.get("uri")
+    async def _handler(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
+        args = args or {}
+        uri = args.get("uri")
         if not uri:
             return ToolResult.error("Missing required argument: 'uri'")
 
-        server_target = call.arguments.get("server")
+        server_target = args.get("server")
         target_clients = (
             [clients[server_target]]
             if server_target and server_target in clients

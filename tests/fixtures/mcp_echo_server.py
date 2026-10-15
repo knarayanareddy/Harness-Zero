@@ -47,7 +47,7 @@ def handle_request(req: dict) -> dict | None:
                             },
                             "required": ["message"],
                         },
-                        "annotations": {"readOnly": True},
+                        "annotations": {"readOnlyHint": True},
                     },
                     {
                         "name": "mutate_data",
@@ -59,7 +59,7 @@ def handle_request(req: dict) -> dict | None:
                             },
                             "required": ["target"],
                         },
-                        "annotations": {"destructive": True},
+                        "annotations": {"destructiveHint": True},
                     },
                     {
                         "name": "fail_tool",

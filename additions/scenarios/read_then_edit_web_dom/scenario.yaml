@@ -1,0 +1,26 @@
+name: read_then_edit_web_dom
+kind: web
+summary: Edit through the real client — view_file then edit_file; the diff card renders in the timeline, the file changes on disk, and the conversation survives a page refresh.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: allow
+workspace_files:
+  app.py: |
+    def greet(name):
+        return f"Hello, {name}!"
+
+    if __name__ == "__main__":
+        print(greet("world"))
+turns:
+  - prompt: "Rename greet() to hello() in app.py"
+expect:
+  dom_turns_completed: true
+  dom_reload: true
+  tools_called: [view_file, edit_file]
+  files:
+    app.py: {contains: "def hello(", not_contains: "def greet("}
+  event_types_include: [ui.card]
+  timeline_contains: ["view_file", "edit_file", "Renamed greet() to hello() in app.py.", "Successfully applied 1 search/replace block(s)", "COMPLETED"]
+  timeline_order: ["Let me look at the file first.", "view_file", "edit_file", "Renamed greet() to hello() in app.py."]
+  reload_timeline_contains: ["Rename greet() to hello() in app.py", "edit_file", "Renamed greet() to hello() in app.py."]
+  event_types_exclude: [turn.error, turn.cancelled, approval.required]

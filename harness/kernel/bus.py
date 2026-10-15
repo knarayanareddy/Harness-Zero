@@ -101,7 +101,9 @@ class EventBus:
         Never drops non-delta lifecycle events.
         """
         is_delta = event.type in DELTA_EVENT_TYPES
+        original = event
         for sub in list(self._subscribers.values()):
+            event = original
             if not sub.matches(event.type):
                 continue
 
@@ -112,11 +114,27 @@ class EventBus:
                 # Verify delta stream correlation (e.g. same call_id or stream)
                 same_call = sub._last_delta.data.get("call_id") == event.data.get("call_id")
                 same_stream = sub._last_delta.data.get("stream") == event.data.get("stream")
-                if same_call and same_stream:
+                same_turn = sub._last_delta.turn_id == event.turn_id
+                if same_call and same_stream and same_turn:
                     prev_text = sub._last_delta.data.get("text", "")
                     new_text = event.data.get("text", "")
+                    # `_last_delta` is this subscriber's private copy (see below), so the
+                    # merge never touches the Event instance shared with other subscribers.
                     sub._last_delta.data["text"] = prev_text + new_text
                     continue
+
+            if is_delta:
+                # Each subscriber queues its own copy of a delta. Coalescing mutates the
+                # queued copy in place; mutating the shared instance would append every
+                # later chunk once per subscriber (text duplicated N times in the UI).
+                event = Event(
+                    type=event.type,
+                    data=dict(event.data),
+                    id=event.id,
+                    ts=event.ts,
+                    session_id=event.session_id,
+                    turn_id=event.turn_id,
+                )
 
             # If queue is full:
             if sub.queue.full():

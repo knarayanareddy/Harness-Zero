@@ -1,0 +1,19 @@
+name: approval_allow_web_dom
+kind: web
+summary: Approval flow through the real UI — the jsdom client receives approval.required, clicks the approve button, the write lands, the turn completes.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: ask
+turns:
+  - prompt: "Create notes.txt"
+expect:
+  dom_approves: true
+  dom_turns_completed: true
+  tools_called: [write_to_file]
+  files:
+    notes.txt: {contains: "approved from the browser"}
+  event_types_include: [approval.required, approval.resolved]
+  timeline_contains: ["notes.txt written"]
+  dom_reload: true
+  reload_timeline_contains: ["Create notes.txt", "write_to_file", "notes.txt written"]
+  event_types_exclude: [turn.error, turn.cancelled]

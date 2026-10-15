@@ -1,0 +1,13 @@
+name: memory_remember_search_kernel
+kind: kernel
+summary: remember → (same session) search_memory finds the fact; regression for review Addendum A.1 as a scenario.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: allow
+turns:
+  - prompt: "Remember the codename is Falcon"
+  - prompt: "What is the codename?"
+expect:
+  tools_called: [remember, search_memory]
+  model_saw: ["Falcon"]
+  reload_equals_live: true

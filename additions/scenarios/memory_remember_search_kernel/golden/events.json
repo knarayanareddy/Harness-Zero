@@ -1,0 +1,316 @@
+[
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay",
+      "session_id": "<session>",
+      "strategy": "single_loop"
+    },
+    "type": "session.started"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "options": {
+        "media": [],
+        "model": "replay-v1",
+        "prompt": "Remember the codename is Falcon",
+        "provider": "replay"
+      },
+      "prompt_preview": "Remember the codename is Falcon",
+      "provider": "replay",
+      "strategy": "single_loop"
+    },
+    "type": "turn.started"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay",
+      "request_tokens_estimate": 7
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "text": "Noting that."
+    },
+    "type": "model.text.delta"
+  },
+  {
+    "data": {
+      "arguments": {
+        "key": "codename",
+        "text": "Project codename is Falcon"
+      },
+      "call_id": "call#1",
+      "name": "remember"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "unknown_pricing": false
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "key": "codename",
+        "text": "Project codename is Falcon"
+      },
+      "call_id": "call#1",
+      "name": "remember",
+      "plugin": "tool-memory",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#1",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "card": {
+        "data": {
+          "body": "Permanently remembered fact #1 [codename]: Project codename is Falcon",
+          "level": "info"
+        },
+        "id": "evt#12",
+        "kind": "notice",
+        "title": null
+      }
+    },
+    "type": "ui.card"
+  },
+  {
+    "data": {
+      "call_id": "call#1",
+      "is_error": false,
+      "metadata": {},
+      "name": "remember",
+      "preview": "Permanently remembered fact #1 [codename]: Project codename is Falcon"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay",
+      "request_tokens_estimate": 43
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "text": "Saved."
+    },
+    "type": "model.text.delta"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "unknown_pricing": false
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "end_turn",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "stop_reason": "end_turn",
+      "tool_calls": 1,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "turn.completed"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "options": {
+        "media": [],
+        "model": "replay-v1",
+        "prompt": "What is the codename?",
+        "provider": "replay"
+      },
+      "prompt_preview": "What is the codename?",
+      "provider": "replay",
+      "strategy": "single_loop"
+    },
+    "type": "turn.started"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay",
+      "request_tokens_estimate": 49
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "query": "Falcon"
+      },
+      "call_id": "call#2",
+      "name": "search_memory"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "unknown_pricing": false
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "query": "Falcon"
+      },
+      "call_id": "call#2",
+      "name": "search_memory",
+      "plugin": "tool-memory",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#2",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "card": {
+        "data": {
+          "columns": [
+            "Step",
+            "Source",
+            "Snippet"
+          ],
+          "rows": [
+            [
+              "fact #1",
+              "remember",
+              "codename: Project codename is Falcon"
+            ],
+            [
+              "0",
+              "UNKNOWN",
+              "Remember the codename is [Falcon]"
+            ]
+          ]
+        },
+        "id": "evt#27",
+        "kind": "table",
+        "title": "Memory Search: Falcon"
+      }
+    },
+    "type": "ui.card"
+  },
+  {
+    "data": {
+      "call_id": "call#2",
+      "is_error": false,
+      "metadata": {},
+      "name": "search_memory",
+      "preview": "Found 2 matches for 'Falcon':\n\n- fact #1: codename: Project codename is Falcon\n- [<session> step 0] Remember the codename is [Falcon]"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay",
+      "request_tokens_estimate": 93
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "text": "Found it: the codename is Falcon."
+    },
+    "type": "model.text.delta"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "unknown_pricing": false
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "end_turn",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "stop_reason": "end_turn",
+      "tool_calls": 1,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "turn.completed"
+  }
+]

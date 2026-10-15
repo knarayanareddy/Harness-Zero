@@ -1,0 +1,18 @@
+name: jail_blocks_traversal_kernel
+kind: kernel
+summary: Workspace jail — a read and a write outside the workspace are denied by policy even in allow mode; nothing is read or written; the model is told why.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: allow
+turns:
+  - prompt: "Read /etc/hostname and write a file one level up."
+expect:
+  tools_called: [view_file, write_to_file]
+  files:
+    ../escape.txt: {exists: false}
+  events_match:
+    - {type: tool.decision, data: {action: deny, policy: workspace_jail}}
+    - {type: tool.result, data: {call_id: c2, is_error: true}}
+  event_types_exclude: [turn.error, approval.required]
+  model_saw: ["outside workspace"]
+  stop_reasons: [end_turn]

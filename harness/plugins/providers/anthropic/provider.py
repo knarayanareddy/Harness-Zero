@@ -201,7 +201,7 @@ class AnthropicProvider:
                 elif isinstance(block, ThinkingBlock):
                     content_blocks.append({
                         "type": "thinking",
-                        "thinking": block.thinking,
+                        "thinking": block.text,
                     })
 
             if content_blocks:

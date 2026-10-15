@@ -215,4 +215,45 @@ SETTINGS=1 CLICK='[data-notice="Account deletion confirmed."]' node ui_smoke.mjs
 
 ## Appendix B — Files/lines referenced
 
+Addendum: `harness/kernel/gate.py` (603, 617) · `registry.py` (503) · `context.py` (51) · `harness/plugins/tools/memory/tools.py` · `plugins/stores/fts5_search/plugin.py` · `plugins/context/memories/source.py` · `plugins/bridges/mcp_client/{tools,plugin}.py` · `harness/sdk/paths.py` · `tests/kernel/test_memory_roundtrip.py`, `test_mcp_tool_through_kernel.py`.
+
 `harness/frontends/web/static/events.js` (53–61) · `app.js` (30–57, 78–182, 204–209, 555–572, 805–821) · `api.js` (107–109) · `settings.js` (258) · `index.html` (14–28, 113, 192–241, 285, 318–335, 345–351, 378–440, 457–1411) · `harness/frontends/web/server.py` (268–306, 428, 440, 911–1034) · `harness/kernel/commands.py` (63–69, 92–98) · `tests/frontends/test_web_turn.py`, `test_static_contract.py` · `review/tools/ui_smoke.mjs`.
+
+---
+
+## Addendum (2026-10-15) — memory substrate and MCP bridge, found while answering "can I add Obsidian?"
+
+Prompted by the question whether the repo already has an Obsidian-like memory layer, two more subsystems were exercised **through the real kernel** rather than through their unit tests. Both were broken in a way the test suite could not see, for the same reason as §5: the tests construct the components with hand-made contexts and never cross a plugin boundary. Both are fixed in the same PR as this addendum (`tests/kernel/test_memory_roundtrip.py`, `tests/kernel/test_mcp_tool_through_kernel.py` are the regression tests; each was confirmed to **fail on `f32faf1`** before the fix).
+
+### A.1 Workspace memory never round-tripped (four components, four databases)
+
+| Component | Opened | Written by anyone? |
+|---|---|---|
+| `remember` tool (`plugins/tools/memory/tools.py`) | `.harness/tools/remember/memory.db` | yes — by itself |
+| `search_memory` tool | `.harness/tools/search_memory/memory.db` | **never** → always "No memories or transcripts found" |
+| `store-fts5-search` plugin | `.harness/plugins/store-fts5-search/memory.db` (+ looked for transcripts in `.harness/plugins/store-fts5-search/sessions`, which does not exist) | yes — indexed every turn into a file no tool reads |
+| `memories` context source | `.harness/memory.db` | **never** → "Remembered Facts" block never injected |
+
+Cause: `PolicyGate` hands every tool `registry.data_dir / "tools" / <tool>` (`gate.py:603`), the registry hands every plugin `data_dir / "plugins" / <plugin>` (`registry.py:503`), and `HookContextImpl` carries no `data_dir` at all (`context.py:51`). Each author resolved `memory.db` against whichever directory their context had. `tests/plugins/test_memory_plugins.py` passed because it set the same `ctx_mock.data_dir` on all three.
+
+Live repro on `f32faf1` (mock provider, scripted tool calls): process A `remember("Project codename is Falcon")` → "Permanently remembered fact #1"; process B `search_memory("Falcon")` → *"No memories or transcripts found matching 'Falcon'."*; a new session's first `ModelRequest` contained neither "Falcon" nor "Remembered Facts"; `find .harness -name memory.db` → two files, neither at the path the readers use.
+
+Fix: `harness/sdk/paths.py` (`memory_db_path(workspace)` = `<workspace>/.harness/memory.db`, `sessions_dir(workspace)`) used by all four; `search_memory` additionally searches `remembered_facts` (the FTS table only holds turns). After the fix the same scripts give: one database at `.harness/memory.db`; `search_memory` → "Found 2 matches … fact #1: codename: Project codename is Falcon" plus the indexed turn; the next session's prompt carries the "Remembered Facts & Context" block.
+
+Consequence for the §8 plan: the "memory" row of the feature table should have read *placeholder* in all three reviews; it is now *real* but thin (25 most recent facts, LIKE-match over facts, FTS over turns). A vault of Markdown notes (option 2 below) is the natural human-readable layer on top; the SQLite index should stay the machine-side one.
+
+### A.2 MCP client bridge: no external tool could ever execute
+
+`bridge-mcp-client` connected to a stdio server, discovered its tools and registered them as `mcp__<server>__<tool>` — and then every call failed with `MCP tool error: 'dict' object has no attribute 'arguments'`. The handlers were declared `_handler(call: ToolCall, ctx)` (`mcp_client/tools.py:69,126`) while the gate invokes `handler(current_args: dict, tool_ctx)` (`gate.py:617`), the contract every built-in tool follows. `tests/plugins/bridges/test_mcp_client.py` invoked the handler directly with a `ToolCall`, so it was green.
+
+Two smaller issues on the same path:
+- Risk classification only understood non-standard annotation names (`readOnly`, `destructive`, `openWorld`); the MCP spec's `readOnlyHint` / `destructiveHint` / `openWorldHint` were ignored, so every real server's tools were WRITE → approval prompt on each call in `ask` mode (CLI non-interactive: "Approval denied").
+- The plugin read `plugins.mcp-client.servers` / `extensions.mcp_servers` from the global settings but not its own namespace `plugins.bridge-mcp-client.servers` (the registry names it `bridge-mcp-client`).
+
+Fixed: handler signature, annotation names (legacy spellings still accepted), own-namespace settings key; `docs/PLUGIN_CATALOG.md` now shows the configuration. With a 20-line stdio server over a folder of `.md` notes (stand-in for an Obsidian MCP server): `mcp__vault__search_notes` → `SUCCESS`, note content returned, no approval prompt (`readOnlyHint`).
+
+### A.3 Answer to the Obsidian question, for the record
+
+1. **Zero code:** run with the vault (or a sub-folder) as the workspace — fs/search tools and `AGENTS.md` instructions work today; no backlink/graph awareness.
+2. **Designed path (now unblocked by A.2):** `plugins.bridge-mcp-client.servers.obsidian = {command, args, env}` pointing at an Obsidian MCP server (Local REST API-based ones expose search/read/patch/daily notes). Read-only tools run without prompts; write tools go through the approval card once the web client's SSE path (§8 step 1) works, or through the CLI's interactive approval.
+3. **Obsidian as a front end** (plugin → daemon API/SSE, or ACP): real but premature until §8 step 1.

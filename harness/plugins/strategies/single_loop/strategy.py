@@ -65,7 +65,7 @@ class SingleLoopStrategy:
                 if isinstance(block, TextBlock):
                     final_output += block.text
                 elif isinstance(block, ThinkingBlock):
-                    final_thinking += block.thinking
+                    final_thinking += block.text
 
             if "usage" in assistant_msg.metadata:
                 total_usage = total_usage + Usage.from_dict(assistant_msg.metadata["usage"])
@@ -140,6 +140,10 @@ class SingleLoopStrategy:
                 metadata={"tool_results": True},
             )
             await k.record(result_msg)
+        else:
+            # The loop ran out of iterations while the model was still calling tools.
+            # Say so instead of reporting a normal `end_turn` (silent truncation hides runaway loops).
+            stop_reason = "max_iterations"
 
         return TurnResult(
             output=final_output,

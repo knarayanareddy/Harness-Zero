@@ -1,0 +1,7 @@
+{"arguments": {"file_path": ".env"}, "id": "c1", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"t": "TextDelta", "text": "The file holds credentials; I will not repeat them."}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "end_turn", "t": "Done"}

@@ -1,0 +1,99 @@
+{"arguments": {"file_path": "app.py"}, "id": "c1", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c2", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c3", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c4", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c5", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c6", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c7", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c8", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c9", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c10", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c11", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c12", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c13", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c14", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c15", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c16", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c17", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c18", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c19", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c20", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c21", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c22", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c23", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c24", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"file_path": "app.py"}, "id": "c25", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}

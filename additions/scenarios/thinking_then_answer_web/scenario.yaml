@@ -1,0 +1,11 @@
+name: thinking_then_answer_web
+kind: web
+summary: Thinking deltas reach the client as model.thinking.delta; the final text is rendered; thinking is not fed back to the model as assistant text.
+recorded_from: synthetic
+turns:
+  - prompt: "Give me a short answer."
+expect:
+  dom_turns_completed: true
+  timeline_contains: ["Forty-two.", "Reasoning Process"]
+  event_types_include: [model.thinking.delta, model.text.delta, turn.completed]
+  event_types_exclude: [turn.error, turn.cancelled]

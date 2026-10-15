@@ -85,7 +85,7 @@ async def test_fts5_remember_and_context_source(tmp_path: Path):
 
     # ContextSource verification
     ctx_mock = MagicMock()
-    ctx_mock.data_dir = tmp_path / ".harness"
+    ctx_mock.workspace = tmp_path
 
     source = MemoriesContextSource()
     blocks = await source.blocks(ctx_mock)
@@ -112,7 +112,7 @@ async def test_memory_tools_execution(tmp_path: Path):
     # 1. Test remember tool
     remember_handler = RememberHandler()
     ctx_mock = MagicMock(spec=ToolContext)
-    ctx_mock.data_dir = data_dir
+    ctx_mock.workspace = tmp_path  # tools resolve <workspace>/.harness/memory.db
 
     rem_res = await remember_handler(
         {"text": "Always deploy to production using staging canary", "key": "deployment"},

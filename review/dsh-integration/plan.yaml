@@ -1,0 +1,349 @@
+# Machine-readable index of the DeepSeek-Harness integration pack.
+# Source of truth for sequencing; the WS-*.md files are the source of truth for design.
+# Status values: specified | in_progress | landed | dropped
+version: 1
+baseline:
+  harness_zero_commit: f43c272
+  dsh_commit: 86a40220
+  research_doc: review/RESEARCH_DEEPSEEK_HARNESS.md
+  principles: review/dsh-integration/00_PRINCIPLES.md
+  plugin_template: review/dsh-integration/templates/PLUGIN_TEMPLATE.md
+prerequisites:
+  - id: P0
+    title: "v0.2.1 review §8 critical path: client SSE listeners, submit_turn payload, session bootstrap, error surfacing"
+    doc: review/CODE_REVIEW_v0.2.1.md#8
+    required_by: [WS-01, WS-02, WS-05]
+    status: landed  # on branch arena/99a86436-harness-zero (PR #4); evidence: additions/FLOW_TEST_FINDINGS.md F-2/F-3/F-4/F-6/F-8
+global_gates:
+  - one PR per workstream (WS-03/04/06/10/11 may split into a/b/c as their spec says)
+  - at least one fail-first test quoted in the PR description
+  - no placeholders (data-notice, noop, sample data, "coming soon")
+  - ruff check . && pytest -q && harness plugin doctor --all && harness catalog --check (after WS-02)
+  - catalogs regenerated, CHANGELOG line links to catalog diff
+  - THIRD_PARTY_NOTICES.md for any verbatim port from dsh (MIT)
+
+workstreams:
+  - id: WS-01
+    title: Record/replay golden tests
+    doc: WS-01_record_replay_tests.md
+    status: in_progress  # working implementation in additions/scenarios (11 scenarios, 3 lanes); left: record CLI flag, git mv to tests/scenarios, CI job
+    implementation: additions/scenarios
+    effort_days: 1  # remaining
+    depends_on: [P0]
+    principles: [P5, P1]
+    dsh_refs: [packages/testing/llm-replay, packages/testing/session-snapshot, client/testing]
+    files_add:
+      - tests/scenarios/conftest.py
+      - tests/scenarios/_lib/{replay_provider,normalize,sse,dom}.py
+      - tests/scenarios/test_scenarios.py
+      - tests/scenarios/<8 scenarios>/
+      - tools/headless_timeline.mjs
+      - tests/frontends/package.json
+      - docs/testing/SCENARIOS.md
+    files_modify:
+      - harness/sdk/testing/{__init__,scripted}.py
+      - .github/workflows/ci.yml
+      - pyproject.toml
+      - .gitignore
+    tests:
+      - tests/scenarios/test_scenarios.py
+      - tests/kernel/test_replay_provider.py
+      - tests/scenarios/_lib/test_normalize.py
+    acceptance:
+      - pytest tests/scenarios -q
+      - "teeth: revert Addendum A.1 → memory_remember_search fails"
+      - "teeth: break app.js submit payload → plain_answer-web fails"
+
+  - id: WS-02
+    title: Generated catalogs and freshness gates
+    doc: WS-02_generated_catalogs_gates.md
+    status: specified
+    effort_days: 1.5
+    depends_on: [P0]
+    soft_depends_on: [WS-01]
+    principles: [P4, P2, P6]
+    dsh_refs: [scripts/gen-tool-catalog.ts, scripts/gen-config-catalog.ts, scripts/verify-doc-refs.ts, scripts/verify-package-readmes.ts, scripts/verify-client-*.ts]
+    files_add:
+      - harness/kernel/catalog.py
+      - harness/cli_catalog.py
+      - docs/catalog/{PLUGINS,TOOLS,SETTINGS,EVENTS,COMMANDS,UI_CONTRACT}.md
+      - docs/catalog/catalog.json
+      - docs/catalog/refs.allow
+      - harness/plugins/**/settings.schema.json
+      - harness/plugins/**/README.md
+      - tests/kernel/test_catalog.py
+      - tests/kernel/test_settings_declared.py
+      - tests/sdk/test_scaffold_kinds.py
+    files_modify:
+      - harness/cli.py
+      - harness/kernel/commands.py
+      - harness/kernel/registry.py
+      - harness/sdk/scaffold.py
+      - harness/sdk/manifest.py
+      - tests/kernel/test_import_boundaries.py
+      - .github/workflows/ci.yml
+    files_delete:
+      - docs/PLUGIN_CATALOG.md
+    tests:
+      - tests/kernel/test_settings_declared.py
+      - tests/kernel/test_catalog.py
+      - tests/sdk/test_scaffold_kinds.py
+    acceptance:
+      - harness catalog gen && git diff --quiet docs/
+      - harness catalog --check
+      - harness plugin new --kind tool x && harness plugin doctor x && harness plugin test x
+
+  - id: WS-03
+    title: Loop hygiene (pruner, spill, repeat reminder, cooperative timeout, read-before-edit)
+    doc: WS-03_loop_hygiene.md
+    status: specified
+    effort_days: 2
+    depends_on: [WS-01]
+    split: [WS-03a kernel seams, WS-03b hook plugins]
+    principles: [P1, P2, P6]
+    dsh_refs: [packages/features/tool-result-pruner, packages/features/tool-result-store, packages/features/repeat-tool-call-reminder, packages/core/tool-execution, packages/features/file-edit-guard]
+    files_add:
+      - harness/plugins/hooks/{tool_result_pruner,tool_result_spill,repeat_call_reminder,read_before_edit}/
+      - tests/kernel/test_tool_result_finalize_hook.py
+      - tests/kernel/test_cooperative_timeout.py
+      - tests/kernel/test_loop_hygiene_through_kernel.py
+      - tests/scenarios/{huge_tool_output_pruned_and_spilled,repeat_call_reminder,tool_timeout_partial_output,edit_without_read_blocked}/
+    files_modify:
+      - harness/sdk/types.py
+      - harness/sdk/contracts.py
+      - harness/sdk/context.py
+      - harness/kernel/gate.py
+      - harness/kernel/runner.py
+      - harness/kernel/settings.py
+      - harness/plugins/tools/fs/tools.py
+      - harness/plugins/executors/local/executor.py
+    settings_added:
+      - kernel.limits.tool_grace_s
+      - plugins.hooks-tool-result-pruner.{enabled,threshold_chars,head_chars,tail_chars,exempt_tools}
+      - plugins.hooks-tool-result-spill.{enabled,threshold_chars,max_files_per_session}
+      - plugins.hooks-repeat-call-reminder.{repeat_after,block_after}
+      - plugins.hooks-read-before-edit.{enabled,mode,exempt_globs}
+    acceptance:
+      - pytest tests/kernel/test_loop_hygiene_through_kernel.py tests/kernel/test_cooperative_timeout.py -q
+      - pytest tests/scenarios -q -k "pruned or repeat or timeout or edit_without_read"
+
+  - id: WS-04
+    title: Session log as single source of truth
+    doc: WS-04_session_log_single_source.md
+    status: specified
+    effort_days: 3
+    depends_on: [WS-01]
+    soft_depends_on: [WS-03]
+    split: [WS-04a record v2 + derive_messages, WS-04b runner/gate log-before-execute, WS-04c client single renderer path]
+    principles: [P1, P3]
+    dsh_refs: [packages/core/session-log, packages/features/checkpoints, packages/core/agent-loop]
+    files_add:
+      - harness/kernel/transcript.py
+      - tests/kernel/test_log_is_source.py
+      - tests/kernel/test_record_upgrade_v1.py
+      - tests/kernel/test_derive_messages.py
+      - tests/scenarios/{reload_equals_live,append_failure_fails_closed,crash_between_call_and_result}/
+      - docs/architecture/SESSION_LOG.md
+    files_modify:
+      - harness/sdk/types.py
+      - harness/sdk/contracts.py
+      - harness/kernel/{context,runner,gate,session,commands,approvals}.py
+      - harness/plugins/stores/jsonl_transcript/
+      - harness/plugins/hooks/checkpoints/
+      - harness/frontends/web/static/app.js
+      - docs/events.schema.json
+    acceptance:
+      - pytest tests/kernel/test_log_is_source.py tests/kernel/test_derive_messages.py -q
+      - grep -rn transcript_records harness/ | wc -l == 0
+      - pytest tests/scenarios -q
+
+  - id: WS-05
+    title: Feature-owned UI
+    doc: WS-05_feature_owned_ui.md
+    status: specified
+    effort_days: 2.5
+    depends_on: [P0, WS-02, WS-04]
+    principles: [P2, P4, P6]
+    dsh_refs: [client/features/ui-settings-*, client/core/conversation, client/core/plugin-host, scripts/verify-client-settings-tabs.ts, scripts/verify-client-event-renderers.ts]
+    files_add:
+      - harness/frontends/web/ui.toml
+      - harness/frontends/web/static/registry.js
+      - harness/frontends/web/static/renderers/*.js
+      - harness/frontends/web/static/panels/*.js
+      - tests/frontends/test_ui_contract.py
+      - tests/frontends/test_ui_headless.mjs
+      - tests/scenarios/{plugin_panel_appears_when_enabled,settings_tab_from_plugin_schema}/
+    files_modify:
+      - harness/sdk/manifest.py
+      - harness/kernel/{commands,registry}.py
+      - harness/frontends/web/server.py
+      - harness/frontends/web/static/{app,settings,api,cards}.js
+      - harness/frontends/web/static/index.html
+    commands_added: [commands.list, ui.contributions]
+    acceptance:
+      - pytest tests/frontends -q
+      - harness catalog --check ui   # fail mode
+
+  - id: WS-06
+    title: Permission presets + OS sandbox behind executor
+    doc: WS-06_permission_presets_sandbox.md
+    status: specified
+    effort_days: 4.5
+    depends_on: [WS-01, WS-02]
+    split: [WS-06a presets, WS-06b sandbox]
+    principles: [P3, P6]
+    dsh_refs: [packages/core/permission, packages/core/sandbox, packages/platform/sandbox-landlock, packages/platform/sandbox-seatbelt, docs/security.md]
+    files_add:
+      - harness/kernel/presets.py
+      - harness/plugins/executors/{sandbox_bwrap,sandbox_seatbelt}/
+      - tests/kernel/{test_presets,test_sandbox_fail_closed,test_sandbox_bwrap,test_daemon_no_approver_denies}.py
+      - tests/scenarios/{preset_locked_denies_exec,sandbox_unavailable_required_denies,sandbox_bwrap_full_badge}/
+    files_modify:
+      - harness/sdk/{contracts,types}.py
+      - harness/sdk/testing/kits.py
+      - harness/kernel/{settings,registry,commands}.py
+      - harness/plugins/executors/local/executor.py
+      - harness/plugins/policy/permission_modes/
+      - .github/workflows/ci.yml   # apt-get install bubblewrap
+    settings_added:
+      - kernel.security.preset
+      - kernel.security.exec_in_sandbox
+      - kernel.sandbox.{mode,network,extra_readable}
+    acceptance:
+      - pytest tests/kernel/test_presets.py tests/kernel/test_sandbox_fail_closed.py tests/kernel/test_sandbox_bwrap.py -q
+      - "manual: cat ~/.ssh/id_rsa inside run_command fails under careful; status.security reports backend"
+
+  - id: WS-07
+    title: Workspace changes + present tool
+    doc: WS-07_deliverables_workspace_changes.md
+    status: specified
+    effort_days: 1.5
+    depends_on: [WS-04]
+    soft_depends_on: [WS-05]
+    principles: [P1, P2]
+    dsh_refs: [packages/features/workspace-changes, packages/features/deliverables, client/features/ui-workspace-changes]
+    files_add:
+      - harness/plugins/tools/deliverables/
+      - harness/plugins/hooks/checkpoints/changes.py
+      - harness/frontends/web/static/renderers/{workspace_changes,deliverable}.js
+      - harness/frontends/web/static/panels/diffs.js
+      - tests/kernel/{test_workspace_changes,test_present_tool}.py
+      - tests/scenarios/{turn_changes_summary,present_artifact,restore_turn}/
+    files_modify:
+      - harness/sdk/context.py          # register_command
+      - harness/kernel/{commands,registry}.py
+      - harness/plugins/hooks/checkpoints/{plugin.py,harness_plugin.toml,settings.schema.json}
+    acceptance:
+      - pytest tests/kernel/test_workspace_changes.py tests/kernel/test_present_tool.py -q
+
+  - id: WS-08
+    title: ask_user tool
+    doc: WS-08_ask_user_tool.md
+    status: specified
+    effort_days: 1
+    depends_on: [WS-04]
+    soft_depends_on: [WS-05]
+    principles: [P1, P3]
+    dsh_refs: [packages/features/ask-user-question, client/features/ui-ask-user]
+    files_add:
+      - harness/kernel/interactions.py
+      - harness/plugins/tools/ask_user/
+      - harness/frontends/web/static/renderers/question.js
+      - tests/kernel/test_ask_user_through_kernel.py
+      - tests/scenarios/{ask_user_answered,ask_user_headless}/
+    files_modify:
+      - harness/kernel/{approvals,commands,gate}.py
+      - harness/sdk/context.py
+      - harness/frontends/cli/app.py
+    commands_added: [question.answer]
+    acceptance:
+      - pytest tests/kernel/test_ask_user_through_kernel.py tests/kernel/test_approvals.py -q
+
+  - id: WS-09
+    title: MCP streamable-http + resilience
+    doc: WS-09_mcp_http_transport.md
+    status: specified
+    effort_days: 1.5
+    depends_on: [WS-01, WS-02]
+    principles: [P3, P6]
+    dsh_refs: [packages/features/mcp-client]
+    files_add:
+      - harness/plugins/bridges/mcp_client/transports/{stdio,http}.py
+      - harness/plugins/bridges/mcp_client/supervisor.py
+      - harness/plugins/bridges/mcp_client/settings.schema.json
+      - tests/fixtures/mcp_echo_http_server.py
+      - tests/kernel/{test_mcp_http_through_kernel,test_mcp_reconnect,test_mcp_cancel}.py
+      - tests/scenarios/{mcp_http_echo,mcp_server_dies_and_returns}/
+    files_modify:
+      - harness/plugins/bridges/mcp_client/{client,plugin}.py
+      - harness/plugins/bridges/mcp_client/README.md
+      - harness/cli.py
+    settings_added:
+      - plugins.bridge-mcp-client.{servers,call_timeout_s,connect_timeout_s,reconnect.max_attempts,reconnect.max_backoff_s}
+    acceptance:
+      - pytest tests/kernel/test_mcp_*.py -q
+
+  - id: WS-10
+    title: Jobs and goals
+    doc: WS-10_jobs_and_goals.md
+    status: specified
+    effort_days: 5
+    depends_on: [WS-04, WS-03, WS-05]
+    split: [WS-10a jobs, WS-10b goals]
+    principles: [P1, P2, P3]
+    dsh_refs: [packages/features/jobs, packages/features/goal, client/features/ui-jobs]
+    files_add:
+      - harness/plugins/tools/{jobs,goals}/
+      - harness/kernel/{goals,services}.py
+      - harness/frontends/web/static/panels/jobs.js
+      - harness/frontends/web/static/renderers/{job,goal}.js
+      - tests/kernel/{test_jobs_through_kernel,test_jobs_survive_restart,test_goal_driver}.py
+      - tests/scenarios/{job_finishes_between_turns,goal_three_rounds_then_done,goal_budget_pause}/
+    files_modify:
+      - harness/sdk/context.py
+      - harness/kernel/{runner,commands,settings}.py
+      - harness/plugins/tools/shell/tools.py
+    settings_added:
+      - plugins.tools-jobs.{ring_bytes,max_jobs,spill_max_bytes}
+      - kernel.goals.{max_rounds_hard_cap,max_usd_hard_cap}
+    acceptance:
+      - pytest tests/kernel/test_jobs_*.py tests/kernel/test_goal_driver.py -q
+
+  - id: WS-11
+    title: Subagents (in-process tool) + ACP client
+    doc: WS-11_subagent_acp_client.md
+    status: specified
+    effort_days: 2
+    depends_on: [WS-04, WS-06]
+    soft_depends_on: [WS-10]
+    split: [WS-11a spawn_subagent, WS-11b ACP client]
+    principles: [P1, P3, P6]
+    dsh_refs: [packages/features/subagent, packages/features/acp-client]
+    files_add:
+      - harness/kernel/subagents.py
+      - harness/plugins/tools/subagent/
+      - harness/plugins/bridges/acp_client/
+      - harness/frontends/web/static/renderers/subagent.js
+      - tests/kernel/{test_spawn_subagent_through_kernel,test_acp_client_against_own_server}.py
+      - tests/integration/test_acp_client_{dsh,claude}.py
+      - tests/scenarios/{subagent_worktree_task,subagent_approval_routed_to_parent}/
+    files_modify:
+      - harness/plugins/bridges/acp/server.py
+      - harness/kernel/{runner,settings}.py
+    files_delete:
+      - harness/experimental/spawn_ledger.py
+      - harness/experimental/concurrency_gate.py
+    settings_added:
+      - kernel.subagents.{max_concurrent,max_usd_per_child,max_depth}
+      - plugins.bridge-acp-client.agents
+    acceptance:
+      - pytest tests/kernel/test_spawn_subagent_through_kernel.py tests/kernel/test_acp_client_against_own_server.py -q
+
+recommended_order: [P0, WS-01, WS-02, WS-03, WS-04, WS-05, WS-07, WS-08, WS-06, WS-09, WS-10, WS-11]
+not_adopted:
+  - feature: session-log-deepseek (telemetry upload)
+    reason: no remote upload of transcripts; see research doc Coupling row
+  - feature: Creator / runtime modes as product surface
+    reason: strategies + presets cover it; revisit after WS-06
+  - feature: "@file / @session references, AGENTS.local.md"
+    reason: small, independent; do after the pack as a normal issue (research item 12)

@@ -84,7 +84,7 @@ class SingleLoopStrategy:
                 if isinstance(block, TextBlock):
                     final_output += block.text
                 elif isinstance(block, ThinkingBlock):
-                    final_thinking += block.thinking
+                    final_thinking += block.text
 
             if "usage" in assistant_msg.metadata:
                 total_usage = total_usage + Usage.from_dict(assistant_msg.metadata["usage"])
@@ -139,6 +139,9 @@ class SingleLoopStrategy:
                 metadata={"tool_results": True},
             )
             await k.record(result_msg)
+        else:
+            # Iteration cap exhausted while the model was still calling tools (see single_loop).
+            stop_reason = "max_iterations"
 
         return TurnResult(
             output=final_output,
@@ -507,7 +510,7 @@ class KernelServicesImpl:
 
         content_blocks = []
         if thinking_parts:
-            content_blocks.append(ThinkingBlock(thinking="".join(thinking_parts)))
+            content_blocks.append(ThinkingBlock(text="".join(thinking_parts)))
         if text_parts:
             content_blocks.append(TextBlock(text="".join(text_parts)))
         for tc in tool_calls_dict.values():
