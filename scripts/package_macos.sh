@@ -16,23 +16,19 @@ mkdir -p "$DIST_DIR"
 
 echo "==> Step 1: Compiling standalone Python engine with PyInstaller..."
 PYINSTALLER_BIN=""
-if command -v pyinstaller >/dev/null 2>&1; then
-    PYINSTALLER_BIN="pyinstaller"
-elif [ -x "$REPO_ROOT/.venv/bin/pyinstaller" ]; then
+if [ -x "$REPO_ROOT/.venv/bin/pyinstaller" ]; then
     PYINSTALLER_BIN="$REPO_ROOT/.venv/bin/pyinstaller"
+elif command -v pyinstaller >/dev/null 2>&1; then
+    PYINSTALLER_BIN="pyinstaller"
 else
     echo "Error: PyInstaller not found. Install via: pip install '.[package]'" >&2
     exit 1
 fi
 
 "$PYINSTALLER_BIN" \
-    --name harness-engine \
-    --onefile \
     --clean \
     --noconfirm \
-    --add-data "harness/frontends/web/static:harness/frontends/web/static" \
-    --add-data "builtin:builtin" \
-    harness/engine_main.py
+    packaging/macos/harness-engine.spec
 
 echo "==> Step 2: Compiling native macOS Swift WebKit launcher..."
 swiftc \
@@ -82,7 +78,7 @@ cat << 'EOF' > "$APP_BUNDLE/Contents/Info.plist"
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.2.0</string>
+    <string>0.2.1</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>

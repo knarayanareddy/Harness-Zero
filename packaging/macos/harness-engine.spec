@@ -1,25 +1,27 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
 
+repo_root = Path(SPECPATH).resolve().parent.parent if 'SPECPATH' in locals() else Path('.').resolve()
+
 # Collect all plugin modules for hiddenimports dynamically
-plugin_dir = Path("harness/plugins")
+plugin_dir = repo_root / "harness" / "plugins"
 plugin_hidden_imports = []
 if plugin_dir.exists():
     for py_file in plugin_dir.rglob("*.py"):
-        rel_parts = list(py_file.with_suffix("").parts)
+        rel_parts = list(py_file.relative_to(repo_root).with_suffix("").parts)
         mod_name = ".".join(rel_parts)
         plugin_hidden_imports.append(mod_name)
 
 datas = [
-    ('harness/frontends/web/static', 'harness/frontends/web/static'),
-    ('harness/plugins', 'harness/plugins'),
+    (str(repo_root / 'harness/frontends/web/static'), 'harness/frontends/web/static'),
+    (str(repo_root / 'harness/plugins'), 'harness/plugins'),
 ]
-if Path("builtin").exists():
-    datas.append(('builtin', 'builtin'))
+if (repo_root / "builtin").exists():
+    datas.append((str(repo_root / 'builtin'), 'builtin'))
 
 a = Analysis(
-    ['harness/engine_main.py'],
-    pathex=[],
+    [str(repo_root / 'harness/engine_main.py')],
+    pathex=[str(repo_root)],
     binaries=[],
     datas=datas,
     hiddenimports=plugin_hidden_imports,

@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.1] - 2026-10-15
+
+### Remediation Release: Full End-to-End Cohesion & Security Hardening
+
+Release `0.2.1` addresses all architectural, security, and runtime gaps identified during the post-v0.2.0 audit (`review/CODE_REVIEW_v0.2.0.md` §9 Steps 1–6), establishing complete end-to-end cohesion between the microkernel, web frontend, agent loop, and plugin ecosystem.
+
+#### Fixed & Remediated
+- **Agent Loop Memory & Transcript Store Wiring (Step 1)**:
+  - Corrected `TurnRecord` dataclass serialization mismatch and integrated session transcripts into `TurnRunner`.
+  - Fixed model context feeding so tool results, error payloads, and conversational history persist and inform subsequent turns across sessions.
+  - Added hermetic roundtrip verification tests (`tests/kernel/test_turn_roundtrip.py`).
+- **Turn Endpoints & Tool Result Previews (Step 2)**:
+  - Aligned `/api/sessions/{session_id}/turn` endpoint with dataclass-based request and response models.
+  - Implemented streaming SSE and JSON fallback for real-time turn execution and tool result previews (`render_preview` contract).
+  - Resolved provider resolution edge cases for scripted and external provider configurations (`tests/frontends/test_web_turn.py`).
+- **Modular Frontend Unification & Strict CSP (Step 3)**:
+  - Fully unified web frontend on modular ES modules (`app.js`, `bus.js`, `api.js`, `state.js`, `views/`).
+  - Removed legacy inline scripts, inline styles, and `alert()` / `confirm()` popups in favor of native UI notifications and modals.
+  - Enforced strict Content Security Policy (`default-src 'self'`) across static serving routes.
+- **Security Hardening (Step 4)**:
+  - Enforced POSIX file permissions `0600` on credentials, secrets, and settings files (`~/.harness/settings.json`, `~/.harness/secrets.json`).
+  - Implemented single-use ticket and signed cookie authentication for SSE event streams, preventing unauthorized stream interception.
+  - Added secret redaction filters preventing token exposure in settings GET endpoints and logs.
+- **Dead v1 Tree Removal & Isolation Hardening (Step 5)**:
+  - Removed dead legacy v1 packages (`harness/desktop`, `harness/web`, `harness/core`, etc.).
+  - Hardened `local-executor` command execution with `DEVNULL` stdin to prevent zombie background processes from hanging on interactive prompts.
+  - Made plugin data directory provisioning strictly lazy to prevent unwanted directory scaffolding.
+  - Updated PyInstaller packaging spec with dynamic discovery of all 35 plugin packages.
+- **Documentation Alignment (Step 6)**:
+  - Reconciled `README.md`, `SECURITY.md`, and `docs/` with actual microkernel implementation and plugin inventory.
+  - Formally documented `~/.harness/settings.json` architecture in `review/DECISIONS.md` (Decision D17).
+
+---
+
 ## [0.2.0] - 2026-10-15
 
 ### Major Milestone: Modular Microkernel Architecture & Remediation
