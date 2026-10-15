@@ -232,6 +232,98 @@ export class HarnessStudioApp {
       });
     }
 
+    // Header buttons
+    const openSettingsBtn = document.getElementById('btn-open-settings');
+    if (openSettingsBtn) {
+      openSettingsBtn.addEventListener('click', () => this.openSettings());
+    }
+
+    const closeSettingsBtn = document.getElementById('btn-close-settings');
+    if (closeSettingsBtn) {
+      closeSettingsBtn.addEventListener('click', () => this.closeSettings());
+    }
+
+    const toggleInspectorBtn = document.getElementById('btn-context-inspector');
+    if (toggleInspectorBtn) {
+      toggleInspectorBtn.addEventListener('click', () => this.toggleContextInspector());
+    }
+
+    const closeInspectorBtn = document.getElementById('btn-close-inspector');
+    if (closeInspectorBtn) {
+      closeInspectorBtn.addEventListener('click', () => this.toggleContextInspector());
+    }
+
+    // Sidebar buttons
+    const newSessionBtn = document.getElementById('btn-new-session');
+    if (newSessionBtn) {
+      newSessionBtn.addEventListener('click', () => this.createNewSession());
+    }
+
+    // Terminal clear button
+    const clearTerminalBtn = document.getElementById('btn-terminal-clear');
+    if (clearTerminalBtn) {
+      clearTerminalBtn.addEventListener('click', () => {
+        const term = document.getElementById('terminal-body');
+        if (term) term.textContent = '';
+      });
+    }
+
+    // Approval banner buttons
+    const bannerDenyBtn = document.getElementById('btn-approval-deny');
+    if (bannerDenyBtn) {
+      bannerDenyBtn.addEventListener('click', () => {
+        const banner = document.getElementById('approval-banner');
+        const reqId = banner?.getAttribute('data-request-id');
+        if (reqId) this.resolveApproval(reqId, 'denied');
+      });
+    }
+
+    const bannerApproveBtn = document.getElementById('btn-approval-approve');
+    if (bannerApproveBtn) {
+      bannerApproveBtn.addEventListener('click', () => {
+        const banner = document.getElementById('approval-banner');
+        const reqId = banner?.getAttribute('data-request-id');
+        if (reqId) this.resolveApproval(reqId, 'approved');
+      });
+    }
+
+    // Proceed banner buttons
+    const proceedDismissBtn = document.getElementById('btn-proceed-dismiss');
+    if (proceedDismissBtn) {
+      proceedDismissBtn.addEventListener('click', () => this.dismissProceedBanner());
+    }
+
+    const proceedSubmitBtn = document.getElementById('btn-proceed-submit');
+    if (proceedSubmitBtn) {
+      proceedSubmitBtn.addEventListener('click', () => this.submitProceedFeedback());
+    }
+
+    // Timeline event delegation (for card approvals & card form submissions)
+    const timeline = document.getElementById('timeline');
+    if (timeline) {
+      timeline.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-action]');
+        if (!btn) return;
+        const action = btn.getAttribute('data-action');
+        const reqId = btn.getAttribute('data-request-id');
+        if (action === 'deny-approval' && reqId) {
+          this.resolveApproval(reqId, 'denied');
+        } else if (action === 'approve-approval' && reqId) {
+          this.resolveApproval(reqId, 'approved');
+        }
+      });
+
+      timeline.addEventListener('submit', (e) => {
+        const formElem = e.target.closest('form[data-form-id]');
+        if (!formElem) return;
+        e.preventDefault();
+        const formId = formElem.getAttribute('data-form-id');
+        if (formId) {
+          this.submitCardForm(formId, formElem);
+        }
+      });
+    }
+
     const settingsModal = document.getElementById('settings-modal');
     if (settingsModal) {
       settingsModal.addEventListener('click', (e) => {
@@ -475,7 +567,7 @@ export class HarnessStudioApp {
     try {
       await this.api.resolveApproval(requestId, decision, feedback);
     } catch (err) {
-      alert(`Failed to resolve approval: ${err.message}`);
+      this.appendNotice(`Failed to resolve approval: ${err.message}`, 'error');
     }
   }
 
@@ -673,7 +765,7 @@ export class HarnessStudioApp {
       await this.loadSessions();
       await this.reloadTranscript();
     } catch (err) {
-      alert(`Failed to switch session: ${err.message}`);
+      this.appendNotice(`Failed to switch session: ${err.message}`, 'error');
     }
   }
 
@@ -684,7 +776,7 @@ export class HarnessStudioApp {
       await this.loadSessions();
       await this.reloadTranscript();
     } catch (err) {
-      alert(`Failed to create session: ${err.message}`);
+      this.appendNotice(`Failed to create session: ${err.message}`, 'error');
     }
   }
 
@@ -697,9 +789,10 @@ export class HarnessStudioApp {
     try {
       const sData = await this.api.command('sessions.get', { session_id: this.activeSessionId });
       for (const rec of (sData.records || [])) {
-        if (rec.type === 'USER_INPUT') {
+        const type = rec.type || rec.role;
+        if (type === 'USER_INPUT' || type === 'user') {
           this.appendUserTurn(rec.content || '');
-        } else if (rec.type === 'PLANNER_RESPONSE' || rec.type === 'MODEL') {
+        } else if (type === 'PLANNER_RESPONSE' || type === 'MODEL' || type === 'assistant') {
           this.appendTurnBlock('assistant');
           this.streamAssistantText(rec.content || '');
           this.finalizeStreamingBlock();

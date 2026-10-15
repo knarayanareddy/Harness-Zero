@@ -230,7 +230,7 @@ class HarnessWebServer:
                 "default-src 'self'; "
                 "img-src 'self' data: blob:; "
                 "style-src 'self' 'unsafe-inline'; "
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                "script-src 'self'; "
                 f"frame-src {sb_origin_127} {sb_origin_local}; "
                 "frame-ancestors 'none'; "
                 "connect-src 'self' ws:;"
@@ -317,21 +317,16 @@ class HarnessWebServer:
     async def _handle_index(self, request: web.Request) -> web.Response:
         """Serves the rich studio index.html with tokens injected and sets HttpOnly cookie."""
         index_file = self.static_dir / "index.html"
-        token_script = f"<script>window.__HARNESS_TOKEN__ = {json.dumps(self.auth_token)};</script>"
         if index_file.exists():
             html = index_file.read_text(encoding="utf-8")
             html = html.replace("__HARNESS_TOKEN__", self.auth_token)
             html = html.replace("__SANDBOX_PORT__", str(self.sandbox_port))
-            if "</head>" in html:
-                html = html.replace("</head>", f"  {token_script}\n</head>", 1)
-            else:
-                html = f"{token_script}\n{html}"
             response = web.Response(text=html, content_type="text/html")
         else:
             # Minimal skeleton if static dir is not yet populated
             content = (
                 "<!DOCTYPE html>"
-                f"<html lang='en'><head><meta charset='UTF-8'><title>Harness Studio</title>{token_script}</head>"
+                f"<html lang='en'><head><meta charset='UTF-8'><meta name='harness-token' content='{self.auth_token}'><title>Harness Studio</title></head>"
                 "<body><div id='app'>Harness Studio Loading...</div></body></html>"
             )
             response = web.Response(text=content, content_type="text/html")

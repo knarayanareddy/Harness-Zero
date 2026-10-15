@@ -209,7 +209,7 @@ export class CardRenderer {
     return `
       <div class="harness-card harness-card-form" data-form-id="${formId}">
         <div class="card-header font-semibold text-sm mb-2">${title}</div>
-        <form class="card-form-element" onsubmit="event.preventDefault(); window.HarnessApp?.submitCardForm('${formId}', this);">
+        <form class="card-form-element" data-form-id="${formId}">
           ${fieldsHtml}
           <div class="form-actions mt-3 flex justify-end gap-2">
             <button type="submit" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm">Submit</button>
@@ -292,8 +292,8 @@ export class CardRenderer {
         </div>
         ${details ? `<pre class="bg-gray-900/90 text-gray-200 p-2 rounded text-xs overflow-x-auto font-mono my-2 border border-gray-800">${escapeHtml(details)}</pre>` : ''}
         <div class="flex justify-end gap-3 mt-3">
-          <button type="button" onclick="window.HarnessApp?.resolveApproval('${reqId}', 'denied')" class="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium">Deny</button>
-          <button type="button" onclick="window.HarnessApp?.resolveApproval('${reqId}', 'approved')" class="px-4 py-1.5 rounded bg-amber-600 hover:bg-amber-500 text-white text-sm font-bold shadow">Approve</button>
+          <button type="button" data-action="deny-approval" data-request-id="${reqId}" class="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium">Deny</button>
+          <button type="button" data-action="approve-approval" data-request-id="${reqId}" class="px-4 py-1.5 rounded bg-amber-600 hover:bg-amber-500 text-white text-sm font-bold shadow">Approve</button>
         </div>
       </div>
     `;

@@ -10,7 +10,15 @@ export class HarnessAPI {
   }
 
   _resolveToken() {
-    // 1. Query parameter token (e.g. from studio launcher or login link)
+    // 1. Meta tag token injected into index.html
+    if (typeof document !== 'undefined') {
+      const meta = document.querySelector('meta[name="harness-token"]');
+      if (meta && meta.content && meta.content !== '__HARNESS_TOKEN__') {
+        return meta.content;
+      }
+    }
+
+    // 2. Query parameter token (e.g. from studio launcher or login link)
     if (typeof window !== 'undefined' && window.location) {
       const urlParams = new URLSearchParams(window.location.search);
       const queryToken = urlParams.get('token');

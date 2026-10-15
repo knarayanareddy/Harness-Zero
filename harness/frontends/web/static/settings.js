@@ -2,6 +2,7 @@
  * Schema-driven Settings Panel for Harness-Zero Studio (ES Module).
  * Renders tab groups according to x-ui.group and widgets based on JSON Schema (§11, WEB-05).
  * Secrets display has() status and allow masked writes only.
+ * Operates without inline event handlers (CSP script-src 'self' compliant).
  */
 
 import { escapeHtml } from './cards.js';
@@ -13,6 +14,45 @@ export class SettingsPanel {
     this.schema = null;
     this.values = {};
     this.activeGroup = 'Models & Providers';
+    this.statusMessage = null;
+
+    if (this.container) {
+      this._bindDelegatedEvents();
+    }
+  }
+
+  _bindDelegatedEvents() {
+    this.container.addEventListener('click', (e) => {
+      const tabBtn = e.target.closest('[data-group]');
+      if (tabBtn) {
+        const group = tabBtn.getAttribute('data-group');
+        if (group) this.setGroup(group);
+        return;
+      }
+
+      const saveSecretBtn = e.target.closest('[data-action="save-secret"]');
+      if (saveSecretBtn) {
+        const key = saveSecretBtn.getAttribute('data-secret-key');
+        if (key) this.saveSecret(key);
+      }
+    });
+
+    this.container.addEventListener('change', (e) => {
+      const input = e.target.closest('[data-setting-path]');
+      if (!input) return;
+      const path = input.getAttribute('data-setting-path');
+      const type = input.getAttribute('data-setting-type');
+      let val;
+      if (type === 'boolean') {
+        val = input.checked;
+      } else if (type === 'number') {
+        val = parseFloat(input.value);
+        if (isNaN(val)) return;
+      } else {
+        val = input.value;
+      }
+      this.saveSetting(path, val);
+    });
   }
 
   async load() {
@@ -43,74 +83,62 @@ export class SettingsPanel {
               default: 'openai_compat',
               'x-ui': { group: 'Models & Providers', widget: 'select' },
             },
-          'kernel.model.default': {
-            title: 'Default Model',
-            type: 'string',
-            default: 'gpt-4o',
-            'x-ui': { group: 'Models & Providers', widget: 'text' },
+            'kernel.model.default': {
+              title: 'Default Model',
+              type: 'string',
+              default: 'gpt-4o',
+              'x-ui': { group: 'Models & Providers', widget: 'text' },
+            },
+            'kernel.security.jail_enabled': {
+              title: 'Workspace Jail Boundary',
+              type: 'boolean',
+              default: true,
+              'x-ui': { group: 'Security & Sandboxing', widget: 'boolean' },
+            },
+            'kernel.security.allow_shell_execution': {
+              title: 'Allow Shell Commands',
+              type: 'boolean',
+              default: true,
+              'x-ui': { group: 'Security & Sandboxing', widget: 'boolean' },
+            },
+            'kernel.security.spend_cap_usd': {
+              title: 'Spend Cap (USD)',
+              type: 'number',
+              default: 5.0,
+              minimum: 0.0,
+              'x-ui': { group: 'Economics & Spend', widget: 'number' },
+            },
+            'secrets.OPENAI_API_KEY': {
+              title: 'OpenAI API Key',
+              type: 'string',
+              'x-ui': { group: 'Secrets', widget: 'secret' },
+            },
+            'secrets.ANTHROPIC_API_KEY': {
+              title: 'Anthropic API Key',
+              type: 'string',
+              'x-ui': { group: 'Secrets', widget: 'secret' },
+            },
+            'secrets.GEMINI_API_KEY': {
+              title: 'Gemini API Key',
+              type: 'string',
+              'x-ui': { group: 'Secrets', widget: 'secret' },
+            },
           },
-          'kernel.security.jail_enabled': {
-            title: 'Workspace Jail Boundary',
-            type: 'boolean',
-            default: true,
-            'x-ui': { group: 'Security & Sandboxing', widget: 'boolean' },
-          },
-          'kernel.security.allow_shell_execution': {
-            title: 'Allow Shell Commands',
-            type: 'boolean',
-            default: true,
-            'x-ui': { group: 'Security & Sandboxing', widget: 'boolean' },
-          },
-          'kernel.security.spend_cap_usd': {
-            title: 'Spend Cap (USD)',
-            type: 'number',
-            default: 5.0,
-            minimum: 0.0,
-            'x-ui': { group: 'Economics & Spend', widget: 'number' },
-          },
-          'kernel.strategy.default': {
-            title: 'Turn Strategy',
-            type: 'string',
-            enum: ['single_loop', 'architect_editor'],
-            default: 'single_loop',
-            'x-ui': { group: 'Execution & Strategies', widget: 'select' },
-          },
-          'secrets.OPENAI_API_KEY': {
-            title: 'OpenAI API Key',
-            type: 'string',
-            'x-ui': { group: 'Secrets', widget: 'secret' },
-          },
-          'secrets.ANTHROPIC_API_KEY': {
-            title: 'Anthropic API Key',
-            type: 'string',
-            'x-ui': { group: 'Secrets', widget: 'secret' },
-          },
-          'secrets.GEMINI_API_KEY': {
-            title: 'Gemini API Key',
-            type: 'string',
-            'x-ui': { group: 'Secrets', widget: 'secret' },
-          },
-        },
-      };
+        };
+      }
 
-      // Fetch current values
+      // Fetch active values
       for (const key of Object.keys(this.schema.properties)) {
-        if (key.startsWith('secrets.')) {
-          // Secrets are checked for existence, not raw content
-          const secretName = key.replace('secrets.', '');
-          try {
-            const hasSecret = await this.api.command('settings.get', { path: `has_secret.${secretName}`, default: false });
-            this.values[key] = Boolean(hasSecret);
-          } catch {
-            this.values[key] = false;
-          }
-        } else {
-          try {
+        try {
+          if (key.startsWith('secrets.')) {
+            const has = await this.api.getSettings(`has_secret.${key.replace('secrets.', '')}`);
+            this.values[key] = Boolean(has);
+          } else {
             const val = await this.api.getSettings(key, this.schema.properties[key].default);
             this.values[key] = val;
-          } catch {
-            this.values[key] = this.schema.properties[key].default;
           }
+        } catch {
+          this.values[key] = this.schema.properties[key].default;
         }
       }
 
@@ -128,23 +156,42 @@ export class SettingsPanel {
     this.render();
   }
 
+  showNotice(msg, type = 'info') {
+    this.statusMessage = { msg, type };
+    this.render();
+    setTimeout(() => {
+      this.statusMessage = null;
+      this.render();
+    }, 4000);
+  }
+
   render() {
     if (!this.container) return;
 
     const groups = this.schema.groups || [];
     let tabsHtml = '';
     for (const g of groups) {
-      const activeCls = g === this.activeGroup ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800';
+      const activeCls = g === this.activeGroup ? 'settings-tab-active bg-blue-600 text-white' : 'settings-tab-btn text-gray-400 hover:text-white hover:bg-gray-800';
       tabsHtml += `
-        <button type="button" onclick="window.HarnessApp?.settingsPanel?.setGroup('${escapeHtml(g)}')" class="px-3 py-1.5 rounded text-xs font-medium transition ${activeCls}">
+        <button type="button" data-group="${escapeHtml(g)}" class="px-3 py-1.5 rounded text-xs font-medium transition ${activeCls}">
           ${escapeHtml(g)}
         </button>
       `;
     }
 
+    let statusHtml = '';
+    if (this.statusMessage) {
+      const colorCls = this.statusMessage.type === 'error' ? 'bg-red-950/80 text-red-200 border-red-800' : 'bg-emerald-950/80 text-emerald-200 border-emerald-800';
+      statusHtml = `
+        <div class="p-2 mb-3 rounded text-xs border ${colorCls} flex items-center justify-between">
+          <span>${escapeHtml(this.statusMessage.msg)}</span>
+        </div>
+      `;
+    }
+
     // Filter properties for current group
     let fieldsHtml = '';
-    for (const [key, prop] of Object.entries(this.schema.properties)) {
+    for (const [key, prop] of Object.entries(this.schema.properties || {})) {
       const ui = prop['x-ui'] || {};
       if (ui.group !== this.activeGroup) continue;
 
@@ -166,7 +213,7 @@ export class SettingsPanel {
             </div>
             <div class="flex gap-2 mt-1">
               <input type="password" id="input_${escapeHtml(key)}" placeholder="Enter new secret value to update" class="flex-1 px-3 py-1.5 rounded bg-gray-900 border border-gray-700 text-xs text-white" />
-              <button type="button" onclick="window.HarnessApp?.settingsPanel?.saveSecret('${escapeHtml(key)}')" class="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-xs font-semibold text-white">Save</button>
+              <button type="button" data-action="save-secret" data-secret-key="${escapeHtml(key)}" class="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-xs font-semibold text-white">Save</button>
             </div>
           </div>
         `;
@@ -174,7 +221,7 @@ export class SettingsPanel {
         fieldsHtml += `
           <div class="setting-item flex items-center justify-between py-3 border-b border-gray-800">
             <label class="text-sm font-medium text-gray-200">${title}</label>
-            <input type="checkbox" id="input_${escapeHtml(key)}" ${val ? 'checked' : ''} onchange="window.HarnessApp?.settingsPanel?.saveSetting('${escapeHtml(key)}', this.checked)" class="rounded bg-gray-900 border-gray-700 h-4 w-4 text-blue-600 focus:ring-blue-500" />
+            <input type="checkbox" id="input_${escapeHtml(key)}" data-setting-path="${escapeHtml(key)}" data-setting-type="boolean" ${val ? 'checked' : ''} class="rounded bg-gray-900 border-gray-700 h-4 w-4 text-blue-600 focus:ring-blue-500" />
           </div>
         `;
       } else if (widget === 'select') {
@@ -186,7 +233,7 @@ export class SettingsPanel {
         fieldsHtml += `
           <div class="setting-item flex flex-col gap-1 py-3 border-b border-gray-800">
             <label class="text-sm font-medium text-gray-200">${title}</label>
-            <select id="input_${escapeHtml(key)}" onchange="window.HarnessApp?.settingsPanel?.saveSetting('${escapeHtml(key)}', this.value)" class="px-3 py-1.5 rounded bg-gray-900 border border-gray-700 text-xs text-white">
+            <select id="input_${escapeHtml(key)}" data-setting-path="${escapeHtml(key)}" data-setting-type="string" class="px-3 py-1.5 rounded bg-gray-900 border border-gray-700 text-xs text-white">
               ${options}
             </select>
           </div>
@@ -195,14 +242,14 @@ export class SettingsPanel {
         fieldsHtml += `
           <div class="setting-item flex flex-col gap-1 py-3 border-b border-gray-800">
             <label class="text-sm font-medium text-gray-200">${title}</label>
-            <input type="number" step="0.5" id="input_${escapeHtml(key)}" value="${escapeHtml(val ?? '')}" onchange="window.HarnessApp?.settingsPanel?.saveSetting('${escapeHtml(key)}', parseFloat(this.value))" class="px-3 py-1.5 rounded bg-gray-900 border border-gray-700 text-xs text-white" />
+            <input type="number" step="0.5" id="input_${escapeHtml(key)}" data-setting-path="${escapeHtml(key)}" data-setting-type="number" value="${escapeHtml(val ?? '')}" class="px-3 py-1.5 rounded bg-gray-900 border border-gray-700 text-xs text-white" />
           </div>
         `;
       } else {
         fieldsHtml += `
           <div class="setting-item flex flex-col gap-1 py-3 border-b border-gray-800">
             <label class="text-sm font-medium text-gray-200">${title}</label>
-            <input type="text" id="input_${escapeHtml(key)}" value="${escapeHtml(val ?? '')}" onchange="window.HarnessApp?.settingsPanel?.saveSetting('${escapeHtml(key)}', this.value)" class="px-3 py-1.5 rounded bg-gray-900 border border-gray-700 text-xs text-white" />
+            <input type="text" id="input_${escapeHtml(key)}" data-setting-path="${escapeHtml(key)}" data-setting-type="string" value="${escapeHtml(val ?? '')}" class="px-3 py-1.5 rounded bg-gray-900 border border-gray-700 text-xs text-white" />
           </div>
         `;
       }
@@ -210,6 +257,7 @@ export class SettingsPanel {
 
     this.container.innerHTML = `
       <div class="settings-modal-content flex flex-col h-full">
+        ${statusHtml}
         <div class="flex items-center gap-1 pb-3 mb-3 border-b border-gray-800 overflow-x-auto">
           ${tabsHtml}
         </div>
@@ -224,8 +272,10 @@ export class SettingsPanel {
     try {
       this.values[path] = value;
       await this.api.setSettings(path, value);
+      this.showNotice(`Setting '${path}' saved`, 'info');
     } catch (err) {
-      alert(`Error saving setting '${path}': ${err.message}`);
+      console.error(`Error saving setting '${path}':`, err);
+      this.showNotice(`Error saving setting '${path}': ${err.message}`, 'error');
     }
   }
 
@@ -238,8 +288,10 @@ export class SettingsPanel {
       input.value = '';
       this.values[key] = true;
       this.render();
+      this.showNotice(`Secret '${secretKey}' saved`, 'info');
     } catch (err) {
-      alert(`Error setting secret: ${err.message}`);
+      console.error(`Error setting secret:`, err);
+      this.showNotice(`Error setting secret: ${err.message}`, 'error');
     }
   }
 }
