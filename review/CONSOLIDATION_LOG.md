@@ -18,7 +18,7 @@ what the flow test showed, what moved in the goldens and why). §3 collects defe
 |---|---|---|---|
 | **P1** | 4.1 no payload contract; 4.7 ledger/spend bugs; R8 card shape mismatch | Typed payload dataclasses for every event; `EconomicsSnapshot` as the one spend shape; `cards.js` renders the SDK card shape; generalised static contract tests; bus guard in tests | `pytest tests -q` green with `event_contract_guard` on · `harness events schema \| diff docs/events.schema.json -` empty · 20 scenarios strict · Economics: session ≠ lifetime across sessions |
 | **P2** ✔ | 4.4 browser-driven sessions | Kernel owns session lifecycle: lazy create on first `submit_turn`, resume on start; web `init()` no longer creates sessions; SSE before transcript reload; `sessions.list` rows = `SessionRow`; CLI follows the kernel's session too | 3 daemon restarts ⇒ 1 session (`tests/kernel/test_session_lifecycle.py`, scenario `daemon_restart_web_dom`) · 21 scenarios strict |
-| **P3** | 4.2 two styling systems; 4.3 facade remnants | One styling system (compiled Tailwind vendored, CSP-safe) · delete hand-copied utilities + dead classes · artifact cards into the artifact pane · `tool.output.delta` into the tool card · delete terminal drawer and static pills | `python additions/tools/ui_audit.py --strict` exit 0 · `grep -c 'style="' app.js` = 0 · `pytest tests/frontends -q` |
+| **P3** ✔ | 4.2 two styling systems; 4.3 facade remnants | One styling system: `styles.css` rewritten (components only) + compiled Tailwind `vendor/tw.css` (CSP-safe, committed, CI-checked) · artifact cards into the Artifacts tab · `tool.output.delta` into the tool card · terminal drawer, slash menu and every static pill removed or made live · `.hidden` finally defined (R14) | `python additions/tools/ui_audit.py --strict` exit 0 · `grep -c 'style="' app.js` = 0 · `tests/frontends/test_ui_coherence.py` (audit + jsdom cascade) · 21 scenarios strict |
 | **P4** | 4.7 provider truth | `Provider.is_configured()` / `is_reachable()`; `models.list` never raises; Ollama short-timeout + cache; remove `_is_provider_configured` | unit tests for both paths · scenarios strict |
 | **P5** | 4.5 tests in four places | `additions/scenarios` → `tests/scenarios`; delete `ui_smoke` duplicates; delete vacuous S1; CI runs scenarios | `pytest tests -q` includes the 20 scenarios · CI job green |
 | **P6** | 4.6 version/doc drift | CHANGELOG restructure; `/health.version` from `harness.__version__`; README counts; `docs/ARCHITECTURE.md`; research docs under `docs/research/` | `harness --version` == `/health.version` == CHANGELOG top entry |
@@ -262,7 +262,123 @@ the kernel's `active_session` was irrelevant to it.
 - No "resume a specific session" CLI flag: `/switch <id>` and the web picker already cover it.
 - `sessions_index.jsonl` (written by `Session`) is not read by `list_sessions()`; the directory scan is the
   source of truth. Dropping or using the index is a P6 hygiene item.
-### P3 — One styling system, no facade — pending
+### P3 — One styling system, no facade — **DONE**
+
+**Baseline** (`330fcaa`, end of P2): ruff clean · 369 pytest · 21/21 scenarios · 180 conformance.
+`ui_audit.py` at the baseline: 217 classes defined in `styles.css`, **106 used-but-undefined**, **71
+defined-but-unused**, **37 inline `style=` attributes** (index.html 19, app.js 17, cards.js 1), **12 ids in
+index.html nothing referenced**, stylesheet `styles.css` only.
+
+#### What the audit had not caught (found while rewriting; evidence in `tests/frontends/test_ui_coherence.py`)
+- **R14 — the page had no `.hidden` rule.** The templates were written against Tailwind (`hidden`,
+  `truncate`, `uppercase`, …), the CDN was dropped for the CSP, and `styles.css` only had
+  `.context-inspector.hidden`. jsdom cascade at the baseline: `#approval-banner`, `#onboarding-banner`,
+  `#proceed-banner`, `#session-list`, `#economics-view` and `#btn-stop` all computed `display: flex|block` on
+  load — the amber "High-Risk Action Approval Requested" bar, the indigo "AWAITING APPROVAL Architecture Plan"
+  banner, the Stop button and three studio views were visible at once. The settings modal only closed because
+  `closeSettings()` also set `style.display = 'none'`.
+- **R15 — undefined design tokens.** The second half of `styles.css` used `var(--border-color)`,
+  `var(--bg-secondary)`, `var(--text-primary)`, `var(--accent-hover)`; none existed in `:root`, so the modal
+  dialog background resolved to nothing and the inspector/terminal borders never rendered.
+- **R16 — two stylesheets concatenated into one file**: `.btn-send`, `.btn-stop`, `.composer-input`,
+  `.modal-dialog`, `.btn-icon`, `.diff-line`, `.proceed-banner`, `.settings-tab-btn`, `.banner-actions` were
+  each defined twice with different values; the later (broken, R15) copy won.
+- **R17 — slash menu facade**: typing `/` offered `/plan /diff /compact /pytest /git`; no kernel command
+  interprets them in web prompts (`Commands` has no `compact`), so they were sent to the model as text.
+- **R18 — tool output went nowhere**: `tool.output.delta` was appended to `#terminal-body` inside a drawer
+  that was `display:none` and had no code path to open it.
+- **R19 — static pills**: `🪝 main`, `Autonomous`, `Sovereign Daemon Online`, `● Ready`, `UTF-8`,
+  `Autonomous Heuristic`, `Cache Tier: Invariant`, a placeholder "No active artifact generated yet" and a
+  hard-coded welcome turn in the timeline.
+
+#### Decision: (a) compiled Tailwind, vendored
+`cards.js` and `settings.js` are written in utilities and the card templates are the part of the UI that
+works, so the smaller and safer change is to give those utilities a real definition rather than rewrite the
+templates. The rule is now: **components in `styles.css`, utilities from `vendor/tw.css`, never both.**
+
+- `tailwind.config.cjs` (repo root): `content = static/index.html + static/*.js`, `preflight: false` (the
+  reset lives in `styles.css` and includes the one preflight rule utilities depend on — `border-style:
+  solid; border-width: 0` on every element), compact type scale (`text-xs` 11px … `text-lg` 16px) so the
+  dense layout keeps its proportions, `font-mono`/`font-sans` bound to the `--font-*` tokens.
+- `package.json`: `tailwindcss@3.4.17` (exact) as a devDependency; `npm run build:css` writes
+  `harness/frontends/web/static/vendor/tw.css` (560 lines, 9 KB, 91 utilities, unminified so diffs are
+  readable); `npm run check:css` compares. **CI** rebuilds and `git diff --exit-code`s the file, then runs
+  `ui_audit.py --strict`.
+- `index.html` links `styles.css` then `vendor/tw.css` — in that order, so `.hidden` beats a component's
+  `display: flex` by cascade order alone (no `!important`); the audit enforces the order.
+
+#### What changed
+*`styles.css`* — rewritten (1801 → 1294 lines, 217 → 165 classes, every one used). Sections: tokens,
+reset, frame (title bar / rail / panes / status bar), conversation (turns, thinking, prose, composer),
+banners, studio (tabs, artifacts, session picker, economics), cards (one block per SDK kind plus tool/task),
+settings modal, context inspector. State is expressed with data attributes — `.card-badge[data-status]`,
+`.notice[data-level]`, `.status-dot[data-state]`, `.stability-badge[data-stability]`,
+`.tool-output[data-error]`, `.economics-stat-value[data-warn]`, `.harness-card-task[data-status]` — instead
+of generated class names (`notice-${level}`, `task-${status}`, `stability-${stab}` are gone), which is what
+makes the static audit exact.
+
+*`index.html`* (289 → 246 lines, 0 inline styles, 44 ids all referenced): title bar pills are
+`#workspace-pill` (from `/health.workspace`, new), `#economics-indicator`, context, settings and the
+connection `#status-dot[data-state]`/`#status-text`; the agent header shows `#permission-mode-badge`
+(`kernel.security.permission_mode`, refreshed on `settings.changed`); the status bar shows
+`#active-session-display` (SessionRow title), `#active-model-display`, `#version-display`
+(`/health.version`). Removed: terminal drawer, slash menu, the git/UTF-8/Ready pills, the `theme-dark`
+class, the welcome turn (the P2 empty-timeline hint replaces it) and the ids `act-*`, `tab-*`,
+`studio-viewport` that only decorated `data-*` hooks. The proceed banner's title/description are now filled
+from the artifact card; the Artifacts tab starts with `.artifact-empty` and receives real cards.
+
+*`app.js`* — `tool.output.delta` → `appendToolOutput(call_id, text, stream)` streams into the owning tool
+card's `.tool-output` (created on the first chunk; `tool.result` then only sets the verdict instead of
+duplicating the preview); `appendCard()` also renders `artifact` cards into `#studio-content-area` via
+`showArtifact()` and switches the tab; `showProceedBanner(card)` fills name/summary; `updateDaemonInfo()`,
+`updatePermissionBadge()`, `updateSessionDisplay()` feed the live pills; `setStatusIndicator()` and
+`updateEconomics()` set `data-state`/`data-warn` instead of swapping utility classes; the Economics tab,
+turn blocks and inspector templates use classes only; the settings search toggles `hidden`; `openSettings()`
+/`closeSettings()` no longer touch `style.display`; terminal and slash handlers deleted.
+`grep -c 'style="' app.js` = **0** (was 17).
+
+*`cards.js`* — progress cards render a native `<progress class="progress-bar" value max>` (indeterminate when
+`value` is null) — the last inline `style="width:…%"` is gone; notice/task cards carry state in data
+attributes; `renderToolOutput()` documented as the shared tool-output markup for streaming and results.
+
+*`server.py`* — `/health` gains `workspace` (the only source the title bar had for it).
+
+*`additions/tools/ui_audit.py`* — reads every linked stylesheet (classes may live in either file; only
+`styles.css` is checked for dead rules, the compiled file by construction contains only names found in the
+templates), counts ids referenced by `for`/`aria-*`/`href="#"` as referenced, follows template prefixes
+(`harness-card-${kind}`), and `--strict` now fails on *any* finding: missing or unreferenced ids,
+undefined or unused classes, inline styles, a stylesheet set other than `[styles.css, vendor/tw.css]` in
+that order, a script not served from `/static`.
+
+*Tests* — `tests/frontends/test_ui_coherence.py` (3): strict audit clean; `vendor/tw.css` is compiled
+output containing the utilities the markup relies on and no preflight; jsdom cascade — the eight elements
+that must be hidden on load compute `display: none`, the four that must show do not, and un-hiding the
+modal / Stop button yields `flex`.
+
+*Flow test* — `daemon_restart_web_dom/golden/timeline.txt` loses the hard-coded welcome sentence (the only
+golden delta in the suite; the other DOM scenarios cleared the timeline on reload anyway).
+
+#### Gate (hermetic)
+
+| Check | Result |
+|---|---|
+| `ruff check .` | clean |
+| `harness events schema \| diff docs/events.schema.json -` | no diff |
+| `npm run build:css && git diff --exit-code -- …/vendor/tw.css` | fresh |
+| `python additions/tools/ui_audit.py --strict` | exit 0 — 0 missing ids, 0 unreferenced ids, 0 undefined classes, 0 unused classes, 0 inline styles |
+| `grep -c 'style="' harness/frontends/web/static/app.js` | 0 |
+| `pytest tests -q` | **372 passed** (369 + 3) |
+| `harness plugin test --all` | **180 passed** |
+| `pytest additions/scenarios -q` (strict, DOM lane on) | **21 passed** |
+
+#### Not done in P3 (deliberately)
+- The CSP still allows `style-src 'unsafe-inline'`: nothing in the client needs it any more, but
+  `marked`/`prism` output was not audited for inline styles and jsdom cannot tell; tighten in a follow-up
+  with a browser check.
+- The "Unconfigured (Requires API Key)" optgroup in `populateModels()` stays until P4 changes what
+  `models.list` reports.
+- No visual regression tooling (no browser in this environment); the cascade test covers display state
+  only, not pixels.
 ### P4 — Provider truth — pending
 ### P5 — One test estate — pending
 ### P6 — Version / doc hygiene — pending
@@ -279,6 +395,12 @@ the kernel's `active_session` was irrelevant to it.
 | R11 | `plugins/tools/memory` | `remember` returned the confirmation both as result text and as a notice card → shown twice once cards rendered. | card removed |
 | R12 | `static/app.js` | `CSS.escape` is not available in jsdom; `resolveApprovalUI`/`completeTask` threw there, so the DOM lane could never see "Resolved: …". | `cssString()` helper |
 | R13 | `bridge-shell-hooks` | `ui.card` emitted `{kind, payload}` directly as `data` (no `card` wrapper), so the client's `data.card` was undefined. | fixed |
+| R14 | `static/styles.css` | No `.hidden` rule existed (only `.context-inspector.hidden`): approval banner, proceed banner, onboarding banner, Stop button, session list and economics view were all visible on load. | fixed in P3 (`vendor/tw.css`; cascade test) |
+| R15 | `static/styles.css` | Second half used four undefined custom properties (`--border-color`, `--bg-secondary`, `--text-primary`, `--accent-hover`) → transparent modal dialog, missing borders. | fixed in P3 (one token set) |
+| R16 | `static/styles.css` | Nine selectors defined twice with conflicting values (two stylesheets concatenated). | fixed in P3 (rewrite) |
+| R17 | `index.html` / `app.js` | Slash menu inserted `/plan /diff /compact /pytest /git`; no kernel command interprets them in web prompts. | removed in P3 |
+| R18 | `app.js` | `tool.output.delta` appended to a terminal drawer that was `display:none` with no code path to show it. | P3: streams into the tool card |
+| R19 | `index.html` | Static pills and placeholders (`🪝 main`, `Autonomous`, `Sovereign Daemon Online`, `UTF-8`, `Autonomous Heuristic`, `Cache Tier: Invariant`, welcome turn). | P3: live values or removed; `/health.workspace` added |
 
 ---
 
@@ -291,6 +413,8 @@ ruff check .
 python -m pytest tests -q                                   # hermetic suite (+ event_contract_guard)
 python -m harness.cli plugin test --all                     # plugin conformance
 python -m harness.cli events schema | diff docs/events.schema.json -
+npm install --silent && npm run build:css && git diff --exit-code -- harness/frontends/web/static/vendor/tw.css   # compiled utilities fresh
+python additions/tools/ui_audit.py --strict                 # web UI coherent (ids, classes, inline styles, stylesheets)
 npm --prefix additions/scenarios/_lib/node ci --silent      # jsdom lane deps (once per checkout)
 SCENARIO_DOM_WAIT_MS=6000 python -m pytest additions/scenarios -q          # flow-of-information, strict
 # only when a change is *meant* to move the wire: re-baseline once, inspect `git diff additions/scenarios/*/golden`, then strict again

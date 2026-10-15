@@ -319,6 +319,7 @@ class HarnessWebServer:
         return web.json_response({
             "status": "ok",
             "version": "2.0.0",
+            "workspace": str(self.workspace),
             "active_session": session.info.to_dict() if session else None,
             "sandbox_origin": f"http://{self.host}:{self.sandbox_port}",
             "spend": spend_info,

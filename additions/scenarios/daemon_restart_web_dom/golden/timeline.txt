@@ -1,1 +1,1 @@
-Welcome to Harness-Zero. I am your sovereign autonomous agent assistant. Enter an instruction below to begin. Question one Answer one: Amsterdam. Question two Answer two: Rotterdam.
+Question one Answer one: Amsterdam. Question two Answer two: Rotterdam.

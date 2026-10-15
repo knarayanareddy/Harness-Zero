@@ -16,7 +16,7 @@
  *   .harness-card[data-card-id]            every card
  *   .harness-card-tool[data-call-id]       tool card; badge is `.card-badge.uppercase`,
  *                                          result goes into `.tool-output`
- *   .harness-card-task[data-task-id]       task card; badge is `.card-badge.uppercase`
+ *   .harness-card-task[data-task-id][data-status] task card; badge is `.card-badge.uppercase`
  *   .harness-card-approval[data-request-id] approval card; buttons
  *                                          button[data-action="approve-approval"|"deny-approval"];
  *                                          `.card-actions.flex.justify-end` is replaced on resolve
@@ -182,7 +182,7 @@ export class CardRenderer {
     const level = NOTICE_LEVELS.has(data.level) ? data.level : 'info';
     const body = `<div class="notice-body text-sm">${renderMarkdown(data.body)}</div>`;
     return this.shell(card, 'notice', body, {
-      extraClass: `notice notice-${level}`,
+      extraClass: 'notice',
       attrs: `data-level="${level}" role="${level === 'error' ? 'alert' : 'status'}"`,
     });
   }
@@ -191,10 +191,10 @@ export class CardRenderer {
     const label = escapeHtml(data.label || '');
     const value = data.value === null || data.value === undefined ? null : Math.max(0, Math.min(1, Number(data.value)));
     const pct = value === null ? null : Math.round(value * 100);
-    const bar =
-      pct === null
-        ? '<div class="progress-track"><div class="progress-fill progress-indeterminate"></div></div>'
-        : `<div class="progress-track" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style="width:${pct}%"></div></div>`;
+    // A native <progress>: no value = indeterminate, no inline style needed for the fill.
+    const bar = pct === null
+      ? `<progress class="progress-bar" aria-label="${label}"></progress>`
+      : `<progress class="progress-bar" value="${pct}" max="100" aria-label="${label}"></progress>`;
     const body = `
       <div class="flex items-center justify-between text-xs mb-1">
         <span class="progress-label">${label}</span>
@@ -330,7 +330,10 @@ export class CardRenderer {
     return this.shell(card, 'tool', body, { attrs: `data-call-id="${callId}"` });
   }
 
-  /** Markup app.js appends into a tool card when `tool.result` arrives. */
+  /**
+   * Markup app.js appends into a tool card: once when `tool.output.delta` starts streaming
+   * (empty text, then appended to the <pre>), or when `tool.result` arrives with a preview.
+   */
   renderToolOutput(preview, isError) {
     const text = typeof preview === 'string' ? preview : fmtJson(preview);
     return `<div class="tool-output mt-2 text-xs" data-error="${isError ? 'true' : 'false'}"><div class="tool-output-label font-mono font-medium mb-1">${isError ? 'Error:' : 'Output:'}</div><pre class="p-2 font-mono overflow-x-auto max-h-48">${escapeHtml(text)}</pre></div>`;
@@ -352,7 +355,7 @@ export class CardRenderer {
         <span class="card-badge uppercase font-mono text-xs" data-status="${status}">${status.toUpperCase()}${exit}</span>
       </div>
       ${data.tail ? `<pre class="task-tail mt-2 p-2 font-mono text-xs overflow-x-auto max-h-48">${escapeHtml(data.tail)}</pre>` : ''}`;
-    return this.shell(card, 'task', body, { extraClass: `task-${status}`, attrs: `data-task-id="${taskId}"` });
+    return this.shell(card, 'task', body, { attrs: `data-task-id="${taskId}" data-status="${status}"` });
   }
 
   renderCompaction(card, data) {

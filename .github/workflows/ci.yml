@@ -64,6 +64,15 @@ jobs:
         run: |
           harness events schema | diff -u docs/events.schema.json -
 
+      - name: Verify compiled Tailwind is fresh (vendor/tw.css)
+        run: |
+          npm run build:css
+          git diff --exit-code -- harness/frontends/web/static/vendor/tw.css
+
+      - name: Web UI static audit
+        run: |
+          python additions/tools/ui_audit.py --strict
+
       - name: Verify clean working tree
         run: |
           test -z "$(git status --porcelain)"

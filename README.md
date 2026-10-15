@@ -108,14 +108,16 @@ harness ui --port 8000 --sandbox-port 8001
 - **Authentication**: Generates a random cryptographic session token written to `.harness/daemon.json` (0600 permissions).
 - **Dual-Origin Security**: Core API and event bus stream on `http://127.0.0.1:8000`; untrusted HTML and SVG artifacts render inside a sandboxed iframe on `http://127.0.0.1:8001`, cryptographically preventing XSS prompt-injection attacks.
 - **Host Header Protection**: Blocks DNS rebinding attacks; add external origins via `--allow-host`.
+- **Sessions are kernel-owned**: the daemon resumes the workspace's last conversation on start and creates a session on the first prompt; the client never creates one at boot.
+- **Styling**: two stylesheets, `static/styles.css` (components) and `static/vendor/tw.css` (utilities compiled from the templates). After editing class names in `index.html` / `*.js`, run `npm run build:css` and commit the result; `python additions/tools/ui_audit.py --strict` checks the page stays coherent (CI runs both).
 
 ### Running Interactive CLI Turns
 
 ```bash
-# Start an interactive pair-programming session:
+# Start an interactive pair-programming session (resumes the last conversation; --new starts fresh):
 harness interactive
 
-# Run a single autonomous command:
+# Run a single autonomous command in a new session (--continue appends to the last conversation):
 harness run "Audit repository dependencies and run tests" --workspace . --provider anthropic --model claude-3-7-sonnet
 ```
 

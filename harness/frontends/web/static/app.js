@@ -38,6 +38,7 @@ export class HarnessStudioApp {
         this.activeSessionId = health.active_session.session_id;
       }
       this.updateEconomics(health.spend);
+      this.updateDaemonInfo(health);
     } catch (err) {
       console.warn('[HarnessStudio] Initial health check failed:', err);
     }
@@ -69,7 +70,7 @@ export class HarnessStudioApp {
     // 6. Bind DOM UI listeners
     this.bindControls();
 
-    // 7. Check provider onboarding
+    // 7. Provider onboarding + permission mode badge (both are settings)
     try {
       const provider = await this.api.getSettings('kernel.provider', '');
       if (!provider) {
@@ -78,6 +79,45 @@ export class HarnessStudioApp {
     } catch (e) {
       console.warn('Failed to check provider onboarding:', e);
     }
+    await this.updatePermissionBadge();
+  }
+
+  /** `/health` → workspace pill and version display (the only sources those two values have). */
+  updateDaemonInfo(health) {
+    const ws = document.getElementById('workspace-pill');
+    if (ws && health.workspace) {
+      const name = String(health.workspace).replace(/[\\/]+$/, '').split(/[\\/]/).pop() || health.workspace;
+      ws.textContent = `📁 ${name}`;
+      ws.title = health.workspace;
+    }
+    const version = document.getElementById('version-display');
+    if (version && health.version) version.textContent = `v${health.version}`;
+  }
+
+  /** `kernel.security.permission_mode` (ask | allow | deny) — the mode the PolicyGate enforces. */
+  async updatePermissionBadge() {
+    const badge = document.getElementById('permission-mode-badge');
+    if (!badge) return;
+    try {
+      const mode = await this.api.getSettings('kernel.security.permission_mode', 'ask');
+      badge.textContent = `permissions: ${mode || 'ask'}`;
+      badge.dataset.warn = mode === 'allow' ? 'true' : 'false';
+    } catch (_err) {
+      badge.textContent = 'permissions: ?';
+    }
+  }
+
+  /** Status bar: which session the next prompt goes to (title from SessionRow when known). */
+  updateSessionDisplay(rows) {
+    const el = document.getElementById('active-session-display');
+    if (!el) return;
+    if (!this.activeSessionId) {
+      el.textContent = 'No session — your first message starts one';
+      return;
+    }
+    const row = (rows || this._sessionRows || []).find((r) => r.session_id === this.activeSessionId);
+    el.textContent = row && row.title ? `Session: ${row.title}` : `Session: ${this.activeSessionId}`;
+    el.title = this.activeSessionId;
   }
 
   setupEventHandlers() {
@@ -137,8 +177,17 @@ export class HarnessStudioApp {
     });
 
     this.events.on('tool.output.delta', (data) => {
+      // {call_id, stream, text}: streamed into the tool card it belongs to (there is no separate terminal).
       if (data.text) {
-        this.appendTerminalOutput(data.text);
+        this.appendToolOutput(data.call_id, data.text, data.stream);
+      }
+    });
+
+    this.events.on('settings.changed', (data) => {
+      const paths = Array.isArray(data.paths) ? data.paths : [];
+      if (paths.some((p) => String(p).startsWith('kernel.security'))) this.updatePermissionBadge();
+      if (paths.includes('kernel.provider')) {
+        document.getElementById('onboarding-banner')?.classList.add('hidden');
       }
     });
 
@@ -208,6 +257,7 @@ export class HarnessStudioApp {
         this.clearEmptyTimelineHint();
       }
       this.loadSessions();
+      this.updateSessionDisplay();
     });
 
     this.events.on('session.switched', (data) => {
@@ -238,7 +288,6 @@ export class HarnessStudioApp {
         const text = input.value.trim();
         if (!text || this.isBusy) return;
         input.value = '';
-        input.style.height = 'auto';
 
         // Add user block to timeline immediately
         this.appendUserTurn(text);
@@ -313,15 +362,6 @@ export class HarnessStudioApp {
     const newSessionBtn = document.getElementById('btn-new-session');
     if (newSessionBtn) {
       newSessionBtn.addEventListener('click', () => this.createNewSession());
-    }
-
-    // Terminal clear button
-    const clearTerminalBtn = document.getElementById('btn-terminal-clear');
-    if (clearTerminalBtn) {
-      clearTerminalBtn.addEventListener('click', () => {
-        const term = document.getElementById('terminal-body');
-        if (term) term.textContent = '';
-      });
     }
 
     // Approval banner buttons
@@ -417,34 +457,7 @@ export class HarnessStudioApp {
         this.switchActivity(actName);
         return;
       }
-
-      const slashItem = e.target.closest('[data-slash]');
-      if (slashItem) {
-        const cmd = slashItem.getAttribute('data-slash');
-        const input = document.getElementById('composer-input');
-        if (input) {
-          input.value = cmd + ' ';
-          input.focus();
-        }
-        const slashMenu = document.getElementById('slash-menu');
-        if (slashMenu) slashMenu.style.display = 'none';
-        return;
-      }
     });
-
-    // Slash menu trigger on composer input
-    if (input) {
-      input.addEventListener('input', () => {
-        const slashMenu = document.getElementById('slash-menu');
-        if (slashMenu) {
-          if (input.value.startsWith('/')) {
-            slashMenu.style.display = 'block';
-          } else {
-            slashMenu.style.display = 'none';
-          }
-        }
-      });
-    }
 
     // Settings search filtering for real schema-driven settings
     const searchInput = document.getElementById('settings-search-input');
@@ -453,7 +466,7 @@ export class HarnessStudioApp {
         const q = e.target.value.toLowerCase().trim();
         document.querySelectorAll('.setting-item').forEach((item) => {
           const label = item.querySelector('label')?.textContent.toLowerCase() || '';
-          item.style.display = label.includes(q) ? '' : 'none';
+          item.classList.toggle('hidden', !label.includes(q));
         });
       });
     }
@@ -498,41 +511,37 @@ export class HarnessStudioApp {
       const capUsd = data.cap_usd != null ? `$${Number(data.cap_usd).toFixed(2)}` : '—';
       const inputTok = usage.input_tokens || 0;
       const outputTok = usage.output_tokens || 0;
-      const totalTok = inputTok + outputTok + (usage.cache_read_tokens || 0) + (usage.reasoning_tokens || 0);
-      const unknown = data.unknown_pricing ? ' (lower bound: unknown pricing)' : '';
-      const sessionUsd = `$${Number(data.session_usd || 0).toFixed(4)}${unknown}`;
+      const totalTok = inputTok + outputTok;
+      const sessionUsd = `$${Number(data.session_usd || 0).toFixed(4)}`;
       const totalSpend = `$${Number(data.lifetime_usd || 0).toFixed(4)}`;
+      const unknown = data.unknown_pricing
+        ? '<div class="economics-stat-label mb-3">Some calls used a model without known pricing — spend is a lower bound.</div>'
+        : '';
 
       container.innerHTML = `
-        <div class="economics-card" style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:16px;">
-          <h3 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 12px 0;">Spend & Token Economics</h3>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
-            <div style="background:#09090b; padding:10px; border-radius:6px; border:1px solid #27272a;">
-              <div style="font-size:11px; color:#a1a1aa;">Session Spend / Turn Cap</div>
-              <div style="font-size:18px; font-weight:700; color:#34d399; margin-top:4px;">${escapeHtml(sessionUsd)} / ${escapeHtml(capUsd)}</div>
+        <div class="economics-card">
+          <h3 class="economics-title">Spend &amp; Token Economics</h3>
+          <div class="economics-grid">
+            <div class="economics-stat">
+              <div class="economics-stat-label">Session Spend / Turn Cap</div>
+              <div class="economics-stat-value" data-accent="${data.unknown_pricing ? 'false' : 'true'}" data-warn="${data.unknown_pricing ? 'true' : 'false'}">${escapeHtml(sessionUsd)} / ${escapeHtml(capUsd)}</div>
             </div>
-            <div style="background:#09090b; padding:10px; border-radius:6px; border:1px solid #27272a;">
-              <div style="font-size:11px; color:#a1a1aa;">Workspace Lifetime Cost</div>
-              <div style="font-size:18px; font-weight:700; color:#f4f4f5; margin-top:4px;">${escapeHtml(totalSpend)}</div>
+            <div class="economics-stat">
+              <div class="economics-stat-label">Workspace Lifetime Cost</div>
+              <div class="economics-stat-value">${escapeHtml(totalSpend)}</div>
             </div>
           </div>
-          <div style="font-size:12px; color:#a1a1aa; margin-bottom:8px;">Session Token Consumption:</div>
-          <div style="display:flex; justify-content:space-between; font-size:12px; padding:6px 0; border-bottom:1px solid #27272a;">
-            <span>Prompt (Input) Tokens:</span>
-            <span style="font-family:var(--font-mono); color:#f4f4f5;">${escapeHtml(String(inputTok))}</span>
-          </div>
-          <div style="display:flex; justify-content:space-between; font-size:12px; padding:6px 0; border-bottom:1px solid #27272a;">
-            <span>Completion (Output) Tokens:</span>
-            <span style="font-family:var(--font-mono); color:#f4f4f5;">${escapeHtml(String(outputTok))}</span>
-          </div>
-          <div style="display:flex; justify-content:space-between; font-size:12px; padding:6px 0;">
-            <span style="font-weight:600;">Total Tokens:</span>
-            <span style="font-family:var(--font-mono); font-weight:600; color:#38bdf8;">${escapeHtml(String(totalTok))}</span>
+          ${unknown}
+          <div class="economics-stat-label mb-2">Session Token Consumption</div>
+          <div class="economics-rows">
+            <div class="economics-row"><span>Input Tokens</span><span class="economics-row-value">${escapeHtml(String(inputTok))}</span></div>
+            <div class="economics-row"><span>Output Tokens</span><span class="economics-row-value">${escapeHtml(String(outputTok))}</span></div>
+            <div class="economics-row" data-total="true"><span>Total Tokens</span><span class="economics-row-value">${escapeHtml(String(totalTok))}</span></div>
           </div>
         </div>
       `;
     } catch (err) {
-      container.innerHTML = `<div class="text-xs text-red-400 p-4">Failed to load economics: ${escapeHtml(err.message)}</div>`;
+      container.innerHTML = `<div class="economics-card text-red-400">Failed to load economics: ${escapeHtml(err.message)}</div>`;
     }
   }
 
@@ -567,7 +576,7 @@ export class HarnessStudioApp {
     if (!timeline) return;
 
     const block = document.createElement('div');
-    block.className = `turn-block turn-${role}`;
+    block.className = role === 'user' ? 'turn-block turn-user' : 'turn-block turn-assistant';
     block.innerHTML = `
       <div class="message-bubble">
         <div class="thinking-container"></div>
@@ -666,9 +675,32 @@ export class HarnessStudioApp {
         badge.textContent = data.is_error ? 'ERROR' : 'COMPLETED';
         badge.dataset.status = data.is_error ? 'error' : 'completed';
       }
-      if (!card.querySelector('.tool-output') && (data.preview || data.is_error)) {
+      const streamed = card.querySelector('.tool-output');
+      if (streamed) {
+        // Output already streamed in via tool.output.delta: only the verdict changes.
+        streamed.dataset.error = data.is_error ? 'true' : 'false';
+        const label = streamed.querySelector('.tool-output-label');
+        if (label && data.is_error) label.textContent = 'Error:';
+      } else if (data.preview || data.is_error) {
         card.querySelector('.card-body').insertAdjacentHTML('beforeend', cardRenderer.renderToolOutput(data.preview || '', data.is_error));
       }
+    }
+  }
+
+  /** `tool.output.delta` → the <pre> of the tool card's `.tool-output` (created on the first chunk). */
+  appendToolOutput(callId, text, stream) {
+    if (!callId) return;
+    const card = document.querySelector(`.harness-card-tool[data-call-id=${cssString(callId)}]`);
+    if (!card) return;
+    let out = card.querySelector('.tool-output');
+    if (!out) {
+      card.querySelector('.card-body').insertAdjacentHTML('beforeend', cardRenderer.renderToolOutput('', stream === 'stderr'));
+      out = card.querySelector('.tool-output');
+    }
+    const pre = out?.querySelector('pre');
+    if (pre) {
+      pre.textContent += text;
+      pre.scrollTop = pre.scrollHeight;
     }
   }
 
@@ -688,15 +720,26 @@ export class HarnessStudioApp {
     }
   }
 
-  /** Appends an SDK card ({kind, id, title, data}) to the timeline. */
+  /** Appends an SDK card ({kind, id, title, data}) to the timeline; artifacts also go to the studio. */
   appendCard(card) {
     if (!card) return;
     this.appendCardHtml(cardRenderer.render(card));
 
-    // Proceed banner only for artifact.request_feedback (§11, WEB-04)
-    if (card.kind === 'artifact' && card.data?.request_feedback) {
-      this.showProceedBanner(card.data);
+    if (card.kind === 'artifact') {
+      this.showArtifact(card);
+      if (card.data?.request_feedback) this.showProceedBanner(card);
     }
+  }
+
+  /** Renders an artifact card into the Artifacts tab (newest on top) and brings the tab forward. */
+  showArtifact(card) {
+    const view = document.getElementById('studio-content-area');
+    if (!view) return;
+    view.querySelector('.artifact-empty')?.remove();
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = cardRenderer.render(card);
+    view.prepend(wrapper.firstElementChild);
+    this.switchStudioTab('artifact');
   }
 
   appendCardHtml(cardHtml) {
@@ -708,13 +751,17 @@ export class HarnessStudioApp {
     timeline.scrollTop = timeline.scrollHeight;
   }
 
-  showProceedBanner(artifact) {
-    // `artifact` is the card's data: {name, media_type, url, request_feedback}
+  showProceedBanner(card) {
+    // `card.data` is the artifact: {name, media_type, url, request_feedback}; `card.title` is its summary.
     const banner = document.getElementById('proceed-banner');
-    if (banner) {
-      banner.classList.remove('hidden');
-      banner.setAttribute('data-artifact', artifact.name || '');
-    }
+    if (!banner) return;
+    const artifact = card.data || {};
+    banner.classList.remove('hidden');
+    banner.setAttribute('data-artifact', artifact.name || '');
+    const title = document.getElementById('banner-artifact-title');
+    if (title) title.textContent = artifact.name || 'artifact';
+    const desc = document.getElementById('banner-artifact-desc');
+    if (desc) desc.textContent = card.title && card.title !== artifact.name ? card.title : `${artifact.media_type || ''} — review it in the Artifacts tab, then proceed or dismiss.`;
   }
 
   dismissProceedBanner() {
@@ -739,14 +786,6 @@ export class HarnessStudioApp {
   appendNotice(msg, level = 'info') {
     // Same shape as Card.notice(): levels info | success | warn | error.
     this.appendCard({ kind: 'notice', data: { level, body: String(msg ?? '') } });
-  }
-
-  appendTerminalOutput(text) {
-    const term = document.getElementById('terminal-body');
-    if (term) {
-      term.textContent += text;
-      term.scrollTop = term.scrollHeight;
-    }
   }
 
   showApproval(data) {
@@ -829,13 +868,7 @@ export class HarnessStudioApp {
     const dot = document.getElementById('status-dot');
     const label = document.getElementById('status-text');
     if (label) label.textContent = text;
-    if (dot) {
-      dot.className = 'w-2 h-2 rounded-full ' + (
-        state === 'online' ? 'bg-emerald-400' :
-        state === 'reconnecting' ? 'bg-amber-400 animate-pulse' :
-        'bg-red-500'
-      );
-    }
+    if (dot) dot.dataset.state = state;
   }
 
   updateEconomics(snapshot) {
@@ -847,11 +880,11 @@ export class HarnessStudioApp {
 
     if (snapshot.unknown_pricing) {
       elem.textContent = `${total} / ${cap} (unknown pricing)`;
-      elem.className = 'text-amber-400 font-semibold';
+      elem.dataset.warn = 'true';
       elem.title = 'Some calls used a model without known pricing — session spend is a lower bound';
     } else {
       elem.textContent = `${total} / ${cap}`;
-      elem.className = 'text-emerald-400';
+      elem.dataset.warn = 'false';
       elem.title = 'Session spend / per-turn cap';
     }
   }
@@ -867,6 +900,15 @@ export class HarnessStudioApp {
     if (badge) badge.textContent = `${totalTokens} tok`;
     if (totalTokElem) totalTokElem.textContent = `${totalTokens} tokens`;
     if (histElem) histElem.textContent = `History: ${contextData.history_messages || 0} msgs`;
+    const stabilityElem = document.getElementById('inspector-stability-summary');
+    if (stabilityElem) {
+      const counts = { static: 0, session: 0, turn: 0 };
+      for (const b of contextData.blocks || []) {
+        const k = String(b.stability || 'turn').toLowerCase();
+        counts[k] = (counts[k] || 0) + 1;
+      }
+      stabilityElem.textContent = `Blocks: ${counts.static} static · ${counts.session} session · ${counts.turn} turn`;
+    }
 
     if (!container) return;
     container.innerHTML = '';
@@ -885,7 +927,7 @@ export class HarnessStudioApp {
       card.innerHTML = `
         <div class="flex items-center justify-between mb-1">
           <span class="font-medium text-xs text-white truncate max-w-[180px]" title="${escapeHtml(b.id || '')}">${escapeHtml(b.id || b.source || 'block')}</span>
-          <span class="stability-badge stability-${stab}">${escapeHtml(stab.toUpperCase())}</span>
+          <span class="stability-badge" data-stability="${escapeHtml(stab)}">${escapeHtml(stab.toUpperCase())}</span>
         </div>
         <div class="flex items-center justify-between text-xs text-gray-400">
           <span>Source: ${escapeHtml(b.source || 'kernel')}</span>
@@ -1026,6 +1068,8 @@ export class HarnessStudioApp {
         const active = (sessions || []).find((s) => s.active);
         if (active) this.activeSessionId = active.session_id;
       }
+      this._sessionRows = sessions || [];
+      this.updateSessionDisplay(this._sessionRows);
       list.innerHTML = '';
       if (!sessions || sessions.length === 0) {
         list.innerHTML = '<div class="session-empty text-xs">No sessions yet — your first message starts one.</div>';
@@ -1098,7 +1142,10 @@ export class HarnessStudioApp {
     const timeline = document.getElementById('timeline');
     if (!timeline) return;
     timeline.innerHTML = '';
-    if (!this.activeSessionId) return;
+    if (!this.activeSessionId) {
+      this.showEmptyTimelineHint();
+      return;
+    }
 
     try {
       // TranscriptRecord (harness/sdk/types.py): {role, content, tool_calls: [{id, name, arguments}],
@@ -1125,6 +1172,7 @@ export class HarnessStudioApp {
           this.appendNotice(rec.content, 'info');
         }
       }
+      if (!timeline.children.length) this.showEmptyTimelineHint();
     } catch (err) {
       console.warn('Failed to reload transcript:', err);
     }
@@ -1134,7 +1182,6 @@ export class HarnessStudioApp {
     const modal = document.getElementById('settings-modal');
     if (modal) {
       modal.classList.remove('hidden');
-      modal.style.display = 'flex';
       this.settingsPanel?.load();
     }
   }
@@ -1143,7 +1190,6 @@ export class HarnessStudioApp {
     const modal = document.getElementById('settings-modal');
     if (modal) {
       modal.classList.add('hidden');
-      modal.style.display = 'none';
     }
   }
 }
