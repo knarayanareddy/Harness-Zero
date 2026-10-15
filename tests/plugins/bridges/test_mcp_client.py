@@ -16,7 +16,7 @@ from harness.plugins.bridges.mcp_client import (
     create_mcp_tool_spec,
     derive_risk_class,
 )
-from harness.sdk.contracts import ToolCall, ToolSpec
+from harness.sdk.contracts import ToolSpec
 from harness.sdk.testing import ToolKit
 from harness.sdk.types import RiskClass, ToolResult
 
@@ -40,6 +40,12 @@ class MockPluginContext:
 
 def test_derive_risk_class():
     """Maps MCP tool annotations to Harness RiskClass."""
+    # Spec-standard ToolAnnotations names (MCP 2025-03-26)
+    assert derive_risk_class({"readOnlyHint": True}) == RiskClass.READ
+    assert derive_risk_class({"destructiveHint": True}) == RiskClass.DESTRUCTIVE
+    assert derive_risk_class({"openWorldHint": True}) == RiskClass.NETWORK
+    assert derive_risk_class({"readOnlyHint": False, "destructiveHint": False}) == RiskClass.WRITE
+    # Legacy spellings still accepted
     assert derive_risk_class({"readOnly": True}) == RiskClass.READ
     assert derive_risk_class({"destructive": True}) == RiskClass.DESTRUCTIVE
     assert derive_risk_class({"openWorld": True}) == RiskClass.NETWORK
@@ -148,16 +154,15 @@ async def test_s14_mcp_bridge_plugin_and_disconnect_status(tmp_path: Path):
         # Execute tool through registered handler
         echo_handler = next(h for s, h in ctx.tools if s.name == "mcp__echo__echo")
         tool_ctx = MockToolContext(workspace=tmp_path)
-        call = ToolCall(id="call_mcp_1", name="mcp__echo__echo", arguments={"message": "S14 test message"})
-        result: ToolResult = await echo_handler(call, tool_ctx)
+        # Kernel contract: ToolGate invokes handler(args: dict, ctx) — not a ToolCall.
+        result: ToolResult = await echo_handler({"message": "S14 test message"}, tool_ctx)
 
         assert not result.is_error
         assert "echo: S14 test message" in result.content[0].text
 
         # Test read_resource handler
         read_res_handler = next(h for s, h in ctx.tools if s.name == "read_resource")
-        call_res = ToolCall(id="call_res_1", name="read_resource", arguments={"uri": "memo://today"})
-        res_result: ToolResult = await read_res_handler(call_res, tool_ctx)
+        res_result: ToolResult = await read_res_handler({"uri": "memo://today"}, tool_ctx)
         assert not res_result.is_error
         assert "memo://today" in res_result.content[0].text
 
@@ -200,8 +205,7 @@ async def test_toolkit_conformance_for_mcp_tools(tmp_path: Path):
         kit.test_declared_risk_class_bound(spec)
 
         tool_ctx = MockToolContext(workspace=tmp_path)
-        call = ToolCall(id="call_t1", name="mcp__echo__echo", arguments={"message": "conformance test"})
-        res = await handler(call, tool_ctx)
+        res = await handler({"message": "conformance test"}, tool_ctx)
         assert not res.is_error
         assert "echo: conformance test" in res.content[0].text
     finally:

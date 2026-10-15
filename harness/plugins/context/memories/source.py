@@ -7,6 +7,7 @@ import logging
 import sqlite3
 from typing import Any
 
+from harness.sdk.paths import memory_db_path
 from harness.sdk.types import ContextBlock, Stability
 
 logger = logging.getLogger(__name__)
@@ -20,16 +21,14 @@ class MemoriesContextSource:
     name: str = "memories"
 
     async def blocks(self, ctx: Any) -> list[ContextBlock]:
-        data_dir = getattr(ctx, "data_dir", None)
-        if not data_dir:
-            workspace = getattr(ctx, "workspace", None)
-            if workspace:
-                data_dir = workspace / ".harness"
-
-        if not data_dir:
+        workspace = getattr(ctx, "workspace", None)
+        if not workspace:
             return []
 
-        db_path = data_dir / "memory.db"
+        # Same file the `remember` tool writes and the FTS5 store indexes
+        # (see harness.sdk.paths). HookContext carries no data_dir, and the
+        # per-plugin data_dir would be the wrong place anyway.
+        db_path = memory_db_path(workspace)
         if not db_path.exists():
             return []
 

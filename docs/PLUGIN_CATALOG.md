@@ -73,7 +73,7 @@ Plugins are discovered across standard filesystem roots and loaded in strict ord
 - **`search-tools`**: Codebase search (`search_codebase`) via ripgrep (`rg`) with automatic regex parsing and pure Python fallback.
 - **`shell-tools`**: Asynchronous bash process runner (`run_command`) with process management (`manage_task`), background tasks, and persistent terminal support.
 - **`tool-artifacts`**: Interactive artifact generator saving markdown, HTML widgets, and UI progression diagrams into `.harness/artifacts`.
-- **`tool-memory`**: Explicit fact storage and recall (`search_memory`, `save_memory`).
+- **`tool-memory`**: Explicit fact storage and recall (`remember`, `search_memory`). Facts and the FTS5 transcript index share one database, `<workspace>/.harness/memory.db` (`harness.sdk.paths.memory_db_path`).
 - **`tool-skills`**: Playbook reader (`view_skill`) fetching detailed workflows from `builtin/skills` and workspace skill directories.
 - **`tool-screenshot-macos`**: Native screen capture (`screencapture -x`) returning JPEG/PNG `ImageBlock` for visual debugging.
 
@@ -93,7 +93,7 @@ Plugins are discovered across standard filesystem roots and loaded in strict ord
 - **`context-tool-guidance`**: Instructions on parameter formatting, diff syntax, and tool usage (`Stability.STATIC`).
 - **`context-skills-catalog`**: High-level summary table of available skill playbooks (`Stability.SESSION`).
 - **`context-repo-map`**: Tree-sitter and AST symbol ranking packing entire repository structures into dense outlines (`Stability.SESSION`).
-- **`context-memories`**: Injects cross-session memories and user preferences into active turn context (`Stability.TURN`).
+- **`context-memories`**: Injects the 25 most recent remembered facts from `<workspace>/.harness/memory.db` as a `Stability.SESSION` block ("Remembered Facts & Context").
 
 ### E. Execution Sandboxes
 - **`local-executor`**: Native subprocess execution with stdin/stdout streaming, timeouts, signal propagation, and clean process killing.
@@ -112,6 +112,14 @@ Plugins are discovered across standard filesystem roots and loaded in strict ord
 ### H. Lifecycle Hooks & Bridges
 - **`hook-checkpoints`**: Cline-style Git snapshot mechanism saving working tree state before mutating actions and providing `checkpoint_restore`.
 - **`bridge-shell-hooks`**: Claude Code-compatible hook runner executing external shell scripts on tool events with stdin JSON and exit code filtering.
-- **`bridge-mcp-client`**: Connects external MCP servers over stdio, discovers tools, maps schemas to `mcp__<server>__<tool>`, and handles bidirectional tool calls.
+- **`bridge-mcp-client`**: Connects external MCP servers over stdio, discovers tools, maps schemas to `mcp__<server>__<tool>`, and handles bidirectional tool calls. Configure servers under the plugin's own settings namespace (legacy keys `plugins.mcp-client.servers` / `extensions.mcp_servers` are still read):
+
+  ```json
+  {"plugins": {"bridge-mcp-client": {"servers": {
+    "obsidian": {"command": "uvx", "args": ["mcp-obsidian"], "env": {"OBSIDIAN_API_KEY": "..."}}
+  }}}}
+  ```
+
+  Risk class comes from the server's MCP `ToolAnnotations` (`readOnlyHint` → READ, `destructiveHint` → DESTRUCTIVE, `openWorldHint` → NETWORK, unannotated → WRITE, i.e. approval in `ask` mode).
 - **`bridge-mcp-server`**: Exposes registered Harness tools to external MCP hosts over stdio.
 - **`bridge-acp`**: Speaks Agent Client Protocol over stdio for deep IDE integrations (VS Code, JetBrains).
