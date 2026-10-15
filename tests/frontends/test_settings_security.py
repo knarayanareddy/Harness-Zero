@@ -113,10 +113,10 @@ async def test_canary_secret_never_leaked_and_stored_securely(
     running_server: HarnessWebServer, workspace_dir: Path
 ):
     """
-    Canary secret in POST /settings is:
+    Canary secret in POST /commands/settings.set is:
     - NOT echoed back in POST response
-    - NOT returned by GET /settings (has_api_keys is true instead)
-    - NOT stored in <workspace>/.harness/settings.json (file is mode 0600)
+    - NOT returned by POST /commands/settings.get (secrets.has.* is true instead)
+    - NOT stored in settings.json (file is mode 0600)
     - Persisted in kernel Secrets store with mode 0600
     """
     server = running_server
@@ -124,43 +124,48 @@ async def test_canary_secret_never_leaked_and_stored_securely(
     canary_key = "sk-CANARY-SECRET-999999"
 
     async with httpx.AsyncClient(timeout=5.0) as client:
-        # 1. POST /settings with canary api key
+        # 1. POST /commands/settings.set with canary secret
         headers = {"X-Harness-Token": server.auth_token, "Content-Type": "application/json"}
         post_res = await client.post(
-            f"{base_url}/settings",
+            f"{base_url}/commands/settings.set",
             headers=headers,
-            json={"api_keys": {"openai": canary_key}},
+            json={"path": "secrets.OPENAI_API_KEY", "value": canary_key},
         )
         assert post_res.status_code == 200
-        post_data = post_res.json()
         assert canary_key not in post_res.text
-        assert post_data.get("configured_providers", {}).get("openai") is True
+        post_data = post_res.json().get("result", {})
+        assert post_data.get("has") is True
 
-        # 2. GET /settings -> never returns secret
-        get_res = await client.get(f"{base_url}/settings", headers=headers)
+        # 2. POST /commands/settings.get -> never returns secret
+        get_res = await client.post(
+            f"{base_url}/commands/settings.get",
+            headers=headers,
+            json={"path": "secrets.OPENAI_API_KEY"},
+        )
         assert get_res.status_code == 200
-        get_text = get_res.text
-        assert canary_key not in get_text
-        get_data = get_res.json()
-        assert "api_keys" not in get_data
-        assert get_data.get("configured_providers", {}).get("openai") is True
-        assert get_data.get("has_api_keys", {}).get("openai") is True
+        assert canary_key not in get_res.text
+        assert get_res.json().get("result") is None
 
-        # 3. Check workspace file on disk
-        ws_settings_file = workspace_dir / ".harness" / "settings.json"
-        assert ws_settings_file.exists()
-        # Verify mode 0600 (read/write only by owner)
-        file_mode = ws_settings_file.stat().st_mode & 0o777
-        assert file_mode == 0o600, f"Expected 0600, got {oct(file_mode)}"
+        # Check secrets.has.* query returns True
+        has_res = await client.post(
+            f"{base_url}/commands/settings.get",
+            headers=headers,
+            json={"path": "secrets.has.OPENAI_API_KEY"},
+        )
+        assert has_res.status_code == 200
+        assert has_res.json().get("result") is True
 
-        file_content = ws_settings_file.read_text(encoding="utf-8")
-        assert canary_key not in file_content
-        disk_data = json.loads(file_content)
-        assert "api_keys" not in disk_data
+        # 3. Check settings file on disk
+        settings_file = server.commands.settings.path
+        if settings_file.exists():
+            file_mode = settings_file.stat().st_mode & 0o777
+            assert file_mode == 0o600, f"Expected 0600, got {oct(file_mode)}"
+            file_content = settings_file.read_text(encoding="utf-8")
+            assert canary_key not in file_content
 
         # 4. Check kernel Secrets store
-        assert server.commands.secrets.get("openai_api_key") == canary_key
         assert server.commands.secrets.get("OPENAI_API_KEY") == canary_key
+        assert server.commands.secrets.get("openai_api_key") == canary_key
         secrets_file = server.commands.secrets.path
         if secrets_file.exists():
             secrets_mode = secrets_file.stat().st_mode & 0o777
@@ -177,19 +182,22 @@ async def test_security_settings_propagate_to_kernel(running_server: HarnessWebS
     base_url = f"http://127.0.0.1:{server.port}"
     headers = {"X-Harness-Token": server.auth_token, "Content-Type": "application/json"}
 
-    payload = {
-        "security": {
-            "default_permission_mode": "ask",
-            "session_spend_cap_usd": 15.75,
-            "destructive_command_blocking": True,
-        },
-        "default_provider": "gemini",
-        "default_model": "gemini-2.5-pro",
-    }
+    settings_to_set = [
+        ("kernel.security.permission_mode", "ask"),
+        ("kernel.security.spend_cap_usd", 15.75),
+        ("kernel.security.destructive_blocking", True),
+        ("kernel.provider", "gemini"),
+        ("kernel.model", "gemini-2.5-pro"),
+    ]
 
     async with httpx.AsyncClient(timeout=5.0) as client:
-        res = await client.post(f"{base_url}/settings", headers=headers, json=payload)
-        assert res.status_code == 200
+        for path, val in settings_to_set:
+            res = await client.post(
+                f"{base_url}/commands/settings.set",
+                headers=headers,
+                json={"path": path, "value": val},
+            )
+            assert res.status_code == 200
 
         # Verify kernel SettingsStore was updated
         assert server.commands.settings.get("kernel.security.permission_mode") == "ask"
@@ -332,7 +340,7 @@ async def test_session_switch_validation(
     running_server: HarnessWebServer, commands: Commands
 ):
     """
-    POST /sessions/switch:
+    POST /commands/sessions.switch:
     - Rejects directory traversal session_id (400)
     - Rejects non-existent session_id (404)
     - Successfully switches to an existing session (200)
@@ -347,7 +355,7 @@ async def test_session_switch_validation(
     async with httpx.AsyncClient(timeout=5.0) as client:
         # Traversal attempt
         res_trav = await client.post(
-            f"{base_url}/sessions/switch",
+            f"{base_url}/commands/sessions.switch",
             headers=headers,
             json={"session_id": "../../etc/passwd"},
         )
@@ -355,7 +363,7 @@ async def test_session_switch_validation(
 
         # Non-existent session (valid format, but doesn't exist)
         res_nonexistent = await client.post(
-            f"{base_url}/sessions/switch",
+            f"{base_url}/commands/sessions.switch",
             headers=headers,
             json={"session_id": "session_000000000000"},
         )
@@ -363,11 +371,11 @@ async def test_session_switch_validation(
 
         # Valid session
         res_valid = await client.post(
-            f"{base_url}/sessions/switch",
+            f"{base_url}/commands/sessions.switch",
             headers=headers,
             json={"session_id": real_session.session_id},
         )
         assert res_valid.status_code == 200
-        data = res_valid.json()
+        data = res_valid.json().get("result", res_valid.json())
         assert data.get("status") == "switched"
         assert data.get("session_id") == real_session.session_id

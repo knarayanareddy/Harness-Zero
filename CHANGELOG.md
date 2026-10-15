@@ -36,9 +36,17 @@ Release `0.2.1` addresses all architectural, security, and runtime gaps identifi
   - Implemented streaming SSE and JSON fallback for real-time turn execution and tool result previews (`render_preview` contract).
   - Resolved provider resolution edge cases for scripted and external provider configurations (`tests/frontends/test_web_turn.py`).
 - **Modular Frontend Unification & Strict CSP (Step 3)**:
-  - Fully unified web frontend on modular ES modules (`app.js`, `bus.js`, `api.js`, `state.js`, `views/`).
-  - Removed legacy inline scripts, inline styles, and `alert()` / `confirm()` popups in favor of native UI notifications and modals.
-  - Enforced strict Content Security Policy (`default-src 'self'`) across static serving routes.
+  - Fully unified web frontend on modular ES modules (`app.js`, `cards.js`, `api.js`, `events.js`, `settings.js`).
+  - Added named `addEventListener` subscriptions for all event types in `events.schema.json`, unbreaking live browser event delivery.
+  - Removed legacy inline scripts, duplicate `<head>`/`<body>` tags, fake confirmation `data-notice` attributes, and `data-onclick="noop"` buttons.
+  - Replaced 17 static mockup settings pages with schema-driven `SettingsPanel` (`settings.schema`).
+  - Added first-run onboarding banner and dynamic model grouping (`<optgroup>`) based on configured provider credentials.
+  - Enforced strict Content Security Policy (`script-src 'self'`) across static serving routes.
+  - Added automated static contract tests (`tests/frontends/test_static_contract.py`) and headless jsdom UI smoke tests (`tests/frontends/test_ui_smoke.py`).
+- **Route & Command Architecture Cleanup**:
+  - Removed 21 unrouted legacy REST endpoints and ~650 lines of dead handlers from `server.py`, establishing `/commands/{name}` as the primary interface.
+  - Hardened `sessions_switch` with `validate_session_id()` and existence verification.
+  - Refined command exception mapping with appropriate HTTP error codes (`ValueError` -> 400, `KeyError`/`FileNotFoundError` -> 404).
 - **Security Hardening (Step 4)**:
   - Enforced POSIX file permissions `0600` on credentials, secrets, and settings files (`~/.harness/settings.json`, `~/.harness/secrets.json`).
   - Implemented single-use ticket and signed cookie authentication for SSE event streams, preventing unauthorized stream interception.

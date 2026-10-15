@@ -104,8 +104,27 @@ export class HarnessAPI {
     return await res.json();
   }
 
-  async submitTurn(prompt, options = {}) {
-    return this.command('submit_turn', { prompt, ...options });
+  async submitTurn(prompt, opts = {}) {
+    const sessionId = opts.session_id;
+    const media = opts.media || null;
+    const options = opts.options ? { ...opts.options } : {};
+
+    // Collect any extra top-level options (e.g. model, provider) into options dict
+    for (const [k, v] of Object.entries(opts)) {
+      if (!['session_id', 'media', 'options', 'prompt'].includes(k) && v !== undefined) {
+        options[k] = v;
+      }
+    }
+
+    const payload = { session_id: sessionId, prompt };
+    if (Object.keys(options).length > 0) {
+      payload.options = options;
+    }
+    if (media) {
+      payload.media = media;
+    }
+
+    return this.command('submit_turn', payload);
   }
 
   async cancelTurn(sessionId = null) {

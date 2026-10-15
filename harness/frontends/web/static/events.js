@@ -3,6 +3,40 @@
  * Handles auto-reconnect, Last-Event-ID tracking, and typed event dispatching (§11).
  */
 
+export const KNOWN_EVENT_TYPES = [
+  'approval.required',
+  'approval.resolved',
+  'compaction.completed',
+  'compaction.started',
+  'context.assembled',
+  'cost.updated',
+  'hook.fired',
+  'log',
+  'model.completed',
+  'model.notice',
+  'model.started',
+  'model.text.delta',
+  'model.thinking.delta',
+  'model.tool_call',
+  'plugin.error',
+  'plugin.loaded',
+  'session.started',
+  'session.switched',
+  'settings.changed',
+  'task.completed',
+  'task.started',
+  'tool.call',
+  'tool.decision',
+  'tool.output.delta',
+  'tool.result',
+  'turn.cancelled',
+  'turn.completed',
+  'turn.error',
+  'turn.started',
+  'ui.card',
+  'heartbeat',
+];
+
 export class HarnessEventStream {
   constructor(api, options = {}) {
     this.api = api;
@@ -58,12 +92,11 @@ export class HarnessEventStream {
         this._dispatchInternal('connected', {});
       };
 
-      // The daemon sends *named* frames (`event: <type>`). Per the EventSource
-      // spec those never reach `onmessage` (which only sees unnamed frames), so a
-      // listener is attached per known type; unnamed frames still go through
-      // `onmessage`. Types subscribed later are attached in `on()`.
       this.eventSource.onmessage = (e) => this._onFrame(e);
       this._attachedTypes = new Set();
+      for (const type of KNOWN_EVENT_TYPES) {
+        this._attachNamedListener(type);
+      }
       for (const type of this.listeners.keys()) {
         this._attachNamedListener(type);
       }

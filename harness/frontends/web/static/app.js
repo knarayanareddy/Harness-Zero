@@ -49,10 +49,11 @@ export class HarnessStudioApp {
     await this.populateModels();
     await this.populateStrategies();
 
-    // 4. Load Sessions (and re-render the active session's history: a page refresh
-    //    must show the conversation again, not the welcome screen)
+    // 4. Load Sessions (or auto-create initial session if daemon is fresh)
     await this.loadSessions();
-    if (this.activeSessionId) {
+    if (!this.activeSessionId) {
+      await this.createNewSession();
+    } else {
       await this.reloadTranscript();
     }
 
@@ -62,6 +63,16 @@ export class HarnessStudioApp {
 
     // 6. Bind DOM UI listeners
     this.bindControls();
+
+    // 7. Check provider onboarding
+    try {
+      const provider = await this.api.getSettings('kernel.provider', '');
+      if (!provider) {
+        this.showOnboardingBanner();
+      }
+    } catch (e) {
+      console.warn('Failed to check provider onboarding:', e);
+    }
   }
 
   setupEventHandlers() {
@@ -98,7 +109,8 @@ export class HarnessStudioApp {
     this.events.on('turn.error', (data) => {
       this.setBusy(false);
       this.finalizeStreamingBlock();
-      this.appendNotice(data.error || 'Turn execution error', 'error');
+      const msg = data.message || data.error || 'Turn execution error';
+      this.appendNotice(msg, 'error');
     });
 
     // Streaming Deltas
@@ -213,18 +225,28 @@ export class HarnessStudioApp {
 
         // Submit to API
         try {
-          // A fresh daemon has no active session: create one instead of sending session_id: null.
           if (!this.activeSessionId) {
             await this.createNewSession();
           }
-          const select = document.getElementById('model-select');
-          const model = select?.value;
-          const provider = select?.selectedOptions?.[0]?.dataset?.provider;
-          await this.api.submitTurn(text, {
+
+          const modelSelect = document.getElementById('model-select');
+          const selectedOption = modelSelect?.selectedOptions?.[0];
+          const model = selectedOption?.value || undefined;
+          const provider = selectedOption?.getAttribute('data-provider') || undefined;
+
+          const options = {};
+          if (model) options.model = model;
+          if (provider) options.provider = provider;
+
+          const res = await this.api.submitTurn(text, {
             session_id: this.activeSessionId,
-            model: model || undefined,
-            provider: model && provider ? provider : undefined,
+            options,
           });
+
+          if (res?.result?.error) {
+            this.appendNotice(res.result.error, 'error');
+            this.setBusy(false);
+          }
         } catch (err) {
           this.appendNotice(`Submit failed: ${err.message}`, 'error');
           this.setBusy(false);
@@ -380,13 +402,6 @@ export class HarnessStudioApp {
         return;
       }
 
-      const modeBtn = e.target.closest('[data-mode]');
-      if (modeBtn) {
-        document.querySelectorAll('.mode-segment-btn').forEach((b) => b.classList.remove('active'));
-        modeBtn.classList.add('active');
-        return;
-      }
-
       const slashItem = e.target.closest('[data-slash]');
       if (slashItem) {
         const cmd = slashItem.getAttribute('data-slash');
@@ -397,29 +412,6 @@ export class HarnessStudioApp {
         }
         const slashMenu = document.getElementById('slash-menu');
         if (slashMenu) slashMenu.style.display = 'none';
-        return;
-      }
-
-      const noticeBtn = e.target.closest('[data-notice]');
-      if (noticeBtn) {
-        this.appendNotice(noticeBtn.getAttribute('data-notice'), 'info');
-        return;
-      }
-
-      const stabBtn = e.target.closest('[data-stab]');
-      if (stabBtn) {
-        document.querySelectorAll('.settings-tab-btn').forEach((b) => b.classList.remove('active'));
-        stabBtn.classList.add('active');
-        const targetPage = stabBtn.getAttribute('data-stab');
-        document.querySelectorAll('.settings-page').forEach((p) => p.classList.remove('active'));
-        const pageElem = document.getElementById(`spage-${targetPage}`);
-        if (pageElem) pageElem.classList.add('active');
-        return;
-      }
-
-      const toggleBtn = e.target.closest('[data-action="toggle-active"]');
-      if (toggleBtn) {
-        toggleBtn.classList.toggle('active');
         return;
       }
     });
@@ -438,23 +430,90 @@ export class HarnessStudioApp {
       });
     }
 
-    // Settings search filtering
+    // Settings search filtering for real schema-driven settings
     const searchInput = document.getElementById('settings-search-input');
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
         const q = e.target.value.toLowerCase().trim();
-        document.querySelectorAll('.settings-tab-btn').forEach((btn) => {
-          const label = (btn.getAttribute('data-label') || btn.textContent).toLowerCase();
-          btn.style.display = label.includes(q) ? 'flex' : 'none';
+        document.querySelectorAll('.setting-item').forEach((item) => {
+          const label = item.querySelector('label')?.textContent.toLowerCase() || '';
+          item.style.display = label.includes(q) ? '' : 'none';
         });
       });
     }
   }
 
-  switchStudioTab(tabName) {
+  async switchStudioTab(tabName) {
     document.querySelectorAll('.studio-tab').forEach((t) => t.classList.remove('active'));
     const activeTab = document.querySelector(`.studio-tab[data-tab="${tabName}"]`);
     if (activeTab) activeTab.classList.add('active');
+
+    const artifactView = document.getElementById('studio-content-area');
+    const sessionList = document.getElementById('session-list');
+    const economicsView = document.getElementById('economics-view');
+
+    if (tabName === 'sessions') {
+      if (sessionList) sessionList.classList.remove('hidden');
+      if (artifactView) artifactView.classList.add('hidden');
+      if (economicsView) economicsView.classList.add('hidden');
+      await this.loadSessions();
+    } else if (tabName === 'economics') {
+      if (economicsView) {
+        economicsView.classList.remove('hidden');
+        await this.renderEconomicsTab();
+      }
+      if (artifactView) artifactView.classList.add('hidden');
+      if (sessionList) sessionList.classList.add('hidden');
+    } else {
+      if (artifactView) artifactView.classList.remove('hidden');
+      if (sessionList) sessionList.classList.add('hidden');
+      if (economicsView) economicsView.classList.add('hidden');
+    }
+  }
+
+  async renderEconomicsTab() {
+    const container = document.getElementById('economics-view');
+    if (!container) return;
+    try {
+      const data = await this.api.command('economics');
+      const sessionUsd = (data.session_usd || 0).toFixed(4);
+      const capUsd = (data.cap_usd || 5.00).toFixed(2);
+      const inputTok = data.token_usage?.input || 0;
+      const outputTok = data.token_usage?.output || 0;
+      const totalTok = data.token_usage?.total || 0;
+      const totalSpend = (data.totals?.total_cost_usd || data.session_usd || 0).toFixed(4);
+
+      container.innerHTML = `
+        <div class="economics-card" style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:16px;">
+          <h3 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 12px 0;">Spend & Token Economics</h3>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+            <div style="background:#09090b; padding:10px; border-radius:6px; border:1px solid #27272a;">
+              <div style="font-size:11px; color:#a1a1aa;">Session Spend / Cap</div>
+              <div style="font-size:18px; font-weight:700; color:#34d399; margin-top:4px;">$${escapeHtml(sessionUsd)} / $${escapeHtml(capUsd)}</div>
+            </div>
+            <div style="background:#09090b; padding:10px; border-radius:6px; border:1px solid #27272a;">
+              <div style="font-size:11px; color:#a1a1aa;">Lifetime Total Cost</div>
+              <div style="font-size:18px; font-weight:700; color:#f4f4f5; margin-top:4px;">$${escapeHtml(totalSpend)}</div>
+            </div>
+          </div>
+          <div style="font-size:12px; color:#a1a1aa; margin-bottom:8px;">Session Token Consumption:</div>
+          <div style="display:flex; justify-content:space-between; font-size:12px; padding:6px 0; border-bottom:1px solid #27272a;">
+            <span>Prompt (Input) Tokens:</span>
+            <span style="font-family:var(--font-mono); color:#f4f4f5;">${escapeHtml(String(inputTok))}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:12px; padding:6px 0; border-bottom:1px solid #27272a;">
+            <span>Completion (Output) Tokens:</span>
+            <span style="font-family:var(--font-mono); color:#f4f4f5;">${escapeHtml(String(outputTok))}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:12px; padding:6px 0;">
+            <span style="font-weight:600;">Total Tokens:</span>
+            <span style="font-family:var(--font-mono); font-weight:600; color:#38bdf8;">${escapeHtml(String(totalTok))}</span>
+          </div>
+        </div>
+      `;
+    } catch (err) {
+      container.innerHTML = `<div class="text-xs text-red-400 p-4">Failed to load economics: ${escapeHtml(err.message)}</div>`;
+    }
   }
 
   switchActivity(actName) {
@@ -464,7 +523,7 @@ export class HarnessStudioApp {
     if (actName === 'chat') {
       const input = document.getElementById('composer-input');
       if (input) input.focus();
-    } else if (['files', 'search', 'skills', 'tree'].includes(actName)) {
+    } else if (['sessions', 'economics'].includes(actName)) {
       this.switchStudioTab(actName);
     }
   }
@@ -593,8 +652,9 @@ export class HarnessStudioApp {
         const value = data.result ?? data.preview ?? data.output ?? '';
         const resultStr = escapeHtml(typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value));
         const resDiv = document.createElement('div');
+        const textColor = data.is_error ? 'text-red-300' : 'text-emerald-300';
         resDiv.className = 'mt-2 text-xs tool-output';
-        resDiv.innerHTML = `<div class="text-gray-400 font-mono font-medium mb-1">Output:</div><pre class="p-2 bg-gray-950/90 rounded border border-gray-800 text-emerald-300 font-mono overflow-x-auto max-h-48">${resultStr}</pre>`;
+        resDiv.innerHTML = `<div class="text-gray-400 font-mono font-medium mb-1">Output:</div><pre class="p-2 bg-gray-950/90 rounded border border-gray-800 ${textColor} font-mono overflow-x-auto max-h-48">${resultStr}</pre>`;
         card.appendChild(resDiv);
       }
     }
@@ -825,6 +885,30 @@ export class HarnessStudioApp {
     inspector.classList.toggle('hidden');
   }
 
+  showOnboardingBanner() {
+    const banner = document.getElementById('onboarding-banner');
+    if (!banner) return;
+    banner.classList.remove('hidden');
+
+    const configureBtn = document.getElementById('btn-onboarding-configure');
+    const dismissBtn = document.getElementById('btn-onboarding-dismiss');
+
+    if (configureBtn && !configureBtn._hasListener) {
+      configureBtn._hasListener = true;
+      configureBtn.addEventListener('click', () => {
+        this.openSettings();
+        this.settingsPanel?.setGroup('Models & Providers');
+      });
+    }
+
+    if (dismissBtn && !dismissBtn._hasListener) {
+      dismissBtn._hasListener = true;
+      dismissBtn.addEventListener('click', () => {
+        banner.classList.add('hidden');
+      });
+    }
+  }
+
   async populateModels() {
     const select = document.getElementById('model-select');
     if (!select) return;
@@ -832,24 +916,56 @@ export class HarnessStudioApp {
       const models = await this.api.listModels();
       if (models && models.length > 0) {
         select.innerHTML = '<option value="">Default Model</option>';
+        const configuredGroup = document.createElement('optgroup');
+        configuredGroup.label = 'Configured Models';
+        const unconfiguredGroup = document.createElement('optgroup');
+        unconfiguredGroup.label = 'Unconfigured (Requires API Key)';
+
         for (const m of models) {
           const opt = document.createElement('option');
           opt.value = m.id || m.model_name || m.name;
-          if (m.provider) opt.dataset.provider = m.provider;
-          opt.textContent = `${m.provider ? m.provider + ': ' : ''}${m.id || m.name}`;
-          select.appendChild(opt);
+          if (m.provider) {
+            opt.setAttribute('data-provider', m.provider);
+            opt.dataset.provider = m.provider;
+          }
+          const isConfigured = m.configured !== false;
+          if (isConfigured) {
+            opt.textContent = `${m.provider ? m.provider + ': ' : ''}${m.id || m.name}`;
+            configuredGroup.appendChild(opt);
+          } else {
+            opt.textContent = `${m.provider ? m.provider + ': ' : ''}${m.id || m.name} (unconfigured)`;
+            opt.disabled = true;
+            unconfiguredGroup.appendChild(opt);
+          }
+        }
+
+        if (configuredGroup.children.length > 0) {
+          select.appendChild(configuredGroup);
+        }
+        if (unconfiguredGroup.children.length > 0) {
+          select.appendChild(unconfiguredGroup);
         }
       }
 
       // Restore saved selection
       const savedModel = localStorage.getItem('harness_selected_model');
-      if (savedModel && Array.from(select.options).some(o => o.value === savedModel)) {
+      if (savedModel && Array.from(select.options).some(o => o.value === savedModel && !o.disabled)) {
         select.value = savedModel;
       }
 
+      const updateModelDisplay = () => {
+        const display = document.getElementById('active-model-display');
+        if (display) {
+          const opt = select.selectedOptions[0];
+          display.textContent = opt && opt.value ? opt.textContent : 'Default Model';
+        }
+      };
+
       select.addEventListener('change', () => {
         localStorage.setItem('harness_selected_model', select.value);
+        updateModelDisplay();
       });
+      updateModelDisplay();
     } catch (err) {
       console.warn('Failed to populate models:', err);
     }

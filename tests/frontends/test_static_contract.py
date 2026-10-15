@@ -180,3 +180,62 @@ async def test_strict_csp_header(commands: Commands, event_bus: EventBus, worksp
             assert "'unsafe-eval'" not in script_src_part[0], f"unsafe-eval in script-src: {script_src_part[0]}"
     finally:
         await server.stop()
+
+
+def test_no_mockup_facade_or_dead_elements():
+    """index.html must not contain fake notices, no-ops, hardcoded user placeholders, or malformed tags."""
+    index_path = STATIC_DIR / "index.html"
+    content = index_path.read_text(encoding="utf-8")
+
+    # 1. Zero data-notice fake confirmation attributes
+    assert "data-notice" not in content, "Found fake confirmation 'data-notice' attributes in index.html"
+
+    # 2. Zero data-onclick="noop" attributes
+    assert 'data-onclick="noop"' not in content, "Found 'data-onclick=\"noop\"' in index.html"
+
+    # 3. No hard-coded user/email/UUID placeholders
+    forbidden_placeholders = [
+        "kiranreddy",
+        "user@local.device",
+        "00000000-0000-0000-0000-000000000000",
+        "Replicated directly from",
+    ]
+    for placeholder in forbidden_placeholders:
+        assert placeholder not in content, f"Found hard-coded placeholder '{placeholder}' in index.html"
+
+    # 4. Exactly one <head> and <body> structure
+    assert content.count("<head>") == 1, "index.html must have exactly one <head> tag"
+    assert content.count("</head>") == 1, "index.html must have exactly one </head> tag"
+    assert content.count("<body>") == 1, "index.html must have exactly one <body> tag"
+    assert content.count("</body>") == 1, "index.html must have exactly one </body> tag"
+
+
+def test_events_subscription_contract():
+    """Verify that every schema event type is subscribed on EventSource and app.js handlers are valid."""
+    import json
+
+    schema_path = Path(__file__).parent.parent.parent / "docs" / "events.schema.json"
+    assert schema_path.exists(), f"Missing {schema_path}"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    schema_types = set(schema["properties"]["type"]["enum"])
+
+    events_js_path = STATIC_DIR / "events.js"
+    events_js_content = events_js_path.read_text(encoding="utf-8")
+    app_js_path = STATIC_DIR / "app.js"
+    app_js_content = app_js_path.read_text(encoding="utf-8")
+
+    # 1. events.js must subscribe via addEventListener for named SSE frames
+    assert "addEventListener" in events_js_content, "events.js must use addEventListener for typed events"
+
+    # 2. Every schema event type must be in KNOWN_EVENT_TYPES in events.js
+    for t in schema_types:
+        assert f"'{t}'" in events_js_content or f'"{t}"' in events_js_content, (
+            f"Schema event type '{t}' missing from events.js subscription list"
+        )
+
+    # 3. Every events.on('<type>') in app.js must exist in schema (excluding synthetic '$*' events)
+    app_event_matches = re.findall(r"this\.events\.on\(['\"]([^'\"]+)['\"]", app_js_content)
+    for app_type in set(app_event_matches):
+        if app_type.startswith("$"):
+            continue
+        assert app_type in schema_types, f"app.js listens to unknown event type '{app_type}' not in schema"

@@ -171,8 +171,14 @@ class Commands:
 
     async def sessions_switch(self, session_id: str) -> dict[str, Any]:
         """Switches active session and emits session.switched."""
+        validate_session_id(session_id)
+        session = self.session_manager.get_session(session_id)
+        if not session:
+            raise KeyError(f"Session not found: {session_id}")
         session = await self.session_manager.switch_session(session_id)
-        return session.info.to_dict()
+        res = session.info.to_dict()
+        res["status"] = "switched"
+        return res
 
     async def settings_get(self, path: str, default: Any = None) -> Any:
         """Reads namespaced setting value, or checks secret existence with has_secret."""
@@ -268,15 +274,38 @@ class Commands:
             },
         }
 
+    def _is_provider_configured(self, provider_name: str, provider_instance: Any = None) -> bool:
+        """Determines whether a model provider has the necessary secrets or local runtime."""
+        if provider_name in ("mock", "ollama"):
+            return True
+        if provider_instance and getattr(provider_instance, "api_key", ""):
+            return True
+        keys_to_check = [
+            f"{provider_name}_api_key",
+            f"{provider_name.upper()}_API_KEY",
+        ]
+        if provider_name == "openai_compat":
+            keys_to_check.extend([
+                "openai_api_key",
+                "openrouter_api_key",
+                "deepseek_api_key",
+                "OPENAI_API_KEY",
+                "OPENROUTER_API_KEY",
+                "DEEPSEEK_API_KEY",
+            ])
+        return any(self.secrets.has(k) for k in keys_to_check)
+
     async def models_list(self) -> list[dict[str, Any]]:
-        """Aggregates models supported across all registered providers."""
+        """Aggregates models supported across all registered providers, flagging configured status."""
         results: list[dict[str, Any]] = []
         for p in self.registry.get_all_providers():
             try:
                 models = await p.list_models()
+                configured = self._is_provider_configured(p.name, p)
                 for m in models:
                     d = m.to_dict()
                     d["provider"] = p.name
+                    d["configured"] = configured
                     results.append(d)
             except Exception as e:
                 logger.warning(f"Error querying models from provider '{p.name}': {e}")

@@ -1,0 +1,12 @@
+{
+  "name": "harness-zero-ui",
+  "version": "0.2.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:ui": "node tests/frontends/ui_smoke.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  }
+}
