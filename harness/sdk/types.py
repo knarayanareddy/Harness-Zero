@@ -972,6 +972,59 @@ class SessionInfo:
 
 
 @dataclass(slots=True)
+class ModelRow:
+    """One row of ``models.list`` — a ``ModelInfo`` plus the provider's own verdict on whether it can be used.
+
+    ``status`` is derived: ``needs_key`` when the provider is not configured, ``unreachable`` when it is
+    configured but its liveness probe failed, else ``ready``. ``reachable`` is ``None`` for providers that
+    do not probe (hosted APIs); the row stays ``ready`` and a bad key surfaces at call time.
+    """
+
+    id: str
+    display_name: str
+    provider: str
+    context_tokens: int | None = None
+    input_usd_per_mtok: float | None = None
+    output_usd_per_mtok: float | None = None
+    configured: bool = True
+    reachable: bool | None = None
+
+    @property
+    def status(self) -> str:
+        if not self.configured:
+            return "needs_key"
+        if self.reachable is False:
+            return "unreachable"
+        return "ready"
+
+    @classmethod
+    def from_info(cls, info: ModelInfo, provider: str, *, configured: bool, reachable: bool | None) -> ModelRow:
+        return cls(
+            id=info.id,
+            display_name=info.display_name,
+            provider=provider,
+            context_tokens=info.context_tokens,
+            input_usd_per_mtok=info.input_usd_per_mtok,
+            output_usd_per_mtok=info.output_usd_per_mtok,
+            configured=configured,
+            reachable=reachable,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "display_name": self.display_name,
+            "provider": self.provider,
+            "context_tokens": self.context_tokens,
+            "input_usd_per_mtok": self.input_usd_per_mtok,
+            "output_usd_per_mtok": self.output_usd_per_mtok,
+            "configured": self.configured,
+            "reachable": self.reachable,
+            "status": self.status,
+        }
+
+
+@dataclass(slots=True)
 class SessionRow:
     """One row of ``sessions.list`` — what a session picker renders.
 

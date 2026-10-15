@@ -101,6 +101,12 @@ class ReplayProvider:
     def remaining(self) -> int:
         return len(self._streams) - self._index
 
+    def is_configured(self) -> bool:
+        return True
+
+    async def is_reachable(self) -> bool | None:
+        return None
+
     async def list_models(self) -> list[ModelInfo]:
         return [self._model]
 
@@ -137,6 +143,12 @@ class RecordingProvider:
         self.scenario_dir = scenario_dir
         self.streams: list[list[ModelEvent]] = []
         self.requests: list[ModelRequest] = []
+
+    def is_configured(self) -> bool:
+        return bool(self.inner.is_configured())
+
+    async def is_reachable(self) -> bool | None:
+        return await self.inner.is_reachable()
 
     async def list_models(self) -> list[ModelInfo]:
         return await self.inner.list_models()

@@ -103,6 +103,7 @@ def mock_gemini_provider() -> GeminiProvider:
 async def test_gemini_conformance_provider_kit(mock_gemini_provider: GeminiProvider):
     """Verifies Gemini provider passes all standard ProviderKit tests."""
     kit = ProviderKit()
+    await kit.test_readiness(mock_gemini_provider)
     await kit.test_list_models(mock_gemini_provider)
     await kit.test_plain_prompt(mock_gemini_provider)
     await kit.test_streaming_multiple_deltas(mock_gemini_provider)

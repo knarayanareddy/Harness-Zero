@@ -130,7 +130,21 @@ class CustomProvider(Provider):
         thinking=False,
     )
 
+    def __init__(self, api_key: str = "") -> None:
+        self.api_key = api_key
+
+    def is_configured(self) -> bool:
+        # The provider is the only authority on its readiness: the kernel lists your models as
+        # "needs key" when this is False instead of guessing from secret names.
+        return bool(self.api_key)
+
+    async def is_reachable(self) -> bool | None:
+        # Hosted API → None (not probed). A local server should GET a cheap endpoint with a
+        # ~300 ms timeout, cache the verdict ~30 s and never raise (see the Ollama provider).
+        return None
+
     async def list_models(self) -> list[ModelInfo]:
+        # The catalogue you *know* — returned with or without a key, no network call when unconfigured.
         return [
             ModelInfo(
                 id="custom-model-v1",
@@ -156,7 +170,7 @@ class CustomProviderPlugin:
         self.manifest = manifest
 
     async def setup(self, ctx: PluginContext) -> None:
-        ctx.register_provider(CustomProvider())
+        ctx.register_provider(CustomProvider(api_key=ctx.secrets.get("CUSTOM_API_KEY", "") or ""))
 
     async def teardown(self) -> None:
         pass
@@ -171,7 +185,8 @@ from plugin import CustomProvider
 @pytest.mark.asyncio
 async def test_provider_conformance():
     kit = ProviderKit()
-    provider = CustomProvider()
+    provider = CustomProvider(api_key="test-key")
+    await kit.test_readiness(provider)
     await kit.test_list_models(provider)
     await kit.test_plain_prompt(provider)
     await kit.test_streaming_multiple_deltas(provider)

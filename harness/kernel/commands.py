@@ -24,9 +24,10 @@ from harness.kernel.session import SessionManager
 from harness.kernel.settings import SettingsStore
 from harness.kernel.validators import validate_session_id
 from harness.sdk.cards import Card
+from harness.sdk.contracts import Provider
 from harness.sdk.errors import HarnessError
 from harness.sdk.events import Event, SettingsChanged, UiCard
-from harness.sdk.types import TurnResult
+from harness.sdk.types import ModelRow, TurnResult
 
 logger = logging.getLogger(__name__)
 
@@ -283,41 +284,27 @@ class Commands:
             },
         }
 
-    def _is_provider_configured(self, provider_name: str, provider_instance: Any = None) -> bool:
-        """Determines whether a model provider has the necessary secrets or local runtime."""
-        if provider_name in ("mock", "ollama"):
-            return True
-        if provider_instance and getattr(provider_instance, "api_key", ""):
-            return True
-        keys_to_check = [
-            f"{provider_name}_api_key",
-            f"{provider_name.upper()}_API_KEY",
-        ]
-        if provider_name == "openai_compat":
-            keys_to_check.extend([
-                "openai_api_key",
-                "openrouter_api_key",
-                "deepseek_api_key",
-                "OPENAI_API_KEY",
-                "OPENROUTER_API_KEY",
-                "DEEPSEEK_API_KEY",
-            ])
-        return any(self.secrets.has(k) for k in keys_to_check)
-
     async def models_list(self) -> list[dict[str, Any]]:
-        """Aggregates models supported across all registered providers, flagging configured status."""
-        results: list[dict[str, Any]] = []
-        for p in self.registry.get_all_providers():
+        """``models.list`` → ``ModelRow`` dicts for every model every provider knows about.
+
+        Readiness comes from the provider itself (``is_configured()`` / ``is_reachable()``), never from
+        name heuristics here. Probes run concurrently and are short by contract; a provider that fails is
+        logged at DEBUG and contributes no rows — this command never raises.
+        """
+
+        async def rows_for(p: Provider) -> list[dict[str, Any]]:
             try:
+                configured = bool(p.is_configured())
+                reachable = await p.is_reachable()
                 models = await p.list_models()
-                configured = self._is_provider_configured(p.name, p)
-                for m in models:
-                    d = m.to_dict()
-                    d["provider"] = p.name
-                    d["configured"] = configured
-                    results.append(d)
-            except Exception as e:
-                logger.warning(f"Error querying models from provider '{p.name}': {e}")
+            except Exception as e:  # noqa: BLE001 — one broken provider must not hide the others
+                logger.debug("models.list: provider %r unavailable: %s", p.name, e)
+                return []
+            return [ModelRow.from_info(m, p.name, configured=configured, reachable=reachable).to_dict() for m in models]
+
+        results: list[dict[str, Any]] = []
+        for rows in await asyncio.gather(*(rows_for(p) for p in self.registry.get_all_providers())):
+            results.extend(rows)
         return results
 
     async def files_read(self, path: str) -> dict[str, Any]:

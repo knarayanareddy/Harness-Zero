@@ -218,7 +218,17 @@ class PluginRegistry:
             )
         self.tools[spec.name] = (spec, handler, plugin_name)
 
+    #: Members every provider must have; checked at registration so a contract gap fails the plugin load
+    #: loudly instead of surfacing as a missing picker entry or an AttributeError mid-turn.
+    _PROVIDER_MEMBERS: tuple[str, ...] = ("name", "caps", "is_configured", "is_reachable", "list_models", "generate", "aclose")
+
     def _register_provider(self, p: Provider, plugin_name: str) -> None:
+        missing = [m for m in self._PROVIDER_MEMBERS if not hasattr(p, m)]
+        if missing:
+            raise PluginLoadError(
+                f"Provider registered by plugin '{plugin_name}' does not implement the Provider contract "
+                f"(missing: {', '.join(missing)}); see harness.sdk.contracts.Provider"
+            )
         if p.name in self.providers:
             _, existing_origin = self.providers[p.name]
             raise PluginLoadError(

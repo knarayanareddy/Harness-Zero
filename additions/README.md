@@ -18,6 +18,11 @@ its plan P5 moves this suite into `tests/` and CI.
 prompt — so the same seven goldens lost it again, and a 21st scenario, `daemon_restart_web_dom`, pins the new
 behaviour: two prompts with no session, daemon restart, page reload → one session row, full history, no click.
 
+**Update after consolidation P4**: `Provider.is_configured()` / `is_reachable()` joined the SDK contract and the
+registry now rejects providers that lack them, so `scenarios/_lib/replay_provider.py` implements both (the strict
+web lanes caught the gap: without it the picker lost `replay-v1` and the DOM lane sent prompts with no model).
+`tools/ui_audit.py --strict` became the P3 gate and runs in CI together with `npm run build:css` freshness.
+
 ## Contents
 
 | path | what it is | use it for |

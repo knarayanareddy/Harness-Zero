@@ -19,7 +19,7 @@ what the flow test showed, what moved in the goldens and why). §3 collects defe
 | **P1** | 4.1 no payload contract; 4.7 ledger/spend bugs; R8 card shape mismatch | Typed payload dataclasses for every event; `EconomicsSnapshot` as the one spend shape; `cards.js` renders the SDK card shape; generalised static contract tests; bus guard in tests | `pytest tests -q` green with `event_contract_guard` on · `harness events schema \| diff docs/events.schema.json -` empty · 20 scenarios strict · Economics: session ≠ lifetime across sessions |
 | **P2** ✔ | 4.4 browser-driven sessions | Kernel owns session lifecycle: lazy create on first `submit_turn`, resume on start; web `init()` no longer creates sessions; SSE before transcript reload; `sessions.list` rows = `SessionRow`; CLI follows the kernel's session too | 3 daemon restarts ⇒ 1 session (`tests/kernel/test_session_lifecycle.py`, scenario `daemon_restart_web_dom`) · 21 scenarios strict |
 | **P3** ✔ | 4.2 two styling systems; 4.3 facade remnants | One styling system: `styles.css` rewritten (components only) + compiled Tailwind `vendor/tw.css` (CSP-safe, committed, CI-checked) · artifact cards into the Artifacts tab · `tool.output.delta` into the tool card · terminal drawer, slash menu and every static pill removed or made live · `.hidden` finally defined (R14) | `python additions/tools/ui_audit.py --strict` exit 0 · `grep -c 'style="' app.js` = 0 · `tests/frontends/test_ui_coherence.py` (audit + jsdom cascade) · 21 scenarios strict |
-| **P4** | 4.7 provider truth | `Provider.is_configured()` / `is_reachable()`; `models.list` never raises; Ollama short-timeout + cache; remove `_is_provider_configured` | unit tests for both paths · scenarios strict |
+| **P4** ✔ | 4.7 provider truth | `Provider.is_configured()` / `is_reachable()` in the SDK contract, implemented by all five providers + `ScriptedProvider`; `models.list` → `ModelRow` with `status` ready / needs_key / unreachable, concurrent probes, never raises, DEBUG only; Ollama 300 ms probe cached 30 s; `_is_provider_configured` deleted; registry rejects providers that skip the contract; picker groups by status | `tests/plugins/test_provider_readiness.py` (hermetic bootstrapped `models.list`) · `test_ollama.py` probe tests · contract tests · 21 scenarios strict |
 | **P5** | 4.5 tests in four places | `additions/scenarios` → `tests/scenarios`; delete `ui_smoke` duplicates; delete vacuous S1; CI runs scenarios | `pytest tests -q` includes the 20 scenarios · CI job green |
 | **P6** | 4.6 version/doc drift | CHANGELOG restructure; `/health.version` from `harness.__version__`; README counts; `docs/ARCHITECTURE.md`; research docs under `docs/research/` | `harness --version` == `/health.version` == CHANGELOG top entry |
 
@@ -379,7 +379,85 @@ golden delta in the suite; the other DOM scenarios cleared the timeline on reloa
   `models.list` reports.
 - No visual regression tooling (no browser in this environment); the cascade test covers display state
   only, not pixels.
-### P4 — Provider truth — pending
+### P4 — Provider truth lives in the provider — **DONE**
+
+**Baseline** (`b92c90e`, end of P3): ruff clean · 372 pytest · 21/21 scenarios · 180 conformance.
+Hermetic daemon, no keys, no Ollama — `POST /commands/models.list` returned **4 rows**: three Ollama
+catalogue entries marked `configured: true` (Ollama was not running) and `mock`. The five key-based
+providers were *absent* (their `list_models()` raised `ProviderError(kind="auth")`, which the command
+swallowed) and the daemon logged **five `WARNING  Error querying models from provider …` lines per page
+load**. So the "Unconfigured (Requires API Key)" optgroup was unreachable by construction, and the one
+provider that was listed as usable was the one that was down.
+
+#### Defects
+- **R20** `OllamaProvider.list_models()` fell back to the built-in catalogue on connection failure and
+  `_is_provider_configured()` hard-coded `ollama → True`; the picker offered `llama3.2:latest` as a working
+  model with nothing listening. The probe also used the 10 s connect timeout of the generation client.
+- **R21** Hosted providers raised `auth` from `list_models()` when the key was missing, so they vanished
+  from `models.list` instead of being listed as "needs key"; every call logged a WARNING.
+- **R22** `Commands._is_provider_configured()` guessed readiness from secret *names*
+  (`{name}_api_key`, `{NAME}_API_KEY`, a hard-coded list for `openai_compat`) — a second, drifting copy of
+  what each plugin's `setup()` already knows.
+- **R23** (found by the flow test, see below) nothing checked that a registered provider implements the
+  contract; a provider missing a method disappeared from the picker silently.
+
+#### What changed
+*SDK* — `harness/sdk/contracts.py::Provider` gains `is_configured() -> bool` (pure: credentials present or
+none needed) and `async is_reachable() -> bool | None` (short-timeout liveness probe, `None` = not probed,
+never raises); `list_models()` is documented as "the catalogue the provider knows, with or without a key;
+network only when configured; `auth` only when real credentials were rejected".
+`harness/sdk/types.py::ModelRow` = `ModelInfo` fields + `provider`, `configured`, `reachable` and derived
+`status` (`needs_key` → `unreachable` → `ready`). `ProviderKit.test_readiness()` added;
+`test_list_models()` now also asserts that an unconfigured provider returns its catalogue rather than
+raising. Scaffold template and `docs/PORTING_RECIPES.md` show both methods.
+
+*Providers* — Ollama: one `GET /api/tags` probe with `PROBE_TIMEOUT_S = 0.3`, cached `PROBE_TTL_S = 30`
+(positive *and* negative), feeds both `is_reachable()` and `list_models()` (installed models when up,
+catalogue when down — flagged `unreachable` upstream). Anthropic / Gemini / OpenAI-compatible:
+`is_configured()` = key present (OpenAI-compatible: or a self-hosted base URL — vLLM/LM Studio are
+keyless by design, `requires_api_key()`); `is_reachable()` = `None`; `list_models()` returns the catalogue
+without touching the network when unconfigured. Mock and `ScriptedProvider` (with `configured` /
+`reachable` knobs for tests) implement both.
+
+*Kernel* — `Commands.models_list()` asks each provider (`asyncio.gather`), builds `ModelRow`s, logs a
+failing provider at DEBUG and never raises; `_is_provider_configured()` deleted.
+`PluginRegistry._register_provider()` rejects a provider missing any contract member with
+`PluginLoadError("… missing: is_configured, is_reachable …")` — a contract gap now fails the plugin load
+(visible as `plugin.error`) instead of a silent hole in the picker.
+
+*Clients* — web `populateModels()` renders three optgroups from `status` — **Ready** / **Needs API key
+(Settings → Secrets)** / **Not running** — the last two disabled; it reads `ModelRow` keys only (contract
+test). CLI `/models` gains a Status column.
+
+#### Flow test found R23
+After the provider changes the strict web lanes failed with `turn.started.options` missing
+`provider: replay / model: replay-v1`: the scenario `ReplayProvider` (`additions/scenarios/_lib/replay_provider.py`)
+had no `is_configured()`, so `models.list` skipped it, the picker had no `replay-v1` option, and the DOM
+lane sent the prompt without a model. Fix: `ReplayProvider` / `RecordingProvider` implement the contract,
+and the registry check above makes the next such gap loud. No golden changed.
+
+#### After
+Same hermetic daemon: **17 rows in 74 ms** (25 ms cached): `mock → ready`, `ollama ×3 → unreachable
+(reachable: false)`, `anthropic ×3 / gemini ×3 / openai ×3 / openrouter ×2 / deepseek ×2 → needs_key`;
+**0 WARNING lines**. The DOM lane of `plain_answer_web` now sees 19 options with `replay-v1` selected.
+
+#### Gate (hermetic)
+
+| Check | Result |
+|---|---|
+| `ruff check .` | clean |
+| `harness events schema \| diff docs/events.schema.json -` | no diff |
+| `npm run build:css && git diff --exit-code -- …/vendor/tw.css` | fresh |
+| `python additions/tools/ui_audit.py --strict` | exit 0 |
+| `pytest tests -q` | **387 passed** (372 + 15; one transient failure in the first full run was not reproduced in three further full runs — name not captured, reported as is) |
+| `harness plugin test --all` | **180 passed** |
+| `pytest additions/scenarios -q` (strict, DOM lane on) | **21 passed** |
+
+#### Not done in P4
+- The onboarding banner still keys off `kernel.provider` being empty; it does not yet say "your configured
+  provider has no ready model" — that needs the same `ModelRow` data and belongs with the settings UI.
+- Hosted providers are never probed (`reachable: null`); a bad key still surfaces at call time as
+  `turn.error{kind: auth}`, which the client already renders.
 ### P5 — One test estate — pending
 ### P6 — Version / doc hygiene — pending
 
@@ -401,6 +479,10 @@ golden delta in the suite; the other DOM scenarios cleared the timeline on reloa
 | R17 | `index.html` / `app.js` | Slash menu inserted `/plan /diff /compact /pytest /git`; no kernel command interprets them in web prompts. | removed in P3 |
 | R18 | `app.js` | `tool.output.delta` appended to a terminal drawer that was `display:none` with no code path to show it. | P3: streams into the tool card |
 | R19 | `index.html` | Static pills and placeholders (`🪝 main`, `Autonomous`, `Sovereign Daemon Online`, `UTF-8`, `Autonomous Heuristic`, `Cache Tier: Invariant`, welcome turn). | P3: live values or removed; `/health.workspace` added |
+| R20 | `providers/ollama` + `commands.py` | Ollama listed as configured/usable while not running (catalogue fallback + hard-coded `ollama → True`); probe used the 10 s generation timeout. | P4: `is_reachable()` 300 ms probe, 30 s cache, rows `unreachable` |
+| R21 | hosted providers | Missing key → `list_models()` raised `auth` → provider absent from `models.list` + WARNING per page load. | P4: catalogue returned, `status: needs_key`, DEBUG |
+| R22 | `commands.py` | `_is_provider_configured()` guessed readiness from secret names. | P4: deleted; `Provider.is_configured()` |
+| R23 | `kernel/registry.py` | No contract check at provider registration; a provider missing a method vanished from the picker silently (hit by the scenario `ReplayProvider`). | P4: `PluginLoadError` naming the missing members |
 
 ---
 

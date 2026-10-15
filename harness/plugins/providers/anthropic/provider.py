@@ -106,22 +106,19 @@ class AnthropicProvider:
         if not self._external_client and not self._client.is_closed:
             await self._client.aclose()
 
+    def is_configured(self) -> bool:
+        """An API key is required (an injected client counts as configured for tests)."""
+        return bool(self.api_key) or self._external_client
+
+    async def is_reachable(self) -> bool | None:
+        """Hosted API: not probed."""
+        return None
+
     async def list_models(self) -> list[ModelInfo]:
-        """Returns supported models with 24h caching."""
+        """The built-in catalogue — known with or without a key (a missing key is `is_configured()`'s business)."""
         now = time.time()
         if self._cached_models and (now - self._cached_models_ts) < 86400:
             return self._cached_models
-
-        # Check API key if not provided and not external client
-        if not self.api_key and not self._external_client:
-            raise ProviderError(
-                provider=self.name,
-                model="claude-3-7-sonnet",
-                kind="auth",
-                message="No Anthropic API key configured (set ANTHROPIC_API_KEY in ~/.harness/secrets.json)",
-                retryable=False,
-            )
-
         self._cached_models = list(DEFAULT_ANTHROPIC_MODELS)
         self._cached_models_ts = now
         return self._cached_models

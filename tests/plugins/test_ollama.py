@@ -5,6 +5,7 @@ Verifies native tool calling, XML fallback on HTTP 400, think tag parsing, and P
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import httpx
@@ -14,7 +15,7 @@ from harness.kernel.bus import EventBus
 from harness.kernel.registry import PluginRegistry
 from harness.kernel.secrets import Secrets
 from harness.kernel.settings import SettingsStore
-from harness.plugins.providers.ollama.provider import OllamaProvider
+from harness.plugins.providers.ollama.provider import DEFAULT_OLLAMA_MODELS, OllamaProvider
 from harness.sdk.testing import ProviderKit
 from harness.sdk.types import (
     Done,
@@ -83,6 +84,7 @@ def mock_ollama_provider() -> OllamaProvider:
 async def test_ollama_conformance_provider_kit(mock_ollama_provider: OllamaProvider):
     """Verifies Ollama provider passes all standard ProviderKit tests."""
     kit = ProviderKit()
+    await kit.test_readiness(mock_ollama_provider)
     await kit.test_list_models(mock_ollama_provider)
     await kit.test_plain_prompt(mock_ollama_provider)
     await kit.test_streaming_multiple_deltas(mock_ollama_provider)
@@ -199,6 +201,74 @@ async def test_ollama_list_models_from_api_tags():
     assert "codellama:7b" in ids
     assert "mistral:instruct" in ids
     assert "deepseek-r1:8b" in ids
+
+
+# -----------------------------------------------------------------------------
+# Readiness (P4): the provider — not the kernel — says whether Ollama is usable
+# -----------------------------------------------------------------------------
+def _down_transport() -> tuple[httpx.MockTransport, list[httpx.Request]]:
+    """Every request fails the way a closed local port does."""
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        raise httpx.ConnectError("Connection refused", request=request)
+
+    return httpx.MockTransport(handler), captured
+
+
+@pytest.mark.asyncio
+async def test_ollama_readiness_when_running():
+    transport, captured = make_mock_ollama_transport(chat_responses=[], tags_models=["codellama:7b"])
+    provider = OllamaProvider(client=httpx.AsyncClient(transport=transport))
+    await ProviderKit().test_readiness(provider)
+    assert provider.is_configured() is True
+    assert await provider.is_reachable() is True
+    assert [m.id for m in await provider.list_models()] == ["codellama:7b"]
+    # One probe serves is_reachable() and list_models() for PROBE_TTL_S.
+    assert len([r for r in captured if r.url.path.endswith("/api/tags")]) == 1
+
+
+@pytest.mark.asyncio
+async def test_ollama_readiness_when_down_is_fast_cached_and_honest():
+    transport, captured = _down_transport()
+    provider = OllamaProvider(client=httpx.AsyncClient(transport=transport))
+
+    t0 = time.monotonic()
+    assert await provider.is_reachable() is False  # never raises
+    assert time.monotonic() - t0 < 1.0
+
+    # The catalogue is still known (so the picker can show it as "not running"), and nothing raised.
+    ids = [m.id for m in await provider.list_models()]
+    assert ids == [m.id for m in DEFAULT_OLLAMA_MODELS]
+
+    # Negative verdicts are cached too: no reconnect storm on every page load.
+    for _ in range(5):
+        assert await provider.is_reachable() is False
+    assert len(captured) == 1
+
+    # After the TTL the probe runs again (and the daemon may have come up meanwhile).
+    provider._probe_ts -= OllamaProvider.PROBE_TTL_S + 1
+    assert await provider.is_reachable() is False
+    assert len(captured) == 2
+
+
+@pytest.mark.asyncio
+async def test_ollama_probe_uses_short_timeout():
+    """The liveness probe must not inherit the 120 s generation timeout."""
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"models": []})
+
+    provider = OllamaProvider(client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    assert await provider.is_reachable() is True
+    timeout = seen[0].extensions.get("timeout", {})
+    assert timeout.get("connect") == pytest.approx(OllamaProvider.PROBE_TIMEOUT_S)
+    assert timeout.get("read") == pytest.approx(OllamaProvider.PROBE_TIMEOUT_S)
+    # Up but nothing pulled yet → the catalogue of suggestions, still "ready".
+    assert [m.id for m in await provider.list_models()] == [m.id for m in DEFAULT_OLLAMA_MODELS]
 
 
 @pytest.mark.asyncio

@@ -48,8 +48,15 @@ from harness.sdk.types import (
 class ProviderKit:
     """Conformance test kit for Provider plugins."""
 
+    async def test_readiness(self, provider: Provider) -> None:
+        """`is_configured()` is a plain bool; `is_reachable()` answers True/False/None quickly and never raises."""
+        configured = provider.is_configured()
+        assert isinstance(configured, bool), f"Provider '{provider.name}'.is_configured() must return bool, got {configured!r}"
+        reachable = await provider.is_reachable()
+        assert reachable in (True, False, None), f"Provider '{provider.name}'.is_reachable() must return True/False/None, got {reachable!r}"
+
     async def test_list_models(self, provider: Provider) -> None:
-        """Provider must list >= 1 supported model or raise ProviderError(kind='auth')."""
+        """Provider must list >= 1 model; it may raise ProviderError(kind='auth') only when real credentials were rejected."""
         try:
             models = await provider.list_models()
             assert len(models) >= 1, f"Provider '{provider.name}' returned empty model list"
@@ -58,6 +65,7 @@ class ProviderKit:
                 assert m.display_name, "ModelInfo missing display_name"
         except ProviderError as err:
             assert err.kind == "auth", f"Expected auth ProviderError, got: {err.kind}"
+            assert provider.is_configured(), "an unconfigured provider must return its catalogue, not raise"
 
     async def test_plain_prompt(self, provider: Provider) -> None:
         """Provider must yield >= 1 TextDelta, exactly one Done, and UsageEvent."""

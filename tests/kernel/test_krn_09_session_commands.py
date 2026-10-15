@@ -15,6 +15,7 @@ Tests required (§5.1, §5.2):
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 
 import pytest
@@ -405,6 +406,70 @@ async def test_models_list_aggregates_providers(
 
 
 @pytest.mark.asyncio
+async def test_models_list_rows_are_model_rows_with_provider_truth(
+    commands: Commands,
+    registry: PluginRegistry,
+    caplog: pytest.LogCaptureFixture,
+):
+    """P4: `models.list` rows are `ModelRow` dicts; `status` comes from the provider's own
+    `is_configured()` / `is_reachable()`, the command never raises and never logs above DEBUG."""
+    from dataclasses import fields
+
+    from harness.sdk.types import ModelRow
+
+    ready = ScriptedProvider(models=[ModelInfo(id="ready-1", display_name="Ready")])
+    ready.name = "ready_provider"
+
+    needs_key = ScriptedProvider(models=[ModelInfo(id="keyed-1", display_name="Keyed")])
+    needs_key.name = "keyed_provider"
+    needs_key.configured = False
+
+    down = ScriptedProvider(models=[ModelInfo(id="local-1", display_name="Local")])
+    down.name = "local_provider"
+    down.reachable = False
+
+    class Broken:
+        name = "broken_provider"
+        caps = ready.caps
+
+        def is_configured(self) -> bool:
+            return True
+
+        async def is_reachable(self) -> bool | None:
+            raise RuntimeError("probe exploded")
+
+        async def list_models(self):  # pragma: no cover - never reached
+            return []
+
+        async def generate(self, req):  # pragma: no cover - never reached
+            yield Done(stop_reason="end_turn")
+
+        async def aclose(self) -> None:
+            pass
+
+    for p in (ready, needs_key, down, Broken()):
+        registry.register_provider(p)
+
+    with caplog.at_level(logging.DEBUG, logger="harness.kernel.commands"):
+        rows = await commands.models_list()
+
+    by_id = {r["id"]: r for r in rows}
+    expected_keys = {f.name for f in fields(ModelRow)} | {"status"}
+    assert all(set(r) == expected_keys for r in rows), [set(r) ^ expected_keys for r in rows]
+
+    assert by_id["ready-1"]["status"] == "ready" and by_id["ready-1"]["configured"] is True and by_id["ready-1"]["reachable"] is None
+    assert by_id["keyed-1"]["status"] == "needs_key" and by_id["keyed-1"]["configured"] is False
+    assert by_id["local-1"]["status"] == "unreachable" and by_id["local-1"]["reachable"] is False
+    assert by_id["ready-1"]["provider"] == "ready_provider"
+
+    # The broken provider contributes nothing, loudly only at DEBUG.
+    assert "broken_provider" not in {r["provider"] for r in rows}
+    noisy = [rec for rec in caplog.records if rec.levelno > logging.DEBUG and "broken_provider" in rec.getMessage()]
+    assert noisy == [], [rec.getMessage() for rec in noisy]
+    assert any("broken_provider" in rec.getMessage() for rec in caplog.records if rec.levelno == logging.DEBUG)
+
+
+@pytest.mark.asyncio
 async def test_generic_command_dispatch(commands: Commands):
     """
     KRN-09 Test 9: generic dispatch router handles RPC string names and custom commands.
@@ -420,3 +485,26 @@ async def test_generic_command_dispatch(commands: Commands):
     commands.register_command("custom.ping", custom_ping)
     res_custom = await commands.dispatch("custom.ping", {"target": "gateway"})
     assert res_custom == "pong-gateway"
+
+
+def test_registry_rejects_providers_that_skip_the_contract(registry: PluginRegistry):
+    """P4: a provider without `is_configured` / `is_reachable` is a plugin bug and fails at load, not later."""
+    from harness.sdk.errors import PluginLoadError
+
+    class HalfProvider:
+        name = "half"
+        caps = ScriptedProvider().caps
+
+        async def list_models(self):
+            return []
+
+        async def generate(self, req):  # pragma: no cover
+            yield None
+
+        async def aclose(self):
+            pass
+
+    with pytest.raises(PluginLoadError, match="missing: is_configured, is_reachable"):
+        registry.register_provider(HalfProvider(), plugin_name="half-plugin")
+    assert registry.get_provider("half") is None
+

@@ -56,6 +56,16 @@ class ScriptedProvider:
     def add_error(self, err: Exception) -> None:
         self.responses.append(err)
 
+    # Readiness knobs for tests that exercise `models.list` grouping.
+    configured: bool = True
+    reachable: bool | None = None
+
+    def is_configured(self) -> bool:
+        return self.configured
+
+    async def is_reachable(self) -> bool | None:
+        return self.reachable
+
     async def list_models(self) -> list[ModelInfo]:
         return list(self._models)
 

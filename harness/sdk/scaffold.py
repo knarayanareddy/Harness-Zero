@@ -235,6 +235,14 @@ class {class_name}Provider(Provider):
         thinking=False,
     )
 
+    def is_configured(self) -> bool:
+        # Return False when a required credential is missing; the kernel then lists your models as "needs key".
+        return True
+
+    async def is_reachable(self) -> bool | None:
+        # Probe a local endpoint with a short timeout (cache ~30 s) or return None for hosted APIs.
+        return None
+
     async def list_models(self) -> list[ModelInfo]:
         return [
             ModelInfo(
@@ -275,6 +283,7 @@ from plugin import {class_name}Provider
 async def test_conformance():
     kit = ProviderKit()
     provider = {class_name}Provider()
+    await kit.test_readiness(provider)
     await kit.test_list_models(provider)
     await kit.test_plain_prompt(provider)
     await kit.test_streaming_multiple_deltas(provider)

@@ -114,6 +114,12 @@ class MockProvider:
     async def aclose(self) -> None:
         await self._scripted.aclose()
 
+    def is_configured(self) -> bool:
+        return True
+
+    async def is_reachable(self) -> bool | None:
+        return None
+
     async def list_models(self) -> list[ModelInfo]:
         return DEFAULT_MOCK_MODELS
 

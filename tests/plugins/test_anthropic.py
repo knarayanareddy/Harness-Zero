@@ -111,6 +111,7 @@ def mock_anthropic_provider() -> AnthropicProvider:
 @pytest.mark.asyncio
 async def test_providerkit_conformance(mock_anthropic_provider: AnthropicProvider):
     kit = ProviderKit()
+    await kit.test_readiness(mock_anthropic_provider)
     await kit.test_list_models(mock_anthropic_provider)
     await kit.test_plain_prompt(mock_anthropic_provider)
     await kit.test_streaming_multiple_deltas(mock_anthropic_provider)

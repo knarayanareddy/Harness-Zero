@@ -972,38 +972,32 @@ export class HarnessStudioApp {
     const select = document.getElementById('model-select');
     if (!select) return;
     try {
+      // ModelRow (harness/sdk/types.py): {id, display_name, provider, context_tokens, input_usd_per_mtok,
+      // output_usd_per_mtok, configured, reachable, status: 'ready' | 'needs_key' | 'unreachable'}.
+      // The provider decided the status; the picker only groups by it.
       const models = await this.api.listModels();
-      if (models && models.length > 0) {
-        select.innerHTML = '<option value="">Default Model</option>';
-        const configuredGroup = document.createElement('optgroup');
-        configuredGroup.label = 'Configured Models';
-        const unconfiguredGroup = document.createElement('optgroup');
-        unconfiguredGroup.label = 'Unconfigured (Requires API Key)';
-
-        for (const m of models) {
-          const opt = document.createElement('option');
-          opt.value = m.id || m.model_name || m.name;
-          if (m.provider) {
-            opt.setAttribute('data-provider', m.provider);
-            opt.dataset.provider = m.provider;
-          }
-          const isConfigured = m.configured !== false;
-          if (isConfigured) {
-            opt.textContent = `${m.provider ? m.provider + ': ' : ''}${m.id || m.name}`;
-            configuredGroup.appendChild(opt);
-          } else {
-            opt.textContent = `${m.provider ? m.provider + ': ' : ''}${m.id || m.name} (unconfigured)`;
-            opt.disabled = true;
-            unconfiguredGroup.appendChild(opt);
-          }
+      select.innerHTML = '<option value="">Default Model</option>';
+      const groups = {
+        ready: { label: 'Ready', suffix: '', disabled: false },
+        needs_key: { label: 'Needs API key (Settings → Secrets)', suffix: ' (needs key)', disabled: true },
+        unreachable: { label: 'Not running', suffix: ' (unreachable)', disabled: true },
+      };
+      const optgroups = {};
+      for (const m of (models || [])) {
+        const g = groups[m.status] || groups.ready;
+        if (!optgroups[m.status]) {
+          optgroups[m.status] = document.createElement('optgroup');
+          optgroups[m.status].label = g.label;
         }
-
-        if (configuredGroup.children.length > 0) {
-          select.appendChild(configuredGroup);
-        }
-        if (unconfiguredGroup.children.length > 0) {
-          select.appendChild(unconfiguredGroup);
-        }
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.dataset.provider = m.provider;
+        opt.textContent = `${m.provider}: ${m.display_name || m.id}${g.suffix}`;
+        opt.disabled = g.disabled;
+        optgroups[m.status].appendChild(opt);
+      }
+      for (const key of Object.keys(groups)) {
+        if (optgroups[key]) select.appendChild(optgroups[key]);
       }
 
       // Restore saved selection

@@ -209,13 +209,21 @@ class CliApp:
                     continue
 
                 if user_input == "/models":
+                    # Rows are ModelRow: id, display_name, provider, context_tokens, configured, reachable, status
                     models = await self.commands.models_list()
                     table = Table(title="Available Models")
                     table.add_column("Provider", style="cyan")
                     table.add_column("ID", style="green")
                     table.add_column("Context", style="dim")
+                    table.add_column("Status")
+                    status_labels = {"ready": "ready", "needs_key": "needs API key", "unreachable": "not running"}
                     for m in models:
-                        table.add_row(m.get("provider", ""), m.get("id", ""), str(m.get("context_tokens", "")))
+                        table.add_row(
+                            m.get("provider", ""),
+                            m.get("id", ""),
+                            str(m.get("context_tokens", "")),
+                            status_labels.get(m.get("status", ""), m.get("status", "")),
+                        )
                     self.console.print(table)
                     continue
 

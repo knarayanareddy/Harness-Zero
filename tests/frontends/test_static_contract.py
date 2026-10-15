@@ -437,3 +437,21 @@ def test_session_picker_reads_session_row_fields_and_boot_creates_no_session():
     controls = _js_function_body(app_js, "bindControls")
     assert "createNewSession" not in controls.split("btn-new-session")[0], "submit must not create a session client-side"
     assert "session_id: this.activeSessionId || undefined" in controls
+
+
+def test_model_picker_reads_model_row_fields_and_groups_by_provider_status():
+    """P4: provider truth lives in the provider. `populateModels()` renders `ModelRow` keys only and groups by
+    the kernel-derived `status` (ready / needs_key / unreachable) instead of guessing from `configured`."""
+    from dataclasses import fields
+
+    from harness.sdk.types import ModelRow
+
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    picker = _js_function_body(app_js, "populateModels")
+    row_keys = {f.name for f in fields(ModelRow)} | {"status"}
+    assert _member_refs(picker, "m") <= row_keys, f"populateModels reads m.{sorted(_member_refs(picker, 'm') - row_keys)}"
+    for status in ("ready", "needs_key", "unreachable"):
+        assert status in picker, f"picker must have a group for status {status!r}"
+    assert "Unconfigured (Requires API Key)" not in app_js, "the old unreachable optgroup is gone"
+    assert "m.configured !== false" not in picker, "status is derived by the kernel, not re-derived client-side"
+

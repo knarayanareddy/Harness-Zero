@@ -42,11 +42,30 @@ class Plugin(Protocol):
 
 @runtime_checkable
 class Provider(Protocol):
+    """A model backend. The provider is the only authority on its own readiness:
+
+    * ``is_configured()`` — it has what it needs to be *called* (credentials present, or none needed). Pure.
+    * ``is_reachable()`` — a cheap, short-timeout liveness probe for providers that have something local to
+      probe (Ollama); ``None`` means "not probed" (hosted APIs). Must never raise; callers may run it on every
+      page load, so cache the answer for ~30 s.
+    * ``list_models()`` — the catalogue the provider *knows*, with or without credentials (a missing key is
+      reported by ``is_configured()``, not by raising). Hit the network only when configured; fall back to
+      the built-in list; raise ``ProviderError(kind="auth")`` only when the service rejected real credentials.
+    """
+
     name: str
     caps: ProviderCaps
 
+    def is_configured(self) -> bool:
+        """True when the provider can be called as configured (keys present or not required). No I/O."""
+        ...
+
+    async def is_reachable(self) -> bool | None:
+        """Short-timeout liveness probe; ``None`` when the provider does not probe. Never raises."""
+        ...
+
     async def list_models(self) -> list[ModelInfo]:
-        """Returns available models supported by this provider."""
+        """Returns the models this provider knows about (installed, served, or built-in catalogue)."""
         ...
 
     def generate(self, req: ModelRequest) -> AsyncIterator[ModelEvent]:

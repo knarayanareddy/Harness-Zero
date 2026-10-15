@@ -16,6 +16,7 @@ import asyncio
 import json
 import os
 import stat
+import time
 from pathlib import Path
 
 import httpx
@@ -567,15 +568,26 @@ async def test_models_and_strategy_settings(
             health_json = res_health.json()
             assert health_json["sandbox_origin"] == f"http://127.0.0.1:{server.sandbox_port}"
 
-            # 2. Query models.list
+            # 2. Query models.list — P4: every row carries the provider's own verdict and the call is quick
+            #    even with every hosted key missing and no local Ollama (probe timeout 300 ms, cached).
+            t0 = time.monotonic()
             res_models = await client.post(
                 f"{base_url}/commands/models.list",
                 json={},
                 headers={"Authorization": f"Bearer {server.auth_token}"},
             )
             assert res_models.status_code == 200
+            assert time.monotonic() - t0 < 5.0
             models_list = res_models.json()["result"]
             assert isinstance(models_list, list)
+            for row in models_list:
+                assert row["status"] in ("ready", "needs_key", "unreachable"), row
+                if row["provider"] == "ollama":
+                    # Running or not, the row must say which — never "ready" while the daemon is down.
+                    assert row["reachable"] in (True, False)
+                    assert row["status"] == ("ready" if row["reachable"] else "unreachable")
+                elif row["provider"] in ("anthropic", "gemini", "openai", "openrouter", "deepseek"):
+                    assert row["configured"] is False and row["status"] == "needs_key", row
 
             # 3. Strategy settings get / set
             res_set_strategy = await client.post(
