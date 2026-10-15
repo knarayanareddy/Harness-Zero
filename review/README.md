@@ -1,8 +1,12 @@
 # `review/` — Harness-Zero review, architecture and build plan
 
-Everything in this folder was produced by an end-to-end review of the repository at commit `a0afc75` (branch `arena/4bab20a8-harness-zero`). **No source files were changed.** The folder is self-contained: documents reference each other by bare filename and reference repository files by their path from the repo root.
+Everything in this folder was produced by an end-to-end review of the repository at commit `a0afc75` (branch `arena/4bab20a8-harness-zero`), plus a follow-up review of the v0.2.0 rebuild (`7185083`). **No source files were changed.** The folder is self-contained: documents reference each other by bare filename and reference repository files by their path from the repo root.
 
-## Start here
+## Latest: `CODE_REVIEW_v0.2.0.md` (review of the rebuild)
+
+After the v2 plan was executed (69 commits, tag `v0.2.0`), the repository was re-reviewed end to end with the same method. Short version: the kernel/SDK/plugin skeleton, boundaries, policy gate, daemon hardening and bridges are real and verified; but the agent loop never feeds tool results or history back to the model (record-schema mismatch + unwired stores), the shipped web page mixes an orphaned modular client with a legacy inline script whose chat endpoint fails on every request, and the legacy `/settings` route re-introduces plaintext API keys and fabricated state. It contains a claim fact-check, a plan-item closure matrix, a duplicate/legacy map, and a prioritised sequence to make the tree cohesive. **Read it first if you are picking up the codebase now.**
+
+## Start here (original review set)
 
 | Order | File | What it is | Read it if you want to… |
 |---|---|---|---|
