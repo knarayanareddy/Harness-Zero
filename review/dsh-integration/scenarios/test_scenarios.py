@@ -24,6 +24,14 @@ ROOT = Path(__file__).parent
 SCENARIOS = discover(ROOT)
 
 
+def _subset(want, have) -> bool:
+    if isinstance(want, dict):
+        return isinstance(have, dict) and all(k in have and _subset(v, have[k]) for k, v in want.items())
+    if isinstance(want, list):
+        return isinstance(have, list) and all(any(_subset(w, h) for h in have) for w in want)
+    return want == have
+
+
 def _check_expectations(sc, result) -> None:
     exp = sc.expect
     if "tools_called" in exp:
@@ -59,6 +67,14 @@ def _check_expectations(sc, result) -> None:
     for needle in exp.get("model_never_saw") or []:
         blob = "\n".join(str(r) for r in result.provider_requests)
         assert needle not in blob, f"model saw forbidden text {needle!r}"
+    if "events_match" in exp:
+        # Each entry is a JSON subset that at least one event must match, e.g. {type: tool.decision, data: {action: deny}}.
+        for want in exp["events_match"]:
+            assert any(_subset(want, e) for e in result.events), f"no event matches {want}; seen={[e.get('type') for e in result.events]}"
+    if sc.kind == "web" and exp.get("auth_required", True):
+        statuses = result.extra.get("unauthenticated") or {}
+        leaking = {k: v for k, v in statuses.items() if v not in (401, 403)}
+        assert statuses and not leaking, f"unauthenticated requests not rejected: {statuses}"
     if "stop_reasons" in exp:
         got = [tr.get("stop_reason") for tr in (getattr(result, "turn_results", None) or [])]
         assert got == exp["stop_reasons"], f"stop reasons {got} != {exp['stop_reasons']}"
@@ -69,10 +85,34 @@ def _check_expectations(sc, result) -> None:
         text = result.dom.get("timeline_text") or ""
         for needle in exp["timeline_contains"]:
             assert needle in text, f"timeline does not show {needle!r}; timeline={text[:400]!r}; console={result.dom.get('console_tail')}"
+    if "timeline_order" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        text = result.dom.get("timeline_text") or ""
+        positions = [(needle, text.find(needle)) for needle in exp["timeline_order"]]
+        missing = [n for n, i in positions if i < 0]
+        assert not missing, f"timeline lacks {missing}; timeline={text[:400]!r}"
+        idx = [i for _, i in positions]
+        assert idx == sorted(idx), f"timeline order is {[n for n, _ in sorted(positions, key=lambda x: x[1])]}, expected {exp['timeline_order']}"
     if "timeline_not_contains" in exp and result.dom is not None:
         text = result.dom.get("timeline_text") or ""
         for needle in exp["timeline_not_contains"]:
             assert needle not in text, f"timeline shows {needle!r}"
+    if "reload_timeline_contains" in exp:
+        rep = (result.dom or {}).get("reload") or {}
+        text = rep.get("timeline_text_on_load") or ""
+        for needle in exp["reload_timeline_contains"]:
+            assert needle in text, (
+                f"after a page refresh the timeline does not show {needle!r}; on_load={text[:300]!r}; "
+                f"after_click={rep.get('timeline_text_after_click', '')[:300]!r}; "
+                f"after_reloadTranscript={rep.get('timeline_text_after_reload_transcript', '')[:300]!r}; "
+                f"active_session_on_load={rep.get('active_session_on_load')}; console={rep.get('console_tail')}"
+            )
+        assert not rep.get("empty_user_bubbles"), f"page refresh rendered {rep.get('empty_user_bubbles')} empty user bubbles (tool-result records)"
+    if "reload_timeline_not_contains" in exp:
+        rep = (result.dom or {}).get("reload") or {}
+        text = rep.get("timeline_text_on_load") or ""
+        for needle in exp["reload_timeline_not_contains"]:
+            assert needle not in text, f"after a page refresh the timeline shows {needle!r}"
     if exp.get("dom_turns_completed") and result.dom is not None:
         incomplete = [t for t in result.dom.get("turns", []) if not t.get("completed")]
         assert not incomplete, f"client never saw the turn finish: {incomplete}; sse={result.dom.get('sse_events')[:20]}; submit={result.dom.get('submit_bodies')}; fetch={result.dom.get('fetch_log')[-6:]}"

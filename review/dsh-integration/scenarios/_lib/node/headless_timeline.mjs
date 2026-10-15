@@ -18,6 +18,7 @@ const STATIC = process.env.STATIC || path.resolve('harness/frontends/web/static'
 const PROMPTS = process.env.PROMPTS ? JSON.parse(process.env.PROMPTS) : [process.env.PROMPT || 'hello'];
 const WAIT_MS = parseInt(process.env.WAIT_MS || '6000', 10);
 const NEW_SESSION = process.env.NEW_SESSION === '1';
+const RELOAD = process.env.RELOAD === '1'; // simulate a page refresh on an existing session: no clicks, no prompts
 const APPROVE = process.env.APPROVE === '1';
 const MODEL = process.env.MODEL || '';
 
@@ -127,6 +128,23 @@ const txt = (sel) => ($(sel)?.textContent || '').replace(/\s+/g, ' ').trim();
 await sleep(1500);
 
 const report = { app_booted: !!window.HarnessApp };
+const timelineText = () => ($('#timeline')?.textContent || '').replace(/\s+/g, ' ').trim();
+if (RELOAD) {
+  // What the user sees right after pressing F5 on a daemon that has an active session.
+  report.active_session_on_load = window.HarnessApp?.activeSessionId || null;
+  report.timeline_text_on_load = timelineText();
+  report.timeline_children_on_load = $('#timeline')?.children.length ?? null;
+  const items = [...window.document.querySelectorAll('#session-list .session-item')];
+  report.session_items = items.length;
+  // The only click a user can make to get the history back: the session entry in the sidebar.
+  (items.find((i) => i.classList.contains('active')) || items[0])?.click();
+  await sleep(1000);
+  report.timeline_text_after_click = timelineText();
+  // Renderer fidelity, independent of wiring: what reloadTranscript() itself produces.
+  if (window.HarnessApp?.reloadTranscript) { await window.HarnessApp.reloadTranscript(); await sleep(300); }
+  report.timeline_text_after_reload_transcript = timelineText();
+  report.empty_user_bubbles = [...window.document.querySelectorAll('#timeline .turn-user')].filter((n) => !n.textContent.trim()).length;
+}
 report.model_options = [...window.document.querySelectorAll('#model-select option')].map((o) => o.value);
 if (NEW_SESSION) { $('#btn-new-session')?.click(); await sleep(800); }
 report.active_session_before_send = window.HarnessApp?.activeSessionId || null;

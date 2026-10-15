@@ -14,4 +14,6 @@ expect:
     notes.txt: {contains: "approved from the browser"}
   event_types_include: [approval.required, approval.resolved]
   timeline_contains: ["notes.txt written"]
+  dom_reload: true
+  reload_timeline_contains: ["Create notes.txt", "write_to_file", "notes.txt written"]
   event_types_exclude: [turn.error, turn.cancelled]

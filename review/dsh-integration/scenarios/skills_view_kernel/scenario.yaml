@@ -1,0 +1,14 @@
+name: skills_view_kernel
+kind: kernel
+summary: Progressive skills — the skills catalog is injected into the prompt and view_skill returns the full SKILL.md to the model (and a card to the UI).
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: allow
+turns:
+  - prompt: "Plan the architecture using the code-architect skill."
+expect:
+  tools_called: [view_skill]
+  event_types_include: [tool.call, tool.result, ui.card, turn.completed]
+  event_types_exclude: [turn.error, approval.required]
+  model_saw: ["Available Skills (Progressive Disclosure)", "code-architect", "Code Architect Playbook"]
+  reload_equals_live: true

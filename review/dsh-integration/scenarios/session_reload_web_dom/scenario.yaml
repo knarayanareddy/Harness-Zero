@@ -1,0 +1,13 @@
+name: session_reload_web_dom
+kind: web
+summary: Two turns through the real client, then a page refresh — the conversation must be visible again without any further click.
+recorded_from: synthetic
+turns:
+  - prompt: "Question one"
+  - prompt: "Question two"
+expect:
+  dom_turns_completed: true
+  dom_reload: true
+  timeline_contains: ["Answer one: Amsterdam.", "Answer two: Rotterdam."]
+  reload_timeline_contains: ["Question one", "Answer one: Amsterdam.", "Question two", "Answer two: Rotterdam."]
+  event_types_exclude: [turn.error, turn.cancelled]

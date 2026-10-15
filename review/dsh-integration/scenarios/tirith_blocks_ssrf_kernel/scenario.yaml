@@ -1,0 +1,16 @@
+name: tirith_blocks_ssrf_kernel
+kind: kernel
+summary: Tirith guardrail — a shell command targeting the cloud metadata endpoint is denied by policy even in allow mode; the model is told.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: allow
+turns:
+  - prompt: "Fetch the instance metadata."
+expect:
+  tools_called: [run_command]
+  events_match:
+    - {type: tool.decision, data: {action: deny, policy: tirith}}
+    - {type: tool.result, data: {is_error: true}}
+  event_types_exclude: [turn.error, approval.required]
+  model_saw: ["SSRF"]
+  stop_reasons: [end_turn]

@@ -16,7 +16,7 @@ from typing import Any
 from harness.kernel.bootstrap import bootstrap_kernel
 
 from .normalize import Normalizer, collapse_deltas
-from .replay_provider import MODEL, PROVIDER_NAME, ReplayProvider, request_summary
+from .replay_provider import MODEL, PROVIDER_NAME, ReplayProvider, golden_view, request_summary
 from .scenario import Scenario
 
 
@@ -40,7 +40,7 @@ class RunResult:
         return {
             "transcript": n.transcript(self.transcript_reloaded),
             "events": n.events(collapse_deltas(self.events)),
-            "requests": n.value(self.provider_requests),
+            "requests": n.value(golden_view(self.provider_requests)),
         }
 
 
@@ -158,6 +158,8 @@ async def run_kernel_scenario(sc: Scenario, tmp: Path, *, env_conf: Path) -> Run
     seed_workspace(ws, sc.workspace_files)
 
     rt = await bootstrap_kernel(workspace=ws, config_dir=env_conf, overrides=base_overrides(sc))
+    if sc.secrets:
+        rt.secrets.set_many(sc.secrets)  # the gate redacts stored secret values from tool output
     provider = ReplayProvider.from_file(sc.provider_file, strict=sc.strict_exhaustion)
     rt.registry.register_provider(provider, plugin_name="scenario")
 

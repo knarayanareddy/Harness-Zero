@@ -27,7 +27,7 @@ from harness.kernel.bootstrap import bootstrap_kernel
 
 from .kernel_runner import ScriptedApprover, base_overrides, seed_workspace
 from .normalize import Normalizer, collapse_deltas
-from .replay_provider import MODEL, ReplayProvider, request_summary
+from .replay_provider import MODEL, ReplayProvider, golden_view, request_summary
 from .scenario import Scenario
 from .sse import SSEReader
 
@@ -56,7 +56,7 @@ class WebRunResult:
             "transcript": n.transcript(self.transcript_reloaded),
             "events": n.events(collapse_deltas(self.events)),
             "http": n.value(self.http),
-            "requests": n.value(self.provider_requests),
+            "requests": n.value(golden_view(self.provider_requests)),
         }
         if self.dom is not None:
             out["timeline"] = n.text(self.dom.get("timeline_text", "") or "")
@@ -105,6 +105,18 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
             http_log.append({"command": name, "request": body, "status": r.status_code, "response": _trim(data)})
             return r.status_code, data
 
+        # Auth must fail closed: no bearer token -> no command, no ticket, no event stream.
+        unauth: dict[str, int] = {}
+        r = await client.post("/commands/sessions.list", content="{}")
+        unauth["command"] = r.status_code
+        r = await client.post("/auth/ticket", content="{}")
+        unauth["ticket"] = r.status_code
+        async with client.stream("GET", "/events") as r:
+            unauth["events"] = r.status_code
+        async with client.stream("GET", "/events?ticket=not-a-ticket") as r:
+            unauth["events_bad_ticket"] = r.status_code
+        http_log.append({"command": "unauthenticated", "request": {}, "status": 0, "response": unauth})
+
         # Browser SSE connection (ticket flow exactly like events.js)
         r = await client.post("/auth/ticket", headers=headers, content="{}")
         ticket = r.json().get("ticket") if r.status_code == 200 else None
@@ -146,6 +158,10 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
                             errors.append(f"turn {turn.prompt!r} never reached a terminal event within 20s")
                             break
 
+            # Simulate a page refresh in the real client on the session that just ran.
+            if dom and dom_report is not None and sc.expect.get("dom_reload"):
+                dom_report["reload"] = await _run_dom_lane(base, sc, token, reload=True)
+
             # Reload what a page refresh would render
             if sid:
                 status, got = await call("sessions.get", {"session_id": sid})
@@ -172,7 +188,11 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
         dom=dom_report,
         errors=errors,
         tools_called=[t for t in tools_called if t],
-        extra={"replay_remaining": provider.remaining, "named_sse_frames": sum(1 for f in sse.frames if f["event"] != "message")},
+        extra={
+            "replay_remaining": provider.remaining,
+            "named_sse_frames": sum(1 for f in sse.frames if f["event"] != "message"),
+            "unauthenticated": unauth,
+        },
     )
 
 
@@ -191,17 +211,18 @@ def _trim(data: Any) -> Any:
     return data
 
 
-async def _run_dom_lane(base: str, sc: Scenario, token: str) -> dict[str, Any]:
+async def _run_dom_lane(base: str, sc: Scenario, token: str, *, reload: bool = False) -> dict[str, Any]:
     env = dict(os.environ)
     env.update(
         {
             "BASE": base,
             "STATIC": str(STATIC_DIR),
-            "PROMPT": sc.turns[0].prompt if sc.turns else "",
-            "PROMPTS": json.dumps([t.prompt for t in sc.turns]),
+            "PROMPT": "" if reload else (sc.turns[0].prompt if sc.turns else ""),
+            "PROMPTS": "[]" if reload else json.dumps([t.prompt for t in sc.turns]),
             "WAIT_MS": os.environ.get("SCENARIO_DOM_WAIT_MS", "6000"),
-            "NEW_SESSION": "1" if sc.expect.get("dom_new_session", True) else "0",
+            "NEW_SESSION": "0" if reload else ("1" if sc.expect.get("dom_new_session", True) else "0"),
             "APPROVE": "1" if sc.expect.get("dom_approves") else "0",
+            "RELOAD": "1" if reload else "0",
             "MODEL": MODEL.id,
         }
     )

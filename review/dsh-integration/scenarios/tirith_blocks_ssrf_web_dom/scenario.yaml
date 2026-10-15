@@ -1,0 +1,16 @@
+name: tirith_blocks_ssrf_web_dom
+kind: web
+summary: A policy denial seen through the real client — the tool card must show DENIED with the reason, and the turn completes with the model's explanation.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: allow
+turns:
+  - prompt: "Fetch the instance metadata."
+expect:
+  dom_turns_completed: true
+  tools_called: [run_command]
+  events_match:
+    - {type: tool.decision, data: {action: deny, policy: tirith}}
+  timeline_contains: ["run_command", "DENIED", "SSRF", "That request was blocked by the security policy."]
+  timeline_not_contains: ["ALLOWED"]
+  event_types_exclude: [turn.error, turn.cancelled, approval.required]

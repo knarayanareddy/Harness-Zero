@@ -1,0 +1,16 @@
+name: memory_remember_web_dom
+kind: web
+summary: Memory through the real client — remember in turn one, search_memory in turn two; both tool cards render and the found fact is shown.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: allow
+turns:
+  - prompt: "Remember the codename is Falcon"
+  - prompt: "What is the codename?"
+expect:
+  dom_turns_completed: true
+  tools_called: [remember, search_memory]
+  model_saw: ["Project codename is Falcon"]
+  timeline_contains: ["remember", "search_memory", "Found it: the codename is Falcon.", "COMPLETED"]
+  timeline_order: ["Noting that.", "remember", "Saved.", "What is the codename?", "search_memory", "Found it: the codename is Falcon."]
+  event_types_exclude: [turn.error, turn.cancelled, approval.required]

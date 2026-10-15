@@ -31,6 +31,7 @@ class Scenario:
     expect: dict[str, Any] = field(default_factory=dict)
     workspace_files: dict[str, str] = field(default_factory=dict)  # relative path -> content, seeded before the run
     mcp_servers: dict[str, Any] = field(default_factory=dict)
+    secrets: dict[str, str] = field(default_factory=dict)  # seeded into the kernel's Secrets store (config dir) before the run
     strict_exhaustion: bool = True
     xfail: str | None = None  # reason: the scenario documents a known bug; it must FAIL until fixed
 
@@ -59,6 +60,7 @@ def load_scenario(path: Path) -> Scenario:
         mcp_servers=data.get("mcp_servers", {}) or {},
         strict_exhaustion=bool(data.get("strict_exhaustion", True)),
         xfail=data.get("xfail"),
+        secrets={str(k): str(v) for k, v in (data.get("secrets") or {}).items()},
     )
 
 

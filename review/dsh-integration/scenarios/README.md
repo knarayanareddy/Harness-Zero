@@ -78,7 +78,9 @@ turns:
   - prompt: "Create notes.txt"
     model: replay-1            # optional, defaults to the replay model
 approvals: [approve, deny]     # scripted approver (kernel lane / API lane), in order
-xfail: "F-11 not fixed yet"    # documents a known bug; strict xfail until it is fixed
+secrets:                       # seeded into the kernel's Secrets store (config dir) before the run
+  INTERNAL_TOKEN: hunter2-super-secret-value
+xfail: "F-13 not fixed yet"    # documents a known bug; strict xfail until it is fixed
 expect:
   tools_called: [write_to_file]            # exact ordered list
   tools_called_subset: [view_file]         # must appear
@@ -86,6 +88,8 @@ expect:
   no_errors: true                          # default; set false for scenarios that must error
   event_types_include: [approval.required, turn.completed]
   event_types_exclude: [turn.error, turn.cancelled]
+  events_match:                            # JSON subset at least one event must match
+    - {type: tool.decision, data: {action: deny, policy: workspace_jail}}
   stop_reasons: [max_iterations]           # kernel lane: TurnResult.stop_reason per turn
   replay_consumed: true                    # default; every recorded response was requested
   model_saw: ["hello harness"]             # substring of any model request
@@ -96,6 +100,10 @@ expect:
   dom_turns_completed: true                # web: the client itself saw turn.completed for every turn
   timeline_contains: ["notes.txt written"] # visible text in the rendered timeline
   timeline_not_contains: ["undefined"]
+  timeline_order: ["Noting that.", "remember", "Saved."]  # these must appear in this order
+  dom_reload: true                         # web: boot the client again on the same session (= page refresh)
+  reload_timeline_contains: ["Question one", "Answer one"]  # what the refreshed page must show, with no click
+  auth_required: true                      # web, default: unauthenticated command/ticket/events -> 401
 ```
 
 Golden files are compared after the expectations: `transcript.json`, `events.json`,
@@ -130,6 +138,18 @@ provider/model id.
 | thinking_then_answer_web | web + DOM | thinking deltas rendered as "Reasoning Process", turn completes |
 | approval_allow_web_dom | web + DOM | approval card rendered, **Approve** clicked in jsdom, write lands |
 | session_resume_web | web (API) | two turns, `sessions.get` equals what the page would re-render |
+| session_reload_web_dom | web + DOM | two turns in the client, then a page refresh: history visible without a click |
+| read_then_edit_web_dom | web + DOM | tool cards with outputs in order, `📝 File Diff` card, refresh keeps the tool calls |
+| memory_remember_web_dom | web + DOM | remember / search_memory cards in order, found fact shown |
+| tirith_blocks_ssrf_web_dom | web + DOM | a policy denial renders as `DENIED` + reason, never `ALLOWED` |
+| skills_view_kernel | kernel | skills catalog in the system prompt, `view_skill` returns the playbook |
+| jail_blocks_traversal_kernel | kernel | read and write outside the workspace denied by `workspace_jail` |
+| shell_exec_denied_without_approver_kernel | kernel | `run_command` in `ask` mode with nobody approving → fails closed |
+| secret_redacted_from_model_kernel | kernel | stored secret + `sk-…` pattern redacted before the model sees them |
+| tirith_blocks_ssrf_kernel | kernel | metadata-endpoint `curl` denied by Tirith in allow mode |
+
+Every web scenario additionally records that unauthenticated `/commands/*`, `/auth/ticket`, `/events` and a
+bogus ticket are rejected with 401 (`http.json`, entry `unauthenticated`).
 
 Findings produced by running these live in `../FLOW_TEST_FINDINGS.md`.
 

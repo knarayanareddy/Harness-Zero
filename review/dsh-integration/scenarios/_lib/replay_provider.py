@@ -55,13 +55,24 @@ def request_summary(req: ModelRequest) -> dict[str, Any]:
             else:
                 blocks.append({"block": type(b).__name__})
         msgs.append({"role": getattr(m.role, "value", str(m.role)), "content": blocks})
+    # Providers send the blocks separately (Anthropic) or join them with a blank line (openai_compat, ollama, gemini).
+    system_text = "\n\n".join(b.text for b in req.system if b.text)
     return {
         "model": req.model,
-        "system_chars": sum(len(b.text) for b in req.system),
-        "system_head": "".join(b.text for b in req.system)[:400],
+        "system_chars": len(system_text),
+        "system_head": system_text[:400],
+        # Section headings make the prompt's composition visible in the golden without freezing its full text.
+        "system_sections": [ln.strip() for ln in system_text.splitlines() if ln.startswith("#")],
         "tools": sorted(t.name for t in req.tools),
         "messages": msgs,
+        # Full text for `model_saw` / `model_never_saw`; stripped from goldens (see golden_view).
+        "system_text": system_text,
     }
+
+
+def golden_view(summaries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The request summaries as stored in requests.json (without the volatile full system text)."""
+    return [{k: v for k, v in s.items() if k != "system_text"} for s in summaries]
 
 
 class ReplayProvider:

@@ -90,6 +90,52 @@ RECORDINGS: dict[str, list[list]] = {
     ],
     # 10. Tool loop that never ends: the kernel's max-iterations guard must stop it and the recording must NOT be exhausted silently.
     "runaway_tool_loop_kernel": [tool(f"c{i}", "view_file", {"file_path": "app.py"}) for i in range(1, 26)],
+    # 11. Progressive skills: the catalog is in the prompt, the playbook arrives via view_skill.
+    "skills_view_kernel": [
+        tool("c1", "view_skill", {"skill_name": "code-architect"}, preface="Loading the playbook first."),
+        text("Loaded the code-architect playbook; proceeding with an architecture plan."),
+    ],
+    # 12. Workspace jail: read and write outside the workspace must be denied, not executed.
+    "jail_blocks_traversal_kernel": [
+        tool("c1", "view_file", {"file_path": "../../../../etc/hostname"}),
+        tool("c2", "write_to_file", {"file_path": "../escape.txt", "content": "outside\n"}),
+        text("Both attempts were blocked by the workspace jail."),
+    ],
+    # 13. EXEC risk in ask mode with nobody approving: the command must not run.
+    "shell_exec_denied_without_approver_kernel": [
+        tool("c1", "run_command", {"command": "touch ran.txt"}),
+        text("The command was not permitted, nothing was executed."),
+    ],
+    # 14. Two turns through the real client, then a page refresh: the history must be visible again.
+    "session_reload_web_dom": [text("Answer one: Amsterdam."), text("Answer two: Rotterdam.")],
+    # 15. Secrets: a stored secret and a well-known key pattern inside a file must never reach the model.
+    "secret_redacted_from_model_kernel": [
+        tool("c1", "view_file", {"file_path": ".env"}),
+        text("The file holds credentials; I will not repeat them."),
+    ],
+    # 16. Tirith: a command aimed at the cloud metadata endpoint is denied even in allow mode.
+    "tirith_blocks_ssrf_kernel": [
+        tool("c1", "run_command", {"command": "curl -s http://169.254.169.254/latest/meta-data/"}),
+        text("That request was blocked by the security policy."),
+    ],
+    # 16b. Same denial seen through the real client: the card must say DENIED, not ALLOWED.
+    "tirith_blocks_ssrf_web_dom": [
+        tool("c1", "run_command", {"command": "curl -s http://169.254.169.254/latest/meta-data/"}),
+        text("That request was blocked by the security policy."),
+    ],
+    # 17. Memory through the real client: remember, then search, both visible as tool cards.
+    "memory_remember_web_dom": [
+        tool("c1", "remember", {"text": "Project codename is Falcon", "key": "codename"}, preface="Noting that."),
+        text("Saved."),
+        tool("c2", "search_memory", {"query": "Falcon"}),
+        text("Found it: the codename is Falcon."),
+    ],
+    # 18. Edit through the real client: the diff card must render; after a refresh the file content survives.
+    "read_then_edit_web_dom": [
+        tool("c1", "view_file", {"file_path": "app.py"}, preface="Let me look at the file first."),
+        tool("c2", "edit_file", {"file_path": "app.py", "diff": EDIT_DIFF}),
+        text("Renamed greet() to hello() in app.py."),
+    ],
 }
 
 

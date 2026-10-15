@@ -70,6 +70,9 @@ class Normalizer:
             ws = str(Path(workspace).resolve())
             self._paths.append((ws, "<ws>"))
             self._paths.append((str(workspace), "<ws>"))
+            # The per-test temp dir that contains the workspace (paths just outside the jail land here).
+            self._paths.append((str(Path(ws).parent), "<ws-parent>"))
+            self._paths.append((str(Path(workspace).parent), "<ws-parent>"))
         for raw, token in (extra_paths or {}).items():
             self._paths.append((raw, token))
         self._paths.append(("/tmp/", "<tmp>/"))

@@ -1,0 +1,51 @@
+[
+  {
+    "command": "unauthenticated",
+    "request": {},
+    "response": {
+      "command": 401,
+      "events": 401,
+      "events_bad_ticket": 401,
+      "ticket": 401
+    },
+    "status": 0
+  },
+  {
+    "command": "auth.ticket",
+    "request": {},
+    "response": {
+      "ticket": true
+    },
+    "status": 200
+  },
+  {
+    "command": "events.sse",
+    "request": {},
+    "response": {},
+    "status": 200
+  },
+  {
+    "command": "health",
+    "request": {},
+    "response": {
+      "active_session": false
+    },
+    "status": 200
+  },
+  {
+    "command": "sessions.get",
+    "request": {
+      "session_id": "<session>"
+    },
+    "response": {
+      "result": {
+        "busy": "…",
+        "metadata": "…",
+        "records": "…",
+        "session_id": "<session>"
+      },
+      "status": "ok"
+    },
+    "status": 200
+  }
+]

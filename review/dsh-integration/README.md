@@ -8,8 +8,8 @@ The specs in this folder do not change the runtime. **No workstream may be start
 
 | File | What it is |
 |---|---|
-| `FLOW_TEST_FINDINGS.md` | **Executed** flow-of-information test: 10 findings (5 × P0 fixed, 1 × P1 fixed, 3 documented for their workstream), the exact `harness/` files touched, reproduction commands. |
-| `scenarios/` | Runnable record/replay scenarios (`pytest review/dsh-integration/scenarios -q`): real kernel + real web daemon + the shipped client in jsdom, model replayed from `provider.jsonl`, goldens per scenario. `scenarios/README.md` documents the schema and how to move it into `tests/`. |
+| `FLOW_TEST_FINDINGS.md` | **Executed** flow-of-information test: 12 findings (6 × P0 fixed, 3 × P1 fixed, 3 documented for their workstream), the exact `harness/` files touched, a per-subsystem coverage matrix (what is proven, what is not), reproduction commands. |
+| `scenarios/` | 20 runnable record/replay scenarios (`pytest review/dsh-integration/scenarios -q`): real kernel + real web daemon + the shipped client in jsdom, model replayed from `provider.jsonl`, goldens per scenario; covers turns, approvals, thinking, memory, skills, MCP, diff/checkpoints, auth, jail/Tirith/secret guardrails, page refresh. `scenarios/README.md` documents the schema and how to move it into `tests/`. |
 | `00_PRINCIPLES.md` | The six invariants borrowed from `dsh`, each with the Harness-Zero rule and the CI check that enforces it. Read first; every WS cites them. |
 | `plan.yaml` | Machine-readable index: workstreams, dependencies, effort, `dsh` references, files to add/modify, tests, acceptance commands. |
 | `templates/PLUGIN_TEMPLATE.md` | The standard layout every new plugin must follow (manifest, `plugin.py`, README contract, conformance test, settings schema). |

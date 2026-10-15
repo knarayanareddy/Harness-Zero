@@ -11,8 +11,11 @@
       }
     ],
     "model": "replay-v1",
-    "system_chars": 1462,
-    "system_head": "You are Harness-Zero, an advanced agentic software engineering system. You operate with absolute precision, rigorous test-driven verification, and minimal disruption. Always inspect files thoroughly before editing, write clean production-grade code, and verify all changes with automated tests.Tool Execution Rules:\n1. Read before writing: inspect files using view_file before editing.\n2. Precise edi",
+    "system_chars": 1468,
+    "system_head": "You are Harness-Zero, an advanced agentic software engineering system. You operate with absolute precision, rigorous test-driven verification, and minimal disruption. Always inspect files thoroughly before editing, write clean production-grade code, and verify all changes with automated tests.\n\nTool Execution Rules:\n1. Read before writing: inspect files using view_file before editing.\n2. Precise e",
+    "system_sections": [
+      "# Available Skills (Progressive Disclosure)"
+    ],
     "tools": [
       "checkpoint_restore",
       "create_artifact",
@@ -64,8 +67,12 @@
       }
     ],
     "model": "replay-v1",
-    "system_chars": 1534,
-    "system_head": "You are Harness-Zero, an advanced agentic software engineering system. You operate with absolute precision, rigorous test-driven verification, and minimal disruption. Always inspect files thoroughly before editing, write clean production-grade code, and verify all changes with automated tests.Tool Execution Rules:\n1. Read before writing: inspect files using view_file before editing.\n2. Precise edi",
+    "system_chars": 1542,
+    "system_head": "You are Harness-Zero, an advanced agentic software engineering system. You operate with absolute precision, rigorous test-driven verification, and minimal disruption. Always inspect files thoroughly before editing, write clean production-grade code, and verify all changes with automated tests.\n\nTool Execution Rules:\n1. Read before writing: inspect files using view_file before editing.\n2. Precise e",
+    "system_sections": [
+      "# Available Skills (Progressive Disclosure)",
+      "# Remembered Facts & Context"
+    ],
     "tools": [
       "checkpoint_restore",
       "create_artifact",
@@ -133,8 +140,12 @@
       }
     ],
     "model": "replay-v1",
-    "system_chars": 1534,
-    "system_head": "You are Harness-Zero, an advanced agentic software engineering system. You operate with absolute precision, rigorous test-driven verification, and minimal disruption. Always inspect files thoroughly before editing, write clean production-grade code, and verify all changes with automated tests.Tool Execution Rules:\n1. Read before writing: inspect files using view_file before editing.\n2. Precise edi",
+    "system_chars": 1542,
+    "system_head": "You are Harness-Zero, an advanced agentic software engineering system. You operate with absolute precision, rigorous test-driven verification, and minimal disruption. Always inspect files thoroughly before editing, write clean production-grade code, and verify all changes with automated tests.\n\nTool Execution Rules:\n1. Read before writing: inspect files using view_file before editing.\n2. Precise e",
+    "system_sections": [
+      "# Available Skills (Progressive Disclosure)",
+      "# Remembered Facts & Context"
+    ],
     "tools": [
       "checkpoint_restore",
       "create_artifact",
@@ -222,8 +233,12 @@
       }
     ],
     "model": "replay-v1",
-    "system_chars": 1534,
-    "system_head": "You are Harness-Zero, an advanced agentic software engineering system. You operate with absolute precision, rigorous test-driven verification, and minimal disruption. Always inspect files thoroughly before editing, write clean production-grade code, and verify all changes with automated tests.Tool Execution Rules:\n1. Read before writing: inspect files using view_file before editing.\n2. Precise edi",
+    "system_chars": 1542,
+    "system_head": "You are Harness-Zero, an advanced agentic software engineering system. You operate with absolute precision, rigorous test-driven verification, and minimal disruption. Always inspect files thoroughly before editing, write clean production-grade code, and verify all changes with automated tests.\n\nTool Execution Rules:\n1. Read before writing: inspect files using view_file before editing.\n2. Precise e",
+    "system_sections": [
+      "# Available Skills (Progressive Disclosure)",
+      "# Remembered Facts & Context"
+    ],
     "tools": [
       "checkpoint_restore",
       "create_artifact",

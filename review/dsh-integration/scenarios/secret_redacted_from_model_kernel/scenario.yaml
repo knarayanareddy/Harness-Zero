@@ -1,0 +1,21 @@
+name: secret_redacted_from_model_kernel
+kind: kernel
+summary: Secrets guardrail — a value from the Secrets store and a well-known API-key pattern inside a file are redacted from the tool output before the model (and the transcript) sees it.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: allow
+secrets:
+  INTERNAL_TOKEN: hunter2-super-secret-value
+workspace_files:
+  .env: |
+    INTERNAL_TOKEN=hunter2-super-secret-value
+    OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz0123456789
+    APP_NAME=demo
+turns:
+  - prompt: "What is in .env?"
+expect:
+  tools_called: [view_file]
+  model_saw: ["[REDACTED SECRET]", "[REDACTED API KEY]", "APP_NAME=demo"]
+  model_never_saw: ["hunter2-super-secret-value", "sk-abcdefghijklmnopqrstuvwxyz0123456789"]
+  event_types_exclude: [turn.error]
+  reload_equals_live: true

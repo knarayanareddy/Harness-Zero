@@ -17,6 +17,7 @@ expect:
   tools_called: [view_file, edit_file]
   files:
     app.py: {contains: "def hello(", not_contains: "def greet("}
+    .harness/checkpoints/.git/HEAD: {exists: true}   # checkpoint hook snapshotted before edit_file
   event_types_include: [tool.call, tool.decision, tool.result, ui.card]
   model_saw: ["def greet(name)"]
   reload_equals_live: true

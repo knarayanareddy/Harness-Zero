@@ -1,0 +1,18 @@
+name: shell_exec_denied_without_approver_kernel
+kind: kernel
+summary: run_command (EXEC) in ask mode with no approver listening — fails closed, the command never runs, the model is told.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: ask
+turns:
+  - prompt: "Create ran.txt with the shell."
+expect:
+  no_errors: false
+  tools_called: [run_command]
+  files:
+    ran.txt: {exists: false}
+  events_match:
+    - {type: tool.decision, data: {action: ask}}
+    - {type: tool.result, data: {is_error: true}}
+  event_types_exclude: [turn.error]
+  stop_reasons: [end_turn]
