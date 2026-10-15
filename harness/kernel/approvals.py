@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from harness.kernel.bus import EventBus
-from harness.sdk.events import Event
+from harness.sdk.events import ApprovalRequired, ApprovalResolved, Event
 
 logger = logging.getLogger(__name__)
 
@@ -88,15 +88,15 @@ class ApprovalBroker:
             evt = Event(
                 type="approval.required",
                 session_id=session_id,
-                data={
-                    "approval_id": req_id,
-                    "call_id": call_id,
-                    "kind": kind,
-                    "summary": summary,
-                    "details": details or {},
-                    "timeout_s": effective_timeout,
-                    "options": ["approve", "deny"],
-                },
+                data=ApprovalRequired(
+                    approval_id=req_id,
+                    call_id=call_id,
+                    kind=kind,
+                    summary=summary,
+                    details=details or {},
+                    timeout_s=effective_timeout,
+                    options=["approve", "deny"],
+                ),
             )
             self.bus.publish(evt)
 
@@ -113,12 +113,12 @@ class ApprovalBroker:
                 evt = Event(
                     type="approval.resolved",
                     session_id=session_id,
-                    data={
-                        "approval_id": req_id,
-                        "approved": False,
-                        "by": "timeout",
-                        "reason": "timed out",
-                    },
+                    data=ApprovalResolved(
+                        approval_id=req_id,
+                        approved=False,
+                        by="timeout",
+                        reason="timed out",
+                    ),
                 )
                 self.bus.publish(evt)
             return False, "timed out"
@@ -148,12 +148,12 @@ class ApprovalBroker:
             evt = Event(
                 type="approval.resolved",
                 session_id=session_id,
-                data={
-                    "approval_id": approval_id,
-                    "approved": approved,
-                    "by": by,
-                    "reason": reason,
-                },
+                data=ApprovalResolved(
+                    approval_id=approval_id,
+                    approved=approved,
+                    by=by,
+                    reason=reason,
+                ),
             )
             self.bus.publish(evt)
         return True

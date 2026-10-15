@@ -1,6 +1,37 @@
+import sys
 from pathlib import Path
 
 import pytest
+
+_TESTS_DIR = str(Path(__file__).parent.resolve())
+
+
+@pytest.fixture(autouse=True)
+def event_contract_guard(monkeypatch: pytest.MonkeyPatch):
+    """Every event the kernel or a plugin publishes must satisfy its payload contract.
+
+    Wraps ``EventBus.publish`` and runs ``harness.sdk.events.validate_event`` on each event whose
+    publisher lives outside ``tests/`` (tests publish synthetic envelopes to exercise bus mechanics).
+    Any violation fails the test that caused it, so a payload drift is caught by whichever test first
+    drives that code path — not by a user in the browser.
+    """
+    from harness.kernel.bus import EventBus
+    from harness.sdk.events import validate_event
+
+    original = EventBus.publish
+    violations: list[str] = []
+
+    def guarded_publish(self, event):
+        caller = sys._getframe(1).f_code.co_filename
+        if not caller.startswith(_TESTS_DIR):
+            errors = validate_event(event)
+            if errors:
+                violations.append(f"{event.type} from {Path(caller).name}: {errors}")
+        return original(self, event)
+
+    monkeypatch.setattr(EventBus, "publish", guarded_publish)
+    yield
+    assert not violations, "event payload contract violations:\n" + "\n".join(violations)
 
 
 @pytest.fixture(autouse=True)

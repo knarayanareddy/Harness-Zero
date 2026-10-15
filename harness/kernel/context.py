@@ -17,7 +17,7 @@ from harness.kernel.compaction import estimate_request_tokens, estimate_tokens
 from harness.kernel.registry import PluginRegistry
 from harness.kernel.settings import SettingsStore
 from harness.sdk.contracts import ContextSource
-from harness.sdk.events import Event
+from harness.sdk.events import ContextAssembled, Event
 from harness.sdk.types import (
     Capability,
     ContentBlock,
@@ -342,8 +342,8 @@ class ContextAssembler:
                 Event(
                     type="context.assembled",
                     session_id=session_id,
-                    data={
-                        "blocks": [
+                    data=ContextAssembled(
+                        blocks=[
                             {
                                 "id": b.id,
                                 "stability": b.stability.value,
@@ -352,9 +352,9 @@ class ContextAssembler:
                             }
                             for b in collected_blocks
                         ],
-                        "total_tokens": total_tokens,
-                        "history_messages": len(history_messages),
-                    },
+                        total_tokens=total_tokens,
+                        history_messages=len(history_messages),
+                    ),
                 )
             )
 

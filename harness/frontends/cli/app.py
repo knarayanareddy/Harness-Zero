@@ -224,14 +224,18 @@ class CliApp:
                     continue
 
                 if user_input == "/economics":
+                    # EconomicsSnapshot: {turn_usd, session_usd, lifetime_usd, cap_usd, unknown_pricing, usage}
                     econ = await self.commands.economics(self.session_id)
-                    cap = econ.get("spend_cap_usd", 5.0)
-                    totals = econ.get("totals") or {}
+                    cap = econ.get("cap_usd")
+                    usage = econ.get("usage") or {}
+                    cap_line = f"Spend Cap (per turn): ${cap:.2f}" if cap is not None else "Spend Cap (per turn): none"
+                    unknown = "  (pricing unknown for some calls — lower bound)" if econ.get("unknown_pricing") else ""
                     self.console.print(Panel(
-                        f"Spend Cap: ${cap:.2f}\n"
-                        f"Session Cost: ${totals.get('cost_usd', 0.0):.4f}\n"
-                        f"Input Tokens: {totals.get('input_tokens', 0)}\n"
-                        f"Output Tokens: {totals.get('output_tokens', 0)}",
+                        f"{cap_line}\n"
+                        f"Session Cost: ${econ.get('session_usd', 0.0):.4f}{unknown}\n"
+                        f"Workspace Lifetime Cost: ${econ.get('lifetime_usd', 0.0):.4f}\n"
+                        f"Input Tokens: {usage.get('input_tokens', 0)}\n"
+                        f"Output Tokens: {usage.get('output_tokens', 0)}",
                         title="Session Economics",
                         border_style="cyan",
                     ))

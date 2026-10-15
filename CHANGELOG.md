@@ -9,7 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — P1 typed event/card contract (`review/CONSOLIDATION_LOG.md`)
+- **Every event payload is now a dataclass** in `harness/sdk/events.py` (`EVENT_PAYLOADS`, one `@event_payload` class per type, e.g. `ToolDecision`, `CostUpdated`, `UiCard`). `Event(data=<payload>)` serialises it and refuses a payload of the wrong type; `validate_event()` checks any envelope (required fields, leaf types, no undeclared keys, card validity for `ui.card`). All 45 kernel/plugin emit sites use the dataclasses. `harness events schema` now emits `$defs/payloads/<type>` sub-schemas with an `allOf`/`if`/`then` dispatch on `type`; `docs/events.schema.json` regenerated.
+- **One spend shape — `EconomicsSnapshot`** `{turn_usd, session_usd, lifetime_usd, cap_usd, unknown_pricing, usage}` (`harness/sdk/types.py`, built by `harness/kernel/economics.py`). It is what the `economics` command returns, what `cost.updated` carries and what `GET /health` embeds as `spend`. The previous `{spend_cap_usd, totals}` command result is gone; the CLI `/economics` panel and the web Economics tab read the snapshot.
+- **Card wire shape is the SDK's.** `cards.js` renders `Card{kind, id, title, data}` with the keys in `harness.sdk.cards.CARD_FIELDS` (markdown, code, diff, table, notice, progress, tree, approval, artifact, form) plus web-internal `tool`/`task`/`compaction`; the dead `plan` kind and every `a || b || c` alias chain are removed. `notice` gains the `success` level; `validate_card` rejects undeclared `data` keys. `ui.card` events from `bridge-shell-hooks` and `form.submit` now carry a real `Card`.
+- `task.started` and `settings.changed` are emitted for the first time (background inbox; `settings.set`); the never-emitted `log` type is removed from the catalogue (28 → 29 types net).
+- `CostLedger.record()` takes `session_id`; `totals(session_id=…)` filters by it, so session spend ≠ lifetime spend. The runner keeps `cost_usd=None` (instead of `0.0`) when a model has no known pricing, so `unknown_pricing` and the ledger agree.
+- `reloadTranscript()` reads `TranscriptRecord` as written (`role`, `tool_calls[{id,name,arguments}]`, `tool_results[{tool_use_id,content,is_error}]`) and restores tool outputs after a page refresh.
+
 ### Fixed
+- `tool.call.arguments` on the bus aliased the gate's mutable `current_args` dict, so SSE consumers saw hook/policy rewrites (absolute paths) depending on queue timing; payload serialisation now snapshots the data.
+- `remember` no longer emits a notice card duplicating its own result text.
+
+### Added
+- `tests/conftest.py::event_contract_guard` — autouse fixture: every event published by non-test code during the suite must pass `validate_event`.
+- `tests/frontends/test_static_contract.py`: `test_event_handlers_read_only_contract_fields` (every `data.<key>` an `app.js` handler reads ⊆ that event's payload schema, one level of delegation followed), `test_card_renderers_read_only_contract_fields` (`cards.js` ⊆ `CARD_FIELDS`), `test_transcript_reload_reads_transcript_record_fields`; the scenario suite validates every observed bus event / SSE frame against the contract.
+
+### Fixed (earlier in this cycle)
 - **Economics tab and header spend indicator always showed `$0.0000` / `0` tokens.** `renderEconomicsTab()` / `updateEconomics()` read `session_usd`, `cap_usd`, `token_usage.*` and `totals.total_cost_usd`, none of which the `economics` command emits (`{spend_cap_usd, totals: Usage.to_dict()}`). They now read the real keys and no longer fall back to a literal `$5.00` cap. Contract test: `tests/frontends/test_static_contract.py::test_economics_payload_keys_match_app_js`. (Review: `review/CODE_REVIEW_158c836.md`.)
 - **Workspace memory did not round-trip.** `remember`, `search_memory`, the FTS5 store and the `memories` context source each opened a *different* `memory.db` (`.harness/tools/<tool>/`, `.harness/plugins/<plugin>/`, `.harness/`), so a remembered fact could never be searched or injected into a later session. All four now use `harness.sdk.paths.memory_db_path(workspace)` = `<workspace>/.harness/memory.db`; the FTS5 store also re-indexes from the real `.harness/sessions` directory. `search_memory` now searches remembered facts as well as transcript turns. Kernel-level regression test: `tests/kernel/test_memory_roundtrip.py`.
 - **MCP tools could never execute inside the kernel.** `bridge-mcp-client` handlers took `(call: ToolCall, ctx)` while the gate invokes `handler(args: dict, ctx)`; every MCP call failed with `'dict' object has no attribute 'arguments'`. Handlers now follow the kernel contract. Regression test through the real gate: `tests/kernel/test_mcp_tool_through_kernel.py`.

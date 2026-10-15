@@ -505,6 +505,47 @@ class Usage:
         )
 
 
+@dataclass(slots=True)
+class EconomicsSnapshot:
+    """The one spend shape: returned by the ``economics`` command, carried by ``cost.updated``,
+    and embedded in ``GET /health`` as ``spend``.
+
+    ``turn_usd`` is the cost of the running (or most recent) turn; ``session_usd`` and ``usage``
+    are the cost ledger's totals for the session; ``lifetime_usd`` is the ledger total across all
+    sessions of the workspace; ``cap_usd`` is the per-turn spend cap (``kernel.security.spend_cap_usd``);
+    ``unknown_pricing`` is true when tokens were consumed by a model without known pricing, in
+    which case the USD figures are lower bounds.
+    """
+
+    turn_usd: float = 0.0
+    session_usd: float = 0.0
+    lifetime_usd: float = 0.0
+    cap_usd: float | None = None
+    unknown_pricing: bool = False
+    usage: Usage = field(default_factory=Usage)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "turn_usd": self.turn_usd,
+            "session_usd": self.session_usd,
+            "lifetime_usd": self.lifetime_usd,
+            "cap_usd": self.cap_usd,
+            "unknown_pricing": self.unknown_pricing,
+            "usage": self.usage.to_dict(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> EconomicsSnapshot:
+        return cls(
+            turn_usd=float(data.get("turn_usd", 0.0)),
+            session_usd=float(data.get("session_usd", 0.0)),
+            lifetime_usd=float(data.get("lifetime_usd", 0.0)),
+            cap_usd=data.get("cap_usd"),
+            unknown_pricing=bool(data.get("unknown_pricing", False)),
+            usage=Usage.from_dict(data.get("usage") or {}),
+        )
+
+
 class Stability(str, Enum):
     STATIC = "static"
     SESSION = "session"

@@ -2,7 +2,12 @@
 
 Everything in this folder was produced by an end-to-end review of the repository at commit `a0afc75` (branch `arena/4bab20a8-harness-zero`), plus a follow-up review of the v0.2.0 rebuild (`7185083`). **No source files were changed.** The folder is self-contained: documents reference each other by bare filename and reference repository files by their path from the repo root.
 
-## Latest: `CODE_REVIEW_158c836.md` (fourth pass — `main` after the build agent's remediation commit)
+## In progress: `CONSOLIDATION_LOG.md` — executing the P1–P6 plan from the fourth review
+
+Plan, acceptance criteria, per-phase log (what changed, what the flow-of-information suite showed, which goldens
+moved and why), defects R8+ found on the way, and the gate recipe. P1 (typed event/card contract) is done.
+
+## Latest review: `CODE_REVIEW_158c836.md` (fourth pass — `main` after the build agent's remediation commit)
 
 Review of `main @ 158c836` ("remediate all code review findings", pushed directly to `main` after PR #4). The commit is a genuine clean-up — `server.py` 1257 → 578 lines with `/commands/{name}` + `/events` as the only API, `index.html` 1452 → 289 with the mock-up pages gone, every suite green (ruff; 360 tests; 180 plugin conformance; all 20 flow scenarios' DOM expectations) — and yet the tree still feels "all over the place" for seven concrete reasons, each with file:line evidence: no shared payload contract between kernel and UI (the new Economics tab read four keys the kernel never emits and always showed `$0.0000 / 0 tokens`), two styling systems with 128 undefined utility classes, facade remnants of the studio layout, session creation decided in the browser (three daemon restarts → three empty sessions), tests in four places with three jsdom bootstraps and two npm roots (and the suite that catches regressions not in CI), a rewritten `[0.2.1]` changelog section, and a few kernel loose ends (`CostLedger.totals()` ignores `session_id`; Ollama models "configured" while Ollama is down). The PR fixes the one hard regression with a contract test, re-baselines seven goldens, adds `additions/tools/ui_audit.py`, and gives an ordered six-step consolidation plan with an acceptance command per step and a final "definition of done" checklist. **Read this first.**
 

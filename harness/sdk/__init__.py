@@ -4,7 +4,7 @@ Universal contracts, domain types, error classes, cards, events, and manifest de
 """
 from __future__ import annotations
 
-from harness.sdk.cards import Card, fallback, validate_card
+from harness.sdk.cards import BUILTIN_CARD_KINDS, CARD_FIELDS, Card, fallback, validate_card
 from harness.sdk.context import (
     HookContext,
     KernelServices,
@@ -44,7 +44,7 @@ from harness.sdk.errors import (
     ToolInputError,
     TurnInProgress,
 )
-from harness.sdk.events import KNOWN_EVENT_TYPES, Event
+from harness.sdk.events import EVENT_PAYLOADS, KNOWN_EVENT_TYPES, Event, EventPayload, validate_event
 from harness.sdk.events import schema as events_schema
 from harness.sdk.manifest import PluginManifest
 from harness.sdk.scaffold import scaffold_plugin
@@ -57,6 +57,7 @@ from harness.sdk.types import (
     ContextBlock,
     Decision,
     Done,
+    EconomicsSnapshot,
     ExecRequest,
     ExecResult,
     HookEvent,
@@ -127,6 +128,7 @@ __all__ = [
     "ToolCall",
     "ToolResult",
     "Usage",
+    "EconomicsSnapshot",
     "Stability",
     "ContextBlock",
     "ModelParams",
@@ -177,11 +179,16 @@ __all__ = [
     "KernelServices",
     # Cards
     "Card",
+    "CARD_FIELDS",
+    "BUILTIN_CARD_KINDS",
     "validate_card",
     "fallback",
     # Events
     "Event",
+    "EventPayload",
+    "EVENT_PAYLOADS",
     "KNOWN_EVENT_TYPES",
+    "validate_event",
     "events_schema",
     # Tooling
     "scaffold_plugin",

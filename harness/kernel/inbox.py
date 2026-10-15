@@ -12,7 +12,7 @@ from typing import Any
 
 from harness.kernel.bus import EventBus
 from harness.sdk.contracts import Process
-from harness.sdk.events import Event
+from harness.sdk.events import Event, TaskCompleted, TaskStarted
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,14 @@ class BackgroundInbox:
             created_at=time.time(),
         )
         self._tasks[task_id] = bt
+        if self.bus:
+            self.bus.publish(
+                Event(
+                    type="task.started",
+                    session_id=self.session_id,
+                    data=TaskStarted(task_id=task_id, label=bt.label),
+                )
+            )
 
         # Launch background monitor
         bt.monitor_task = asyncio.create_task(
@@ -109,12 +117,12 @@ class BackgroundInbox:
                     Event(
                         type="task.completed",
                         session_id=self.session_id,
-                        data={
-                            "task_id": bt.id,
-                            "label": bt.label,
-                            "exit_code": bt.exit_code,
-                            "tail": tail_str,
-                        },
+                        data=TaskCompleted(
+                            task_id=bt.id,
+                            label=bt.label,
+                            exit_code=bt.exit_code,
+                            tail=tail_str,
+                        ),
                     )
                 )
 

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from harness.kernel.bus import EventBus
+from harness.kernel.economics import economics_snapshot
 from harness.kernel.gate import PolicyGate
 from harness.kernel.registry import PluginRegistry
 from harness.kernel.runner import TurnRunner
@@ -22,8 +23,9 @@ from harness.kernel.secrets import Secrets
 from harness.kernel.session import SessionManager
 from harness.kernel.settings import SettingsStore
 from harness.kernel.validators import validate_session_id
+from harness.sdk.cards import Card
 from harness.sdk.errors import HarnessError
-from harness.sdk.events import Event
+from harness.sdk.events import Event, SettingsChanged, UiCard
 from harness.sdk.types import TurnResult
 
 logger = logging.getLogger(__name__)
@@ -195,9 +197,16 @@ class Commands:
         if path.startswith("secrets."):
             secret_key = path.split(".", 1)[1]
             self.secrets.set(secret_key, str(value))
+            self._publish_settings_changed([path])
             return {"path": path, "status": "ok", "has": True}
         self.settings.set(path, value)
+        self._publish_settings_changed([path])
         return {"path": path, "value": value, "status": "ok"}
+
+    def _publish_settings_changed(self, paths: list[str]) -> None:
+        """Tells every frontend which setting paths changed (values are never put on the bus)."""
+        if self.bus:
+            self.bus.publish(Event(type="settings.changed", data=SettingsChanged(paths=paths)))
 
     async def settings_schema(self) -> dict[str, Any]:
         """Returns consolidated schema with x-ui groups and widgets (§11, WEB-05)."""
@@ -422,17 +431,18 @@ class Commands:
         return self.gate.approvals.pending()
 
     async def economics(self, session_id: str | None = None) -> dict[str, Any]:
-        """Returns spend and token usage ledger totals."""
-        turn_cost = self.runner.cost_ledger
-        totals = None
-        if turn_cost:
-            totals = await turn_cost.totals(session_id=session_id)
+        """Returns the ``EconomicsSnapshot`` for a session (defaults to the active session).
 
-        spend_cap = self.settings.get("kernel.security.spend_cap_usd", 5.0)
-        return {
-            "spend_cap_usd": spend_cap,
-            "totals": totals.to_dict() if totals else None,
-        }
+        Same shape as the ``cost.updated`` event payload and ``GET /health`` ``spend``.
+        """
+        if session_id is None and self.session_manager.active_session:
+            session_id = self.session_manager.active_session.session_id
+        snapshot = await economics_snapshot(
+            ledger=self.runner.cost_ledger,
+            settings=self.settings,
+            session_id=session_id,
+        )
+        return snapshot.to_dict()
 
     async def form_submit(self, form_id: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
         """Handles human interactive form submission from studio frontends."""
@@ -441,15 +451,9 @@ class Commands:
             self.bus.publish(
                 Event(
                     type="ui.card",
-                    data={
-                        "card": {
-                            "kind": "notice",
-                            "payload": {
-                                "level": "success",
-                                "message": f"Form '{form_id}' submitted.",
-                            },
-                        }
-                    },
+                    data=UiCard(
+                        card=Card.notice(f"Form '{form_id}' submitted.", level="success", title="Form submitted").to_dict()
+                    ),
                     session_id=self.session_manager.active_session.session_id if self.session_manager.active_session else None,
                 )
             )

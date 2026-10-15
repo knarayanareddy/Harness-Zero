@@ -51,7 +51,13 @@
   {
     "data": {
       "cap_usd": 5.0,
-      "unknown_pricing": false
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
     },
     "type": "cost.updated"
   },
@@ -91,20 +97,6 @@
   },
   {
     "data": {
-      "card": {
-        "data": {
-          "body": "Permanently remembered fact #1 [codename]: Project codename is Falcon",
-          "level": "info"
-        },
-        "id": "evt#12",
-        "kind": "notice",
-        "title": null
-      }
-    },
-    "type": "ui.card"
-  },
-  {
-    "data": {
       "call_id": "call#1",
       "is_error": false,
       "metadata": {},
@@ -130,7 +122,13 @@
   {
     "data": {
       "cap_usd": 5.0,
-      "unknown_pricing": false
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
     },
     "type": "cost.updated"
   },
@@ -193,7 +191,13 @@
   {
     "data": {
       "cap_usd": 5.0,
-      "unknown_pricing": false
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
     },
     "type": "cost.updated"
   },
@@ -252,7 +256,7 @@
             ]
           ]
         },
-        "id": "evt#27",
+        "id": "evt#25",
         "kind": "table",
         "title": "Memory Search: Falcon"
       }
@@ -286,7 +290,13 @@
   {
     "data": {
       "cap_usd": 5.0,
-      "unknown_pricing": false
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
     },
     "type": "cost.updated"
   },

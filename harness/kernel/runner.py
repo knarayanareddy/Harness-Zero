@@ -14,13 +14,27 @@ from harness.kernel.breaker import CircuitBreaker
 from harness.kernel.bus import EventBus
 from harness.kernel.compaction import Compactor, estimate_request_tokens
 from harness.kernel.context import ContextAssembler, HookContextImpl, TurnContextImpl
+from harness.kernel.economics import economics_snapshot
 from harness.kernel.gate import PolicyGate
 from harness.kernel.inbox import BackgroundInbox, WakeupEvent
 from harness.kernel.registry import PluginRegistry
 from harness.kernel.settings import SettingsStore
 from harness.sdk.contracts import CostLedger, Provider, SearchIndex, Strategy, TranscriptStore
 from harness.sdk.errors import ProviderError, SpendCapExceeded
-from harness.sdk.events import Event
+from harness.sdk.events import (
+    CostUpdated,
+    Event,
+    ModelCompleted,
+    ModelNotice,
+    ModelStarted,
+    ModelTextDelta,
+    ModelThinkingDelta,
+    ModelToolCall,
+    TurnCancelled,
+    TurnCompleted,
+    TurnError,
+    TurnStarted,
+)
 from harness.sdk.types import (
     Done,
     HookEvent,
@@ -206,6 +220,7 @@ class KernelServicesImpl:
 
         # Turn state
         self.turn_cost_usd: float = 0.0
+        self.turn_unknown_pricing: bool = False
         self.transcript_records: list[dict[str, Any]] = []
         self._pricing_cache: dict[str, tuple[float, float]] = {}
 
@@ -339,8 +354,8 @@ class KernelServicesImpl:
 
     async def _calculate_cost(
         self, provider: Provider, model: str, usage: Usage
-    ) -> float:
-        """Calculates USD cost for model usage."""
+    ) -> float | None:
+        """Calculates USD cost for model usage; None when the model has no known pricing."""
         if usage.cost_usd is not None:
             return usage.cost_usd
 
@@ -361,7 +376,7 @@ class KernelServicesImpl:
                 usage.output_tokens / 1_000_000.0
             ) * output_price
 
-        return 0.0
+        return None
 
     async def call_model(self, req: ModelRequest) -> Message:
         """
@@ -380,11 +395,11 @@ class KernelServicesImpl:
                 type="model.started",
                 session_id=self.session.session_id,
                 turn_id=self.turn_id,
-                data={
-                    "provider": provider.name,
-                    "model": req.model,
-                    "request_tokens_estimate": est_tokens,
-                },
+                data=ModelStarted(
+                    provider=provider.name,
+                    model=req.model,
+                    request_tokens_estimate=est_tokens,
+                ),
             )
         )
 
@@ -407,7 +422,7 @@ class KernelServicesImpl:
                             type="model.text.delta",
                             session_id=self.session.session_id,
                             turn_id=self.turn_id,
-                            data={"text": event.text},
+                            data=ModelTextDelta(text=event.text),
                         )
                     )
                 elif isinstance(event, ThinkingDelta):
@@ -417,7 +432,7 @@ class KernelServicesImpl:
                             type="model.thinking.delta",
                             session_id=self.session.session_id,
                             turn_id=self.turn_id,
-                            data={"text": event.text},
+                            data=ModelThinkingDelta(text=event.text),
                         )
                     )
                 elif isinstance(event, ToolCallEnd):
@@ -427,11 +442,11 @@ class KernelServicesImpl:
                             type="model.tool_call",
                             session_id=self.session.session_id,
                             turn_id=self.turn_id,
-                            data={
-                                "call_id": event.id,
-                                "name": event.name,
-                                "arguments": event.arguments,
-                            },
+                            data=ModelToolCall(
+                                call_id=event.id,
+                                name=event.name,
+                                arguments=event.arguments,
+                            ),
                         )
                     )
                 elif isinstance(event, UsageEvent):
@@ -442,7 +457,7 @@ class KernelServicesImpl:
                             type="model.notice",
                             session_id=self.session.session_id,
                             turn_id=self.turn_id,
-                            data={"message": event.message},
+                            data=ModelNotice(message=event.message),
                         )
                     )
                 elif isinstance(event, Done):
@@ -455,7 +470,8 @@ class KernelServicesImpl:
                 self.breaker.record_failure(provider.name, req.model, err)
             raise
 
-        # Cost accounting & spend cap enforcement
+        # Cost accounting & spend cap enforcement. Unknown pricing stays None (never 0.0) so the
+        # ledger, the economics command and the cost.updated event agree on "unknown".
         call_cost = await self._calculate_cost(provider, req.model, usage)
         usage = Usage(
             input_tokens=usage.input_tokens,
@@ -465,7 +481,9 @@ class KernelServicesImpl:
             reasoning_tokens=usage.reasoning_tokens,
             cost_usd=call_cost,
         )
-        self.turn_cost_usd += call_cost
+        self.turn_cost_usd += call_cost or 0.0
+        if call_cost is None and (usage.input_tokens + usage.output_tokens) > 0:
+            self.turn_unknown_pricing = True
 
         if self.cost_ledger:
             try:
@@ -474,23 +492,24 @@ class KernelServicesImpl:
                     provider=provider.name,
                     usage=usage,
                     turn_id=self.turn_id,
+                    session_id=self.session.session_id,
                 )
             except Exception as e:
                 logger.warning(f"Error recording cost to ledger: {e}")
 
-        # Check spend cap
-        unknown_pricing = (call_cost == 0.0 and (usage.input_tokens + usage.output_tokens > 0))
+        snapshot = await economics_snapshot(
+            ledger=self.cost_ledger,
+            settings=self.settings,
+            session_id=self.session.session_id,
+            turn_usd=self.turn_cost_usd,
+            turn_unknown_pricing=self.turn_unknown_pricing,
+        )
         await self.emit(
             Event(
                 type="cost.updated",
                 session_id=self.session.session_id,
                 turn_id=self.turn_id,
-                data={
-                    "turn_usd": self.turn_cost_usd,
-                    "session_usd": self.turn_cost_usd,
-                    "cap_usd": self.spend_cap_usd,
-                    "unknown_pricing": unknown_pricing,
-                },
+                data=CostUpdated.from_snapshot(snapshot),
             )
         )
 
@@ -504,7 +523,7 @@ class KernelServicesImpl:
                 type="model.completed",
                 session_id=self.session.session_id,
                 turn_id=self.turn_id,
-                data={"stop_reason": stop_reason, "usage": usage.to_dict()},
+                data=ModelCompleted(stop_reason=stop_reason, usage=usage),
             )
         )
 
@@ -718,13 +737,13 @@ class TurnRunner:
                     type="turn.started",
                     session_id=session.session_id,
                     turn_id=turn_id,
-                    data={
-                        "prompt_preview": prompt[:120],
-                        "strategy": strat_name,
-                        "provider": provider_name,
-                        "model": model_name,
-                        "options": turn_options,
-                    },
+                    data=TurnStarted(
+                        prompt_preview=prompt[:120],
+                        strategy=strat_name,
+                        provider=provider_name,
+                        model=model_name,
+                        options=turn_options,
+                    ),
                 )
             )
 
@@ -745,7 +764,7 @@ class TurnRunner:
                                 type="turn.error",
                                 session_id=session.session_id,
                                 turn_id=turn_id,
-                                data={"message": err_msg, "kind": "hook_blocked", "retryable": False},
+                                data=TurnError(message=err_msg, kind="hook_blocked", retryable=False),
                             )
                         )
                     return TurnResult(output="", error=err_msg, stop_reason="cancelled")
@@ -806,7 +825,7 @@ class TurnRunner:
                         type="turn.cancelled",
                         session_id=session.session_id,
                         turn_id=turn_id,
-                        data={"reason": "Turn cancelled by user"},
+                        data=TurnCancelled(reason="Turn cancelled by user"),
                     )
                 )
             await services.record(
@@ -824,7 +843,7 @@ class TurnRunner:
                         type="turn.error",
                         session_id=session.session_id,
                         turn_id=turn_id,
-                        data={"message": str(e), "kind": "spend_cap", "retryable": False},
+                        data=TurnError(message=str(e), kind="spend_cap", retryable=False),
                     )
                 )
             return TurnResult(output="", error=str(e), stop_reason="spend_cap_exceeded")
@@ -836,7 +855,7 @@ class TurnRunner:
                         type="turn.error",
                         session_id=session.session_id,
                         turn_id=turn_id,
-                        data={"message": str(e), "kind": e.kind, "retryable": False},
+                        data=TurnError(message=str(e), kind=e.kind, retryable=False),
                     )
                 )
             return TurnResult(output="", error=str(e), stop_reason="error")
@@ -848,7 +867,7 @@ class TurnRunner:
                         type="turn.error",
                         session_id=session.session_id,
                         turn_id=turn_id,
-                        data={"message": str(e), "kind": "runtime_error", "retryable": False},
+                        data=TurnError(message=str(e), kind="runtime_error", retryable=False),
                     )
                 )
             return TurnResult(output="", error=str(e), stop_reason="error")
@@ -863,7 +882,7 @@ class TurnRunner:
                         type="turn.cancelled",
                         session_id=session.session_id,
                         turn_id=turn_id,
-                        data={"reason": "Turn cancelled by user"},
+                        data=TurnCancelled(reason="Turn cancelled by user"),
                     )
                 )
             await services.record(
@@ -894,12 +913,12 @@ class TurnRunner:
                     type="turn.completed",
                     session_id=session.session_id,
                     turn_id=turn_id,
-                    data={
-                        "stop_reason": result.stop_reason,
-                        "usage": result.usage.to_dict(),
-                        "duration_ms": duration_ms,
-                        "tool_calls": result.tool_calls,
-                    },
+                    data=TurnCompleted(
+                        stop_reason=result.stop_reason,
+                        usage=result.usage,
+                        duration_ms=duration_ms,
+                        tool_calls=result.tool_calls,
+                    ),
                 )
             )
 

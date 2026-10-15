@@ -244,38 +244,169 @@ def test_events_subscription_contract():
 def _js_function_body(source: str, name: str) -> str:
     """Returns the text of the first class method ``name(...) {`` up to the next method at the same indent."""
     m = re.search(rf"^  (?:async )?{re.escape(name)}\([^)]*\)\s*\{{", source, re.M)
-    assert m, f"{name} not found in app.js"
+    assert m, f"{name} not found"
     rest = source[m.end():]
     nxt = re.search(r"^  (?:async )?[A-Za-z_]\w*\([^)]*\)\s*\{", rest, re.M)
     return rest[: nxt.start()] if nxt else rest
 
 
-async def test_economics_payload_keys_match_app_js(commands: Commands):
-    """The keys app.js reads from the `economics` command must be keys the kernel actually emits.
+def _js_method_params(source: str, name: str) -> list[str]:
+    m = re.search(rf"^  (?:async )?{re.escape(name)}\(([^)]*)\)\s*\{{", source, re.M)
+    assert m, f"{name} not found"
+    return [p.strip().split("=")[0].strip() for p in m.group(1).split(",") if p.strip()]
 
-    Regression: 158c836 rendered `data.session_usd`, `data.cap_usd`, `data.token_usage.*` and
-    `data.totals.total_cost_usd`; the command returns `{spend_cap_usd, totals: Usage.to_dict()}`,
-    so the Economics tab always showed $0.0000 / $5.00 and 0 tokens.
+
+def _member_refs(body: str, var: str) -> set[str]:
+    """Property names read off ``var`` in a JS body (``var.x``, ``var?.x``, ``var.x.y`` -> x)."""
+    return set(re.findall(rf"\b{re.escape(var)}\??\.([A-Za-z_]\w*)", body))
+
+
+def _event_handlers(app_js: str) -> dict[str, str]:
+    """Maps each ``this.events.on('<type>', (<param>) => {...})`` to the text of its handler body."""
+    handlers: dict[str, str] = {}
+    for m in re.finditer(r"this\.events\.on\(['\"]([^'\"$]+)['\"],\s*(?:async\s*)?\(([^)]*)\)\s*=>\s*\{", app_js):
+        etype, param = m.group(1), m.group(2).strip()
+        depth, i = 1, m.end()
+        while depth and i < len(app_js):
+            depth += {"{": 1, "}": -1}.get(app_js[i], 0)
+            i += 1
+        body = app_js[m.end() : i - 1]
+        if param and param != "data":
+            body = re.sub(rf"\b{re.escape(param)}\b", "data", body)
+        handlers[etype] = body
+    return handlers
+
+
+def _payload_properties(schema: dict, etype: str) -> set[str]:
+    return set(schema["$defs"]["payloads"][etype]["properties"])
+
+
+def test_event_handlers_read_only_contract_fields():
+    """Every key app.js reads from an event payload must be declared by that event's payload dataclass.
+
+    This is the regression guard for review finding R-4.1 (no payload contract): handlers such as
+    `turn.error` -> `data.message`, `tool.decision` -> `data.action`, `cost.updated` -> `data.session_usd`
+    are checked against `docs/events.schema.json` ($defs/payloads), which `harness events schema`
+    generates from `harness/sdk/events.py`. Delegated helpers (`this.foo(data)`) are followed one level.
     """
-    from harness.sdk.types import Usage
+    import json
 
-    payload = await commands.economics()
-    top_keys = set(payload.keys())
-    totals_keys = set(Usage().to_dict().keys())
-    # `cost.updated` event payload (harness/kernel/runner.py) — the header indicator consumes both shapes.
-    cost_event_keys = {"turn_usd", "session_usd", "cap_usd", "unknown_pricing"}
+    schema = json.loads((Path(__file__).parent.parent.parent / "docs" / "events.schema.json").read_text(encoding="utf-8"))
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    handlers = _event_handlers(app_js)
+    assert handlers, "no event handlers found in app.js"
+
+    problems: list[str] = []
+    for etype, body in handlers.items():
+        allowed = _payload_properties(schema, etype)
+        refs = _member_refs(body, "data")
+        # Follow one level of delegation: this.helper(data) / this.helper(data.x) -> helper's first param.
+        for helper in set(re.findall(r"this\.([A-Za-z_]\w*)\(data\)", body)):
+            params = _js_method_params(app_js, helper)
+            if params:
+                refs |= _member_refs(_js_function_body(app_js, helper), params[0])
+        unknown = sorted(refs - allowed)
+        if unknown:
+            problems.append(f"{etype}: app.js reads data.{unknown} but the payload declares {sorted(allowed)}")
+    assert not problems, "\n".join(problems)
+
+    # Nested: context.assembled blocks are ContextBlockInfo.
+    inspector = _js_function_body(app_js, "updateContextInspector")
+    block_props = set(schema["$defs"]["ContextBlockInfo"]["properties"])
+    assert _member_refs(inspector, "b") <= block_props, f"updateContextInspector reads b.{sorted(_member_refs(inspector, 'b') - block_props)}"
+
+
+def test_card_renderers_read_only_contract_fields():
+    """cards.js renders exactly the SDK card contract (harness/sdk/cards.py CARD_FIELDS) — no alias chains.
+
+    Regression guard for review finding R8: `Card.to_dict()` is `{kind, id, title, data}` while the old
+    renderer read `card.payload` with different keys, so every plugin card rendered empty or as fallback.
+    """
+    import json
+
+    from harness.sdk.cards import CARD_FIELDS
+    from harness.sdk.events import EVENT_PAYLOADS
+
+    cards_js = (STATIC_DIR / "cards.js").read_text(encoding="utf-8")
+    assert "card.payload" not in cards_js and ".payload" not in cards_js, "cards.js must read card.data, not card.payload"
+
+    def fields_of(etype: str) -> set[str]:
+        from dataclasses import fields
+
+        return {f.name for f in fields(EVENT_PAYLOADS[etype])}
+
+    expected: dict[str, set[str]] = {kind: set(keys) for kind, keys in CARD_FIELDS.items()}
+    # Web-internal kinds carry kernel event payloads (+ a client-side status).
+    expected["tool"] = fields_of("tool.call") | {"status"}
+    expected["task"] = fields_of("task.started") | fields_of("task.completed") | {"status"}
+    expected["compaction"] = fields_of("compaction.completed")
+
+    problems: list[str] = []
+    for kind, allowed in expected.items():
+        method = "render" + kind[0].upper() + kind[1:]
+        body = _js_function_body(cards_js, method)
+        params = _js_method_params(cards_js, method)
+        assert params[:2] == ["card", "data"], f"{method} must be declared as {method}(card, data)"
+        refs = _member_refs(body, "data")
+        unknown = sorted(refs - allowed)
+        if unknown:
+            problems.append(f"{method} reads data.{unknown}; contract allows {sorted(allowed)}")
+        card_refs = _member_refs(body, "card")
+        assert card_refs <= {"id", "title", "kind"}, f"{method} reads card.{sorted(card_refs)}"
+    assert not problems, "\n".join(problems)
+
+    # Every SDK kind has a renderer branch; the dead `plan` kind is gone.
+    for kind in CARD_FIELDS:
+        assert f"case '{kind}':" in cards_js, f"cards.js has no branch for SDK card kind {kind!r}"
+    assert "renderPlan" not in cards_js
+
+    # The JS mirror of KNOWN_EVENT_TYPES matches the SDK (plus the server heartbeat frame).
+    events_js = (STATIC_DIR / "events.js").read_text(encoding="utf-8")
+    js_types = set(re.findall(r"^\s+'([a-z._]+)',$", events_js, re.M))
+    assert js_types == set(EVENT_PAYLOADS) | {"heartbeat"}, f"events.js KNOWN_EVENT_TYPES drift: {sorted(js_types ^ (set(EVENT_PAYLOADS) | {'heartbeat'}))}"
+    assert json.loads((Path(__file__).parent.parent.parent / "docs" / "events.schema.json").read_text(encoding="utf-8"))["properties"]["type"]["enum"] == sorted(EVENT_PAYLOADS)
+
+
+def test_transcript_reload_reads_transcript_record_fields():
+    """reloadTranscript() must read the TranscriptRecord shape the kernel writes (runner.record / sessions.get)."""
+    from dataclasses import fields
+
+    from harness.sdk.types import TranscriptRecord
 
     app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    body = _js_function_body(app_js, "reloadTranscript")
+    rec_fields = {f.name for f in fields(TranscriptRecord)}
+    assert _member_refs(body, "rec") <= rec_fields, f"reloadTranscript reads rec.{sorted(_member_refs(body, 'rec') - rec_fields)}"
+    assert _member_refs(body, "tc") <= {"id", "name", "arguments"}  # KernelServicesImpl.record tool_calls entries
+    assert _member_refs(body, "tr") <= {"tool_use_id", "content", "is_error"}  # ... tool_results entries
+    assert "rec.type" not in body and "PLANNER_RESPONSE" not in body, "legacy record discriminators must not come back"
 
+
+async def test_economics_payload_keys_match_app_js(commands: Commands):
+    """The Economics tab and the header indicator read the EconomicsSnapshot the kernel actually returns.
+
+    Regression: 158c836 rendered `data.session_usd`, `data.cap_usd`, `data.token_usage.*` and
+    `data.totals.total_cost_usd` while the command returned `{spend_cap_usd, totals}`, so the tab
+    always showed $0.0000 / $5.00 and 0 tokens. Since P1 the command, `cost.updated` and
+    `/health.spend` all carry `EconomicsSnapshot.to_dict()`.
+    """
+    from dataclasses import fields
+
+    from harness.sdk.events import CostUpdated
+    from harness.sdk.types import EconomicsSnapshot, Usage
+
+    payload = await commands.economics()
+    snapshot_keys = {f.name for f in fields(EconomicsSnapshot)}
+    assert set(payload) == snapshot_keys
+    assert {f.name for f in fields(CostUpdated)} == snapshot_keys, "cost.updated must carry the EconomicsSnapshot shape"
+    usage_keys = set(Usage().to_dict())
+
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
     tab = _js_function_body(app_js, "renderEconomicsTab")
-    top_refs = set(re.findall(r"\bdata\.([a-z_]+)", tab))
-    totals_refs = set(re.findall(r"\btotals\.([a-z_]+)", tab))
-    assert top_refs <= top_keys, f"renderEconomicsTab reads {sorted(top_refs - top_keys)} but economics returns {sorted(top_keys)}"
-    assert totals_refs <= totals_keys, f"renderEconomicsTab reads totals.{sorted(totals_refs - totals_keys)} but Usage.to_dict() has {sorted(totals_keys)}"
-    assert "token_usage" not in tab and "total_cost_usd" not in tab
+    assert _member_refs(tab, "data") <= snapshot_keys, f"renderEconomicsTab reads {sorted(_member_refs(tab, 'data') - snapshot_keys)}"
+    assert _member_refs(tab, "usage") <= usage_keys, f"renderEconomicsTab reads usage.{sorted(_member_refs(tab, 'usage') - usage_keys)}"
+    assert "token_usage" not in tab and "total_cost_usd" not in tab and "totals" not in tab
 
     indicator = _js_function_body(app_js, "updateEconomics")
-    ind_top = set(re.findall(r"\bspendData\.([a-z_]+)", indicator)) - {"totals"}
-    ind_totals = set(re.findall(r"\btotals\??\.([a-z_]+)", indicator))
-    assert ind_top <= (top_keys | cost_event_keys), f"updateEconomics reads unknown keys {sorted(ind_top - top_keys - cost_event_keys)}"
-    assert ind_totals <= totals_keys, f"updateEconomics reads totals.{sorted(ind_totals - totals_keys)}"
+    assert _member_refs(indicator, "snapshot") <= snapshot_keys, f"updateEconomics reads {sorted(_member_refs(indicator, 'snapshot') - snapshot_keys)}"
+    assert "spend_cap_usd" not in indicator and "totals" not in indicator

@@ -22,7 +22,7 @@ from harness.kernel.settings import SettingsStore, validate_schema_value
 from harness.sdk.context import PolicyContext, ToolContext
 from harness.sdk.contracts import Executor, Policy, Process
 from harness.sdk.errors import CapabilityDenied, SettingsValidationError
-from harness.sdk.events import Event
+from harness.sdk.events import Event, ToolCallResult, ToolCallStarted, ToolDecision, ToolOutputDelta, UiCard
 from harness.sdk.types import (
     RISK_ORDER,
     Action,
@@ -203,11 +203,11 @@ class ToolContextImpl(ToolContext):
             evt = Event(
                 type="tool.output.delta",
                 session_id=self._session_id,
-                data={
-                    "call_id": self.call_id,
-                    "stream": stream,
-                    "text": text,
-                },
+                data=ToolOutputDelta(
+                    call_id=self.call_id,
+                    stream=stream,
+                    text=text,
+                ),
             )
             self._bus.publish(evt)
 
@@ -312,14 +312,14 @@ class PolicyGate:
                     Event(
                         type="tool.result",
                         session_id=session_id,
-                        data={
-                            "call_id": call_id,
-                            "name": call.name,
-                            "is_error": True,
-                            "duration_ms": 0.0,
-                            "preview": err_msg,
-                            "metadata": {},
-                        },
+                        data=ToolCallResult(
+                            call_id=call_id,
+                            name=call.name,
+                            is_error=True,
+                            duration_ms=0.0,
+                            preview=err_msg,
+                            metadata={},
+                        ),
                     )
                 )
             return res
@@ -338,14 +338,14 @@ class PolicyGate:
                     Event(
                         type="tool.result",
                         session_id=session_id,
-                        data={
-                            "call_id": call_id,
-                            "name": spec.name,
-                            "is_error": True,
-                            "duration_ms": 0.0,
-                            "preview": err_msg[:2048],
-                            "metadata": {},
-                        },
+                        data=ToolCallResult(
+                            call_id=call_id,
+                            name=spec.name,
+                            is_error=True,
+                            duration_ms=0.0,
+                            preview=err_msg[:2048],
+                            metadata={},
+                        ),
                     )
                 )
             return res
@@ -359,13 +359,13 @@ class PolicyGate:
                 Event(
                     type="tool.call",
                     session_id=session_id,
-                    data={
-                        "call_id": call_id,
-                        "name": spec.name,
-                        "arguments": current_args,
-                        "risk": risk_val,
-                        "plugin": plugin_name,
-                    },
+                    data=ToolCallStarted(
+                        call_id=call_id,
+                        name=spec.name,
+                        arguments=current_args,
+                        risk=risk_val,
+                        plugin=plugin_name,
+                    ),
                 )
             )
 
@@ -394,27 +394,27 @@ class PolicyGate:
                                 Event(
                                     type="tool.decision",
                                     session_id=session_id,
-                                    data={
-                                        "call_id": call_id,
-                                        "action": "deny",
-                                        "policy": f"hook:{hook.name}",
-                                        "risk": risk_val,
-                                        "reason": reason,
-                                    },
+                                    data=ToolDecision(
+                                        call_id=call_id,
+                                        action="deny",
+                                        policy=f"hook:{hook.name}",
+                                        risk=risk_val,
+                                        reason=reason,
+                                    ),
                                 )
                             )
                             self.bus.publish(
                                 Event(
                                     type="tool.result",
                                     session_id=session_id,
-                                    data={
-                                        "call_id": call_id,
-                                        "name": spec.name,
-                                        "is_error": True,
-                                        "duration_ms": dur_ms,
-                                        "preview": err_msg[:2048],
-                                        "metadata": {"blocked_by": hook.name},
-                                    },
+                                    data=ToolCallResult(
+                                        call_id=call_id,
+                                        name=spec.name,
+                                        is_error=True,
+                                        duration_ms=dur_ms,
+                                        preview=err_msg[:2048],
+                                        metadata={"blocked_by": hook.name},
+                                    ),
                                 )
                             )
                         return ToolResult.error(err_msg)
@@ -482,27 +482,27 @@ class PolicyGate:
                     Event(
                         type="tool.decision",
                         session_id=session_id,
-                        data={
-                            "call_id": call_id,
-                            "action": "deny",
-                            "policy": first_deny.policy or "policy",
-                            "risk": effective_risk_val,
-                            "reason": first_deny.reason,
-                        },
+                        data=ToolDecision(
+                            call_id=call_id,
+                            action="deny",
+                            policy=first_deny.policy or "policy",
+                            risk=effective_risk_val,
+                            reason=first_deny.reason,
+                        ),
                     )
                 )
                 self.bus.publish(
                     Event(
                         type="tool.result",
                         session_id=session_id,
-                        data={
-                            "call_id": call_id,
-                            "name": spec.name,
-                            "is_error": True,
-                            "duration_ms": dur_ms,
-                            "preview": err_msg[:2048],
-                            "metadata": {"policy": first_deny.policy},
-                        },
+                        data=ToolCallResult(
+                            call_id=call_id,
+                            name=spec.name,
+                            is_error=True,
+                            duration_ms=dur_ms,
+                            preview=err_msg[:2048],
+                            metadata={"policy": first_deny.policy},
+                        ),
                     )
                 )
             return ToolResult.error(err_msg)
@@ -517,13 +517,13 @@ class PolicyGate:
                     Event(
                         type="tool.decision",
                         session_id=session_id,
-                        data={
-                            "call_id": call_id,
-                            "action": "ask",
-                            "policy": asks[0].policy or "policy",
-                            "risk": effective_risk_val,
-                            "reason": reasons,
-                        },
+                        data=ToolDecision(
+                            call_id=call_id,
+                            action="ask",
+                            policy=asks[0].policy or "policy",
+                            risk=effective_risk_val,
+                            reason=reasons,
+                        ),
                     )
                 )
 
@@ -552,14 +552,14 @@ class PolicyGate:
                         Event(
                             type="tool.result",
                             session_id=session_id,
-                            data={
-                                "call_id": call_id,
-                                "name": spec.name,
-                                "is_error": True,
-                                "duration_ms": dur_ms,
-                                "preview": err_msg[:2048],
-                                "metadata": {"approval": "denied"},
-                            },
+                            data=ToolCallResult(
+                                call_id=call_id,
+                                name=spec.name,
+                                is_error=True,
+                                duration_ms=dur_ms,
+                                preview=err_msg[:2048],
+                                metadata={"approval": "denied"},
+                            ),
                         )
                     )
                 return ToolResult.error(err_msg)
@@ -570,13 +570,13 @@ class PolicyGate:
                 Event(
                     type="tool.decision",
                     session_id=session_id,
-                    data={
-                        "call_id": call_id,
-                        "action": "allow",
-                        "policy": "policy_gate",
-                        "risk": effective_risk_val,
-                        "reason": "OK",
-                    },
+                    data=ToolDecision(
+                        call_id=call_id,
+                        action="allow",
+                        policy="policy_gate",
+                        risk=effective_risk_val,
+                        reason="OK",
+                    ),
                 )
             )
 
@@ -719,21 +719,21 @@ class PolicyGate:
                         Event(
                             type="ui.card",
                             session_id=session_id,
-                            data={"card": card.to_dict() if hasattr(card, "to_dict") else card},
+                            data=UiCard(card=card.to_dict() if hasattr(card, "to_dict") else card),
                         )
                     )
             self.bus.publish(
                 Event(
                     type="tool.result",
                     session_id=session_id,
-                    data={
-                        "call_id": call_id,
-                        "name": spec.name,
-                        "is_error": final_result.is_error,
-                        "duration_ms": duration_ms,
-                        "preview": preview_text,
-                        "metadata": final_metadata,
-                    },
+                    data=ToolCallResult(
+                        call_id=call_id,
+                        name=spec.name,
+                        is_error=final_result.is_error,
+                        duration_ms=duration_ms,
+                        preview=preview_text,
+                        metadata=final_metadata,
+                    ),
                 )
             )
 

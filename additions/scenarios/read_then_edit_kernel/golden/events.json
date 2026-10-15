@@ -50,7 +50,13 @@
   {
     "data": {
       "cap_usd": 5.0,
-      "unknown_pricing": false
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
     },
     "type": "cost.updated"
   },
@@ -68,7 +74,7 @@
   {
     "data": {
       "arguments": {
-        "file_path": "<ws>/app.py"
+        "file_path": "app.py"
       },
       "call_id": "call#1",
       "name": "view_file",
@@ -119,7 +125,13 @@
   {
     "data": {
       "cap_usd": 5.0,
-      "unknown_pricing": false
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
     },
     "type": "cost.updated"
   },
@@ -138,7 +150,7 @@
     "data": {
       "arguments": {
         "diff": "<<<<<<< SEARCH\ndef greet(name):\n    return f\"Hello, {name}!\"\n=======\ndef hello(name):\n    return f\"Hello, {name}!\"\n>>>>>>> REPLACE\n",
-        "file_path": "<ws>/app.py"
+        "file_path": "app.py"
       },
       "call_id": "call#2",
       "name": "edit_file",
@@ -206,7 +218,13 @@
   {
     "data": {
       "cap_usd": 5.0,
-      "unknown_pricing": false
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
     },
     "type": "cost.updated"
   },

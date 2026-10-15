@@ -177,11 +177,18 @@ async def test_scenario_s2_configure_converse_usage(tmp_path: Path):
 
     # Check economics ledger persistence and Commands API
     session_id = app.session_id
+    # EconomicsSnapshot: the same shape the cost.updated event and /health.spend carry.
     econ = await runtime.commands.economics(session_id=session_id)
-    assert econ["totals"] is not None
-    assert econ["totals"]["input_tokens"] >= 370
-    assert econ["totals"]["output_tokens"] >= 55
-    assert econ["totals"]["cost_usd"] > 0.0
+    assert set(econ) == {"turn_usd", "session_usd", "lifetime_usd", "cap_usd", "unknown_pricing", "usage"}
+    assert econ["usage"]["input_tokens"] >= 370
+    assert econ["usage"]["output_tokens"] >= 55
+    assert econ["session_usd"] > 0.0
+    assert econ["lifetime_usd"] >= econ["session_usd"]
+    assert econ["unknown_pricing"] is False
+    # Totals are per session: a different session id sees nothing of this spend.
+    other = await runtime.commands.economics(session_id="sess_does_not_exist")
+    assert other["session_usd"] == 0.0 and other["usage"]["input_tokens"] == 0
+    assert other["lifetime_usd"] == econ["lifetime_usd"]
 
     assert runtime.runner.cost_ledger is not None
     assert runtime.runner.cost_ledger.path.exists()

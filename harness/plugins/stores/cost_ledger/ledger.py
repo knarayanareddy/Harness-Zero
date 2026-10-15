@@ -93,7 +93,7 @@ class FileCostLedger:
         return in_cost + out_cost + cache_cost
 
     async def record(
-        self, *, model: str, provider: str, usage: Usage, turn_id: str
+        self, *, model: str, provider: str, usage: Usage, turn_id: str, session_id: str | None = None
     ) -> None:
         """Records a model usage event, calculates cost, and writes to economics.json."""
         cost = self._calculate_cost(model, usage)
@@ -102,6 +102,7 @@ class FileCostLedger:
 
         rec = {
             "turn_id": turn_id,
+            "session_id": session_id,
             "provider": provider,
             "model": model,
             "timestamp": time.time(),
@@ -128,13 +129,18 @@ class FileCostLedger:
             await asyncio.to_thread(_save)
 
     async def totals(self, *, session_id: str | None = None) -> Usage:
-        """Returns total accumulated usage and costs."""
+        """Returns accumulated usage and cost for ``session_id`` (or for every session when None).
+
+        ``cost_usd`` is None when no record in scope had known pricing.
+        """
         async with self._lock:
             total = Usage()
             total_cost: float = 0.0
             has_known_cost = False
 
             for r in self._records:
+                if session_id is not None and r.get("session_id") != session_id:
+                    continue
                 total.input_tokens += r.get("input_tokens", 0)
                 total.output_tokens += r.get("output_tokens", 0)
                 total.cache_read_tokens += r.get("cache_read_tokens", 0)

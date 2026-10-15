@@ -19,7 +19,7 @@ from harness.kernel.registry import PluginRegistry
 from harness.kernel.settings import SettingsStore
 from harness.kernel.validators import validate_session_id
 from harness.sdk.errors import TurnInProgress
-from harness.sdk.events import Event
+from harness.sdk.events import Event, SessionStarted, SessionSwitched
 from harness.sdk.types import HookEvent, SessionInfo
 
 logger = logging.getLogger(__name__)
@@ -204,13 +204,13 @@ class Session:
                 Event(
                     type="session.started",
                     session_id=self.session_id,
-                    data={
-                        "session_id": self.session_id,
-                        "workspace": str(self.workspace),
-                        "strategy": strat,
-                        "provider": provider,
-                        "model": model,
-                    },
+                    data=SessionStarted(
+                        session_id=self.session_id,
+                        workspace=str(self.workspace),
+                        strategy=strat,
+                        provider=provider,
+                        model=model,
+                    ),
                 )
             )
 
@@ -341,10 +341,10 @@ class SessionManager:
                 Event(
                     type="session.switched",
                     session_id=session_id,
-                    data={
-                        "session_id": session_id,
-                        "workspace": str(self.workspace),
-                    },
+                    data=SessionSwitched(
+                        session_id=session_id,
+                        workspace=str(self.workspace),
+                    ),
                 )
             )
         return session

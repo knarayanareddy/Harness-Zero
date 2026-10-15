@@ -178,13 +178,13 @@ class ArtifactStore(Protocol):
 @runtime_checkable
 class CostLedger(Protocol):
     async def record(
-        self, *, model: str, provider: str, usage: Usage, turn_id: str
+        self, *, model: str, provider: str, usage: Usage, turn_id: str, session_id: str | None = None
     ) -> None:
-        """Records model usage and costs."""
+        """Records model usage and costs for a turn (and the session it belongs to)."""
         ...
 
     async def totals(self, *, session_id: str | None = None) -> Usage:
-        """Returns total usage across turns or session."""
+        """Returns total usage for one session, or across every session when ``session_id`` is None."""
         ...
 
 

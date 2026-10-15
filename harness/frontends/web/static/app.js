@@ -6,6 +6,9 @@
 import { api } from './api.js';
 import { HarnessEventStream } from './events.js';
 import { cardRenderer, escapeHtml } from './cards.js';
+
+/** Quotes a value for use inside a CSS attribute selector ([data-x=...]); works without CSS.escape (jsdom). */
+const cssString = (value) => JSON.stringify(String(value ?? ''));
 import { SettingsPanel } from './settings.js';
 
 export class HarnessStudioApp {
@@ -100,17 +103,16 @@ export class HarnessStudioApp {
       this.finalizeStreamingBlock();
     });
 
-    this.events.on('turn.cancelled', () => {
+    this.events.on('turn.cancelled', (data) => {
       this.setBusy(false);
       this.finalizeStreamingBlock();
-      this.appendNotice('Turn cancelled by user.', 'warning');
+      this.appendNotice(data.reason || 'Turn cancelled.', 'warn');
     });
 
     this.events.on('turn.error', (data) => {
       this.setBusy(false);
       this.finalizeStreamingBlock();
-      const msg = data.message || data.error || 'Turn execution error';
-      this.appendNotice(msg, 'error');
+      this.appendNotice(data.message, 'error');
     });
 
     // Streaming Deltas
@@ -171,12 +173,11 @@ export class HarnessStudioApp {
     });
 
     this.events.on('compaction.completed', (data) => {
-      this.appendCard({ kind: 'compaction', payload: data });
+      this.appendCard({ kind: 'compaction', data });
     });
 
     this.events.on('ui.card', (data) => {
-      const card = data.card || data;
-      this.appendCard(card);
+      this.appendCard(data.card);
     });
 
     // Approvals
@@ -203,6 +204,14 @@ export class HarnessStudioApp {
       this.activeSessionId = data.session_id;
       this.loadSessions();
       this.reloadTranscript();
+    });
+
+    // Settings changed elsewhere (CLI, another tab): refresh what depends on them.
+    this.events.on('settings.changed', (data) => {
+      const paths = data.paths || [];
+      if (paths.some((p) => p.startsWith('providers.') || p.startsWith('secrets.') || p.startsWith('kernel.'))) {
+        this.populateModels();
+      }
     });
   }
 
@@ -475,28 +484,28 @@ export class HarnessStudioApp {
     const container = document.getElementById('economics-view');
     if (!container) return;
     try {
-      // Payload shape is the `economics` command's: {spend_cap_usd, totals: Usage.to_dict()}
-      // (see Commands.economics / CostLedger.totals). `totals` is null until the first
-      // model call is recorded; `totals.cost_usd` is null when pricing is unknown.
+      // EconomicsSnapshot (harness/sdk/types.py): {turn_usd, session_usd, lifetime_usd, cap_usd,
+      // unknown_pricing, usage: Usage.to_dict()} — the same shape as the `cost.updated` event.
       const data = await this.api.economics(this.activeSessionId);
-      const totals = data.totals || {};
-      const capUsd = data.spend_cap_usd != null ? `$${Number(data.spend_cap_usd).toFixed(2)}` : '—';
-      const inputTok = totals.input_tokens || 0;
-      const outputTok = totals.output_tokens || 0;
-      const totalTok = inputTok + outputTok + (totals.cache_read_tokens || 0) + (totals.reasoning_tokens || 0);
-      const sessionUsd = totals.cost_usd != null ? `$${Number(totals.cost_usd).toFixed(4)}` : (totalTok > 0 ? 'unknown pricing' : '$0.0000');
-      const totalSpend = sessionUsd;
+      const usage = data.usage || {};
+      const capUsd = data.cap_usd != null ? `$${Number(data.cap_usd).toFixed(2)}` : '—';
+      const inputTok = usage.input_tokens || 0;
+      const outputTok = usage.output_tokens || 0;
+      const totalTok = inputTok + outputTok + (usage.cache_read_tokens || 0) + (usage.reasoning_tokens || 0);
+      const unknown = data.unknown_pricing ? ' (lower bound: unknown pricing)' : '';
+      const sessionUsd = `$${Number(data.session_usd || 0).toFixed(4)}${unknown}`;
+      const totalSpend = `$${Number(data.lifetime_usd || 0).toFixed(4)}`;
 
       container.innerHTML = `
         <div class="economics-card" style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:16px;">
           <h3 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 12px 0;">Spend & Token Economics</h3>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
             <div style="background:#09090b; padding:10px; border-radius:6px; border:1px solid #27272a;">
-              <div style="font-size:11px; color:#a1a1aa;">Session Spend / Cap</div>
+              <div style="font-size:11px; color:#a1a1aa;">Session Spend / Turn Cap</div>
               <div style="font-size:18px; font-weight:700; color:#34d399; margin-top:4px;">${escapeHtml(sessionUsd)} / ${escapeHtml(capUsd)}</div>
             </div>
             <div style="background:#09090b; padding:10px; border-radius:6px; border:1px solid #27272a;">
-              <div style="font-size:11px; color:#a1a1aa;">Lifetime Total Cost</div>
+              <div style="font-size:11px; color:#a1a1aa;">Workspace Lifetime Cost</div>
               <div style="font-size:18px; font-weight:700; color:#f4f4f5; margin-top:4px;">${escapeHtml(totalSpend)}</div>
             </div>
           </div>
@@ -608,7 +617,7 @@ export class HarnessStudioApp {
     const timeline = document.getElementById('timeline');
     if (!timeline) return;
 
-    const cardHtml = cardRenderer.render({ kind: 'tool', payload: data });
+    const cardHtml = cardRenderer.render({ kind: 'tool', id: data.call_id, data });
     const wrapper = document.createElement('div');
     wrapper.innerHTML = cardHtml;
     timeline.appendChild(wrapper.firstElementChild);
@@ -618,22 +627,22 @@ export class HarnessStudioApp {
   updateToolDecision(data) {
     const callId = data.call_id;
     if (!callId) return;
-    const card = document.querySelector(`.harness-card-tool[data-call-id="${callId}"]`);
+    const card = document.querySelector(`.harness-card-tool[data-call-id=${cssString(callId)}]`);
     if (card) {
-      const badge = card.querySelector('.uppercase');
+      const badge = card.querySelector('.card-badge');
       if (badge) {
-        // Kernel payload: {action: allow|deny|ask, policy, reason, risk} (kernel/gate.py).
-        const action = String(data.action || data.decision || 'allow').toLowerCase();
-        if (action === 'deny' || action === 'denied') {
+        // `tool.decision` payload: {call_id, action: allow|deny|ask, policy, risk, reason}.
+        if (data.action === 'deny') {
           badge.textContent = 'DENIED';
-          badge.className = 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-red-900/60 text-red-300 border border-red-800';
-          if (data.reason) badge.title = data.reason;
-        } else if (action === 'ask' || action === 'approval_required') {
+          badge.dataset.status = 'denied';
+        } else if (data.action === 'ask') {
           badge.textContent = 'APPROVAL REQUIRED';
-          badge.className = 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-amber-900/60 text-amber-300 border border-amber-800';
+          badge.dataset.status = 'ask';
         } else {
           badge.textContent = 'ALLOWED';
+          badge.dataset.status = 'allowed';
         }
+        badge.title = `${data.policy}: ${data.reason}`;
       }
     }
   }
@@ -641,66 +650,62 @@ export class HarnessStudioApp {
   updateToolResult(data) {
     const callId = data.call_id;
     if (!callId) return;
-    const card = document.querySelector(`.harness-card-tool[data-call-id="${callId}"]`);
+    const card = document.querySelector(`.harness-card-tool[data-call-id=${cssString(callId)}]`);
     if (card) {
-      const badge = card.querySelector('.uppercase');
-      if (badge && badge.textContent !== 'DENIED') {
+      // `tool.result` payload: {call_id, name, is_error, duration_ms, preview, metadata}.
+      const badge = card.querySelector('.card-badge');
+      if (badge && badge.dataset.status !== 'denied') {
         badge.textContent = data.is_error ? 'ERROR' : 'COMPLETED';
-        badge.className = data.is_error
-          ? 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-red-900/60 text-red-300 border border-red-800'
-          : 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-emerald-900/60 text-emerald-300 border border-emerald-800';
+        badge.dataset.status = data.is_error ? 'error' : 'completed';
       }
-
-      // Append result preview if not already present (kernel payload: {preview, is_error, metadata}).
-      if (!card.querySelector('.tool-output')) {
-        const value = data.result ?? data.preview ?? data.output ?? '';
-        const resultStr = escapeHtml(typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value));
-        const resDiv = document.createElement('div');
-        const textColor = data.is_error ? 'text-red-300' : 'text-emerald-300';
-        resDiv.className = 'mt-2 text-xs tool-output';
-        resDiv.innerHTML = `<div class="text-gray-400 font-mono font-medium mb-1">Output:</div><pre class="p-2 bg-gray-950/90 rounded border border-gray-800 ${textColor} font-mono overflow-x-auto max-h-48">${resultStr}</pre>`;
-        card.appendChild(resDiv);
+      if (!card.querySelector('.tool-output') && (data.preview || data.is_error)) {
+        card.querySelector('.card-body').insertAdjacentHTML('beforeend', cardRenderer.renderToolOutput(data.preview || '', data.is_error));
       }
     }
   }
 
   appendTask(data) {
-    this.appendCard({ kind: 'task', payload: data });
+    // `task.started` payload: {task_id, label}
+    this.appendCard({ kind: 'task', id: data.task_id, data: { ...data, status: 'running' } });
   }
 
   completeTask(data) {
-    const taskId = data.task_id;
-    const card = document.querySelector(`.harness-card-task`);
+    // `task.completed` payload: {task_id, label, exit_code, tail} — replace the running card in place.
+    const card = document.querySelector(`.harness-card-task[data-task-id=${cssString(data.task_id)}]`);
+    const html = cardRenderer.render({ kind: 'task', id: data.task_id, data: { ...data, status: 'completed' } });
     if (card) {
-      card.className = 'harness-card harness-card-task border p-3 rounded my-2 text-emerald-400 border-emerald-800 bg-emerald-950/30';
-      const badge = card.querySelector('.uppercase');
-      if (badge) badge.textContent = 'COMPLETED';
+      card.outerHTML = html;
     } else {
-      this.appendCard({ kind: 'task', payload: { ...data, status: 'completed' } });
+      this.appendCardHtml(html);
     }
   }
 
+  /** Appends an SDK card ({kind, id, title, data}) to the timeline. */
   appendCard(card) {
+    if (!card) return;
+    this.appendCardHtml(cardRenderer.render(card));
+
+    // Proceed banner only for artifact.request_feedback (§11, WEB-04)
+    if (card.kind === 'artifact' && card.data?.request_feedback) {
+      this.showProceedBanner(card.data);
+    }
+  }
+
+  appendCardHtml(cardHtml) {
     const timeline = document.getElementById('timeline');
     if (!timeline) return;
-
-    const cardHtml = cardRenderer.render(card);
     const wrapper = document.createElement('div');
     wrapper.innerHTML = cardHtml;
     timeline.appendChild(wrapper.firstElementChild);
     timeline.scrollTop = timeline.scrollHeight;
-
-    // Proceed banner only for artifact.request_feedback (§11, WEB-04)
-    if (card.kind === 'artifact' && (card.payload?.request_feedback || card.payload?.feedback_requested)) {
-      this.showProceedBanner(card.payload);
-    }
   }
 
-  showProceedBanner(payload) {
+  showProceedBanner(artifact) {
+    // `artifact` is the card's data: {name, media_type, url, request_feedback}
     const banner = document.getElementById('proceed-banner');
     if (banner) {
       banner.classList.remove('hidden');
-      banner.setAttribute('data-artifact', payload.filename || payload.path || '');
+      banner.setAttribute('data-artifact', artifact.name || '');
     }
   }
 
@@ -724,8 +729,8 @@ export class HarnessStudioApp {
   }
 
   appendNotice(msg, level = 'info') {
-    const card = { kind: 'notice', payload: { message: msg, level } };
-    this.appendCard(card);
+    // Same shape as Card.notice(): levels info | success | warn | error.
+    this.appendCard({ kind: 'notice', data: { level, body: String(msg ?? '') } });
   }
 
   appendTerminalOutput(text) {
@@ -737,12 +742,16 @@ export class HarnessStudioApp {
   }
 
   showApproval(data) {
-    // The kernel's approval events carry `approval_id` (kernel/approvals.py);
-    // older payloads used `request_id`. Accept both so the buttons always work.
-    const reqId = data.approval_id || data.request_id || data.id || '';
-    // 1. Append approval card to timeline
-    const card = { kind: 'approval', payload: { ...data, request_id: reqId } };
-    this.appendCard(card);
+    // `approval.required` payload: {approval_id, call_id, kind, summary, details, timeout_s, options}
+    const reqId = data.approval_id;
+    // 1. Append approval card to timeline (SDK `approval` card shape; kind/timeout go in the title)
+    const timeout = data.timeout_s ? ` · ${Math.round(data.timeout_s)}s to respond` : '';
+    this.appendCard({
+      kind: 'approval',
+      id: reqId,
+      title: `${data.kind || 'action'}${timeout}`,
+      data: { approval_id: reqId, summary: data.summary, details: data.details || {}, options: data.options || ['approve', 'deny'] },
+    });
 
     // 2. Show top banner for high visibility
     const banner = document.getElementById('approval-banner');
@@ -753,7 +762,8 @@ export class HarnessStudioApp {
   }
 
   resolveApprovalUI(data) {
-    const reqId = data.approval_id || data.request_id || data.id || '';
+    // `approval.resolved` payload: {approval_id, approved, by, reason}
+    const reqId = data.approval_id;
     // Hide top banner if matches
     const banner = document.getElementById('approval-banner');
     if (banner && banner.getAttribute('data-request-id') === reqId) {
@@ -761,14 +771,15 @@ export class HarnessStudioApp {
     }
 
     // Update approval card status in timeline
-    const card = document.querySelector(`.harness-card-approval[data-request-id="${reqId}"]`);
+    const card = document.querySelector(`.harness-card-approval[data-request-id=${cssString(reqId)}]`);
     if (card) {
-      card.classList.remove('border-amber-500/70', 'bg-amber-950/30');
-      card.classList.add('border-gray-700', 'bg-gray-800/40', 'opacity-70');
-      const actions = card.querySelector('.flex.justify-end');
+      card.classList.add('approval-resolved');
+      card.dataset.resolved = data.approved ? 'approved' : 'denied';
+      const actions = card.querySelector('.card-actions');
       if (actions) {
-        const outcome = data.decision || (data.approved === true ? 'approved' : data.approved === false ? 'denied' : 'done');
-        actions.innerHTML = `<span class="text-xs font-semibold uppercase text-gray-400">Resolved: ${escapeHtml(outcome)}</span>`;
+        const outcome = data.approved ? 'approved' : 'denied';
+        const by = data.by ? ` by ${escapeHtml(data.by)}` : '';
+        actions.innerHTML = `<span class="text-xs font-semibold uppercase">Resolved: ${outcome}${by}</span>`;
       }
     }
   }
@@ -819,27 +830,21 @@ export class HarnessStudioApp {
     }
   }
 
-  updateEconomics(spendData) {
+  updateEconomics(snapshot) {
+    // EconomicsSnapshot — from `cost.updated`, `GET /health`.spend and the `economics` command alike.
     const elem = document.getElementById('economics-indicator');
-    if (!elem || !spendData) return;
-    const cap = spendData.cap_usd !== undefined ? `$${Number(spendData.cap_usd).toFixed(2)}` :
-                spendData.spend_cap_usd != null ? `$${Number(spendData.spend_cap_usd).toFixed(2)}` : '—';
-    let totalVal = 0.0;
-    if (spendData.session_usd !== undefined) {
-      totalVal = Number(spendData.session_usd);
-    } else if (spendData.totals?.cost_usd != null) {
-      totalVal = Number(spendData.totals.cost_usd);
-    }
-    const total = `$${totalVal.toFixed(4)}`;
+    if (!elem || !snapshot) return;
+    const cap = snapshot.cap_usd != null ? `$${Number(snapshot.cap_usd).toFixed(2)}` : '—';
+    const total = `$${Number(snapshot.session_usd || 0).toFixed(4)}`;
 
-    if (spendData.unknown_pricing) {
+    if (snapshot.unknown_pricing) {
       elem.textContent = `${total} / ${cap} (unknown pricing)`;
       elem.className = 'text-amber-400 font-semibold';
-      elem.title = 'Model pricing unknown - cost estimates unavailable for this provider';
+      elem.title = 'Some calls used a model without known pricing — session spend is a lower bound';
     } else {
       elem.textContent = `${total} / ${cap}`;
       elem.className = 'text-emerald-400';
-      elem.title = 'Session Spend / Cap';
+      elem.title = 'Session spend / per-turn cap';
     }
   }
 
@@ -1057,21 +1062,28 @@ export class HarnessStudioApp {
     if (!this.activeSessionId) return;
 
     try {
+      // TranscriptRecord (harness/sdk/types.py): {role, content, tool_calls: [{id, name, arguments}],
+      // tool_results: [{tool_use_id, content: [{type, text}], is_error}], thinking?, metadata}
       const sData = await this.api.command('sessions.get', { session_id: this.activeSessionId });
       for (const rec of (sData.records || [])) {
-        const type = rec.type || rec.role;
-        if (type === 'USER_INPUT' || type === 'user') {
+        if (rec.role === 'user') {
           // Tool results are stored as user-role records with empty content: no empty bubble for them.
           if (rec.content) this.appendUserTurn(rec.content);
-        } else if (type === 'PLANNER_RESPONSE' || type === 'MODEL' || type === 'assistant') {
+          for (const tr of (rec.tool_results || [])) {
+            const text = (tr.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+            this.updateToolResult({ call_id: tr.tool_use_id, is_error: !!tr.is_error, preview: text });
+          }
+        } else if (rec.role === 'assistant') {
           if (rec.content) {
             this.appendTurnBlock('assistant');
             this.streamAssistantText(rec.content);
             this.finalizeStreamingBlock();
           }
           for (const tc of (rec.tool_calls || [])) {
-            this.appendToolCall({ name: tc.name, call_id: tc.id || tc.call_id, arguments: tc.arguments || tc.input, decision: 'done' });
+            this.appendToolCall({ call_id: tc.id, name: tc.name, arguments: tc.arguments || {}, status: 'completed' });
           }
+        } else if (rec.role === 'system' && rec.content) {
+          this.appendNotice(rec.content, 'info');
         }
       }
     } catch (err) {

@@ -33,7 +33,7 @@ from harness.sdk.errors import (
     IncompatiblePlugin,
     PluginLoadError,
 )
-from harness.sdk.events import Event
+from harness.sdk.events import Event, PluginError, PluginLoaded
 from harness.sdk.manifest import PluginManifest
 from harness.sdk.types import SDK_API_VERSION, Capability, HookEvent, ToolSpec
 
@@ -531,16 +531,16 @@ class PluginRegistry:
                 if self.bus:
                     evt = Event(
                         type="plugin.loaded",
-                        data={
-                            "name": name,
-                            "version": dp.manifest.version,
-                            "provides": [p.value if hasattr(p, "value") else str(p) for p in dp.manifest.provides],
-                            "capabilities": [
+                        data=PluginLoaded(
+                            name=name,
+                            version=dp.manifest.version,
+                            provides=[p.value if hasattr(p, "value") else str(p) for p in dp.manifest.provides],
+                            capabilities=[
                                 c.value if hasattr(c, "value") else str(c)
                                 for c in effective_caps
                             ],
-                            "trust": dp.tier.value,
-                        },
+                            trust=dp.tier.value,
+                        ),
                     )
                     self.bus.publish(evt)
 
@@ -549,7 +549,7 @@ class PluginRegistry:
                 if self.bus:
                     evt = Event(
                         type="plugin.error",
-                        data={"name": name, "error": str(err)},
+                        data=PluginError(name=name, error=str(err)),
                     )
                     self.bus.publish(evt)
                 # Continue boot! Do not raise or abort.

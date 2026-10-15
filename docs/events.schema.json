@@ -19,7 +19,6 @@
         "context.assembled",
         "cost.updated",
         "hook.fired",
-        "log",
         "model.completed",
         "model.notice",
         "model.started",
@@ -70,7 +69,1190 @@
     },
     "data": {
       "type": "object",
-      "description": "Event-specific payload"
+      "description": "Event-specific payload; see $defs/payloads/<type>"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "approval.required"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/approval.required"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "approval.resolved"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/approval.resolved"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "compaction.completed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/compaction.completed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "compaction.started"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/compaction.started"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "context.assembled"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/context.assembled"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "cost.updated"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/cost.updated"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "hook.fired"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/hook.fired"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "model.completed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/model.completed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "model.notice"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/model.notice"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "model.started"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/model.started"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "model.text.delta"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/model.text.delta"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "model.thinking.delta"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/model.thinking.delta"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "model.tool_call"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/model.tool_call"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "plugin.error"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/plugin.error"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "plugin.loaded"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/plugin.loaded"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "session.started"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/session.started"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "session.switched"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/session.switched"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "settings.changed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/settings.changed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "task.completed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/task.completed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "task.started"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/task.started"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tool.call"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/tool.call"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tool.decision"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/tool.decision"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tool.output.delta"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/tool.output.delta"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tool.result"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/tool.result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "turn.cancelled"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/turn.cancelled"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "turn.completed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/turn.completed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "turn.error"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/turn.error"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "turn.started"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/turn.started"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "ui.card"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/ui.card"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "ContextBlockInfo": {
+      "title": "ContextBlockInfo",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "stability": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "tokens": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "stability",
+        "source",
+        "tokens"
+      ],
+      "description": "One assembled context block (nested in ``context.assembled``)."
+    },
+    "Usage": {
+      "title": "Usage",
+      "type": "object",
+      "properties": {
+        "input_tokens": {
+          "type": "integer"
+        },
+        "output_tokens": {
+          "type": "integer"
+        },
+        "cache_read_tokens": {
+          "type": "integer"
+        },
+        "cache_write_tokens": {
+          "type": "integer"
+        },
+        "reasoning_tokens": {
+          "type": "integer"
+        },
+        "cost_usd": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "payloads": {
+      "approval.required": {
+        "title": "ApprovalRequired",
+        "type": "object",
+        "properties": {
+          "approval_id": {
+            "type": "string"
+          },
+          "call_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object"
+          },
+          "timeout_s": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "approval_id",
+          "call_id",
+          "kind",
+          "summary",
+          "details",
+          "timeout_s",
+          "options"
+        ]
+      },
+      "approval.resolved": {
+        "title": "ApprovalResolved",
+        "type": "object",
+        "properties": {
+          "approval_id": {
+            "type": "string"
+          },
+          "approved": {
+            "type": "boolean"
+          },
+          "by": {
+            "type": "string"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "approval_id",
+          "approved",
+          "by"
+        ]
+      },
+      "compaction.completed": {
+        "title": "CompactionCompleted",
+        "type": "object",
+        "properties": {
+          "summary_tokens": {
+            "type": "integer"
+          },
+          "duration_ms": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "summary_tokens",
+          "duration_ms"
+        ]
+      },
+      "compaction.started": {
+        "title": "CompactionStarted",
+        "type": "object",
+        "properties": {
+          "estimated_tokens": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "estimated_tokens"
+        ]
+      },
+      "context.assembled": {
+        "title": "ContextAssembled",
+        "type": "object",
+        "properties": {
+          "blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ContextBlockInfo"
+            }
+          },
+          "total_tokens": {
+            "type": "integer"
+          },
+          "history_messages": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "blocks",
+          "total_tokens",
+          "history_messages"
+        ]
+      },
+      "cost.updated": {
+        "title": "CostUpdated",
+        "type": "object",
+        "properties": {
+          "turn_usd": {
+            "type": "number"
+          },
+          "session_usd": {
+            "type": "number"
+          },
+          "lifetime_usd": {
+            "type": "number"
+          },
+          "cap_usd": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "unknown_pricing": {
+            "type": "boolean"
+          },
+          "usage": {
+            "$ref": "#/$defs/Usage"
+          }
+        },
+        "additionalProperties": false,
+        "description": "``cost.updated`` carries the same ``EconomicsSnapshot`` the ``economics`` command returns."
+      },
+      "hook.fired": {
+        "title": "HookFired",
+        "type": "object",
+        "properties": {
+          "hook": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "object"
+          },
+          "duration_ms": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "hook",
+          "event",
+          "command",
+          "outcome",
+          "duration_ms"
+        ]
+      },
+      "model.completed": {
+        "title": "ModelCompleted",
+        "type": "object",
+        "properties": {
+          "stop_reason": {
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/$defs/Usage"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "stop_reason",
+          "usage"
+        ]
+      },
+      "model.notice": {
+        "title": "ModelNotice",
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "message"
+        ]
+      },
+      "model.started": {
+        "title": "ModelStarted",
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "request_tokens_estimate": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "provider",
+          "model",
+          "request_tokens_estimate"
+        ]
+      },
+      "model.text.delta": {
+        "title": "ModelTextDelta",
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ]
+      },
+      "model.thinking.delta": {
+        "title": "ModelThinkingDelta",
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ]
+      },
+      "model.tool_call": {
+        "title": "ModelToolCall",
+        "type": "object",
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "arguments": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "call_id",
+          "name",
+          "arguments"
+        ]
+      },
+      "plugin.error": {
+        "title": "PluginError",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "error"
+        ]
+      },
+      "plugin.loaded": {
+        "title": "PluginLoaded",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "provides": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "trust": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "version",
+          "provides",
+          "capabilities",
+          "trust"
+        ]
+      },
+      "session.started": {
+        "title": "SessionStarted",
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          },
+          "strategy": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "workspace",
+          "strategy",
+          "provider",
+          "model"
+        ]
+      },
+      "session.switched": {
+        "title": "SessionSwitched",
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "workspace"
+        ]
+      },
+      "settings.changed": {
+        "title": "SettingsChanged",
+        "type": "object",
+        "properties": {
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "paths"
+        ]
+      },
+      "task.completed": {
+        "title": "TaskCompleted",
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "exit_code": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "tail": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "task_id",
+          "label",
+          "exit_code",
+          "tail"
+        ]
+      },
+      "task.started": {
+        "title": "TaskStarted",
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "task_id",
+          "label"
+        ]
+      },
+      "tool.call": {
+        "title": "ToolCallStarted",
+        "type": "object",
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "arguments": {
+            "type": "object"
+          },
+          "risk": {
+            "type": "string"
+          },
+          "plugin": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "call_id",
+          "name",
+          "arguments",
+          "risk",
+          "plugin"
+        ],
+        "description": "A tool call entered the policy gate (``tool.call``)."
+      },
+      "tool.decision": {
+        "title": "ToolDecision",
+        "type": "object",
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny",
+              "ask"
+            ]
+          },
+          "policy": {
+            "type": "string"
+          },
+          "risk": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "call_id",
+          "action",
+          "policy",
+          "risk",
+          "reason"
+        ]
+      },
+      "tool.output.delta": {
+        "title": "ToolOutputDelta",
+        "type": "object",
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "stream": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "call_id",
+          "stream",
+          "text"
+        ]
+      },
+      "tool.result": {
+        "title": "ToolCallResult",
+        "type": "object",
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "is_error": {
+            "type": "boolean"
+          },
+          "duration_ms": {
+            "type": "number"
+          },
+          "preview": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "call_id",
+          "name",
+          "is_error",
+          "duration_ms",
+          "preview"
+        ]
+      },
+      "turn.cancelled": {
+        "title": "TurnCancelled",
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "reason"
+        ]
+      },
+      "turn.completed": {
+        "title": "TurnCompleted",
+        "type": "object",
+        "properties": {
+          "stop_reason": {
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/$defs/Usage"
+          },
+          "duration_ms": {
+            "type": "number"
+          },
+          "tool_calls": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "stop_reason",
+          "usage",
+          "duration_ms",
+          "tool_calls"
+        ]
+      },
+      "turn.error": {
+        "title": "TurnError",
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "message",
+          "kind"
+        ]
+      },
+      "turn.started": {
+        "title": "TurnStarted",
+        "type": "object",
+        "properties": {
+          "prompt_preview": {
+            "type": "string"
+          },
+          "strategy": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "options": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "prompt_preview",
+          "strategy",
+          "provider",
+          "model"
+        ]
+      },
+      "ui.card": {
+        "title": "UiCard",
+        "type": "object",
+        "properties": {
+          "card": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "card"
+        ],
+        "description": "A card for the frontends; ``card`` is ``harness.sdk.cards.Card.to_dict()``."
+      }
     }
   }
 }

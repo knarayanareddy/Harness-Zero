@@ -44,7 +44,13 @@
   {
     "data": {
       "cap_usd": 5.0,
-      "unknown_pricing": false
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
     },
     "type": "cost.updated"
   },
@@ -110,7 +116,13 @@
   {
     "data": {
       "cap_usd": 5.0,
-      "unknown_pricing": false
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
     },
     "type": "cost.updated"
   },

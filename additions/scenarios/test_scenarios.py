@@ -20,6 +20,8 @@ from _lib.kernel_runner import run_kernel_scenario
 from _lib.scenario import compare_golden, discover, load_scenario
 from _lib.web_runner import run_web_scenario
 
+from harness.sdk.events import validate_event
+
 ROOT = Path(__file__).parent
 SCENARIOS = discover(ROOT)
 
@@ -51,6 +53,16 @@ def _check_expectations(sc, result) -> None:
             assert not p.exists(), f"{rel} should not exist"
     if exp.get("no_errors", True):
         assert not result.errors, f"errors during run: {result.errors}"
+    # Flow-of-information contract: every event that reached the observer (bus subscriber in the kernel
+    # lane, SSE frames in the web lane) must satisfy its payload dataclass in harness/sdk/events.py.
+    violations = []
+    for e in result.events:
+        if e.get("type") == "heartbeat":
+            continue
+        errs = validate_event({k: v for k, v in e.items() if not k.startswith("_")})
+        if errs:
+            violations.append(f"{e.get('type')}: {errs}")
+    assert not violations, "event payload contract violations:\n" + "\n".join(violations[:20])
     if "event_types_include" in exp:
         seen = {e.get("type") for e in result.events}
         missing = [t for t in exp["event_types_include"] if t not in seen]

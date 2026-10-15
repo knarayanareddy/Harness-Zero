@@ -22,5 +22,6 @@ expect:
   event_types_include: [ui.card]
   timeline_contains: ["view_file", "edit_file", "Renamed greet() to hello() in app.py.", "Successfully applied 1 search/replace block(s)", "COMPLETED"]
   timeline_order: ["Let me look at the file first.", "view_file", "edit_file", "Renamed greet() to hello() in app.py."]
-  reload_timeline_contains: ["Rename greet() to hello() in app.py", "edit_file", "Renamed greet() to hello() in app.py."]
+  # After F5 the tool cards come back with their recorded results (P1: reloadTranscript reads TranscriptRecord.tool_results).
+  reload_timeline_contains: ["Rename greet() to hello() in app.py", "view_file", "Output: 1 | def greet(name):", "edit_file", "Successfully applied 1 search/replace block(s)", "Renamed greet() to hello() in app.py."]
   event_types_exclude: [turn.error, turn.cancelled, approval.required]
