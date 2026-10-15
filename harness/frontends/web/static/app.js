@@ -49,8 +49,12 @@ export class HarnessStudioApp {
     await this.populateModels();
     await this.populateStrategies();
 
-    // 4. Load Sessions
+    // 4. Load Sessions (and re-render the active session's history: a page refresh
+    //    must show the conversation again, not the welcome screen)
     await this.loadSessions();
+    if (this.activeSessionId) {
+      await this.reloadTranscript();
+    }
 
     // 5. Connect SSE Event Stream
     this.setupEventHandlers();
@@ -124,6 +128,13 @@ export class HarnessStudioApp {
 
     // Tool execution & cards
     this.events.on('tool.call', (data) => {
+      // Text streamed before this call stays above the card; text from the next model
+      // call starts a fresh block below it (model.text.delta creates one on demand).
+      if (this.currentAssistantBlock) {
+        const hasContent = (this.currentTextElement?.textContent || '') || this.currentThinkingElement;
+        if (hasContent) this.finalizeStreamingBlock();
+        else { this.currentAssistantBlock.remove(); this.finalizeStreamingBlock(); }
+      }
       this.appendToolCall(data);
     });
 
@@ -548,11 +559,17 @@ export class HarnessStudioApp {
     if (card) {
       const badge = card.querySelector('.uppercase');
       if (badge) {
-        badge.textContent = data.decision || 'ALLOWED';
-        if (data.decision === 'DENIED') {
+        // Kernel payload: {action: allow|deny|ask, policy, reason, risk} (kernel/gate.py).
+        const action = String(data.action || data.decision || 'allow').toLowerCase();
+        if (action === 'deny' || action === 'denied') {
+          badge.textContent = 'DENIED';
           badge.className = 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-red-900/60 text-red-300 border border-red-800';
-        } else if (data.decision === 'APPROVAL_REQUIRED') {
+          if (data.reason) badge.title = data.reason;
+        } else if (action === 'ask' || action === 'approval_required') {
+          badge.textContent = 'APPROVAL REQUIRED';
           badge.className = 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-amber-900/60 text-amber-300 border border-amber-800';
+        } else {
+          badge.textContent = 'ALLOWED';
         }
       }
     }
@@ -564,18 +581,19 @@ export class HarnessStudioApp {
     const card = document.querySelector(`.harness-card-tool[data-call-id="${callId}"]`);
     if (card) {
       const badge = card.querySelector('.uppercase');
-      if (badge && badge.textContent === 'RUNNING') {
+      if (badge && badge.textContent !== 'DENIED') {
         badge.textContent = data.is_error ? 'ERROR' : 'COMPLETED';
         badge.className = data.is_error
           ? 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-red-900/60 text-red-300 border border-red-800'
           : 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-emerald-900/60 text-emerald-300 border border-emerald-800';
       }
 
-      // Append result preview if not already present
-      if (!card.querySelector('.text-emerald-300')) {
-        const resultStr = escapeHtml(typeof data.result === 'object' ? JSON.stringify(data.result, null, 2) : String(data.result || ''));
+      // Append result preview if not already present (kernel payload: {preview, is_error, metadata}).
+      if (!card.querySelector('.tool-output')) {
+        const value = data.result ?? data.preview ?? data.output ?? '';
+        const resultStr = escapeHtml(typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value));
         const resDiv = document.createElement('div');
-        resDiv.className = 'mt-2 text-xs';
+        resDiv.className = 'mt-2 text-xs tool-output';
         resDiv.innerHTML = `<div class="text-gray-400 font-mono font-medium mb-1">Output:</div><pre class="p-2 bg-gray-950/90 rounded border border-gray-800 text-emerald-300 font-mono overflow-x-auto max-h-48">${resultStr}</pre>`;
         card.appendChild(resDiv);
       }
@@ -887,7 +905,10 @@ export class HarnessStudioApp {
   }
 
   async switchSession(sessionId) {
-    if (sessionId === this.activeSessionId) return;
+    if (sessionId === this.activeSessionId) {
+      await this.reloadTranscript();
+      return;
+    }
     try {
       await this.api.switchSession(sessionId);
       this.activeSessionId = sessionId;
@@ -920,11 +941,17 @@ export class HarnessStudioApp {
       for (const rec of (sData.records || [])) {
         const type = rec.type || rec.role;
         if (type === 'USER_INPUT' || type === 'user') {
-          this.appendUserTurn(rec.content || '');
+          // Tool results are stored as user-role records with empty content: no empty bubble for them.
+          if (rec.content) this.appendUserTurn(rec.content);
         } else if (type === 'PLANNER_RESPONSE' || type === 'MODEL' || type === 'assistant') {
-          this.appendTurnBlock('assistant');
-          this.streamAssistantText(rec.content || '');
-          this.finalizeStreamingBlock();
+          if (rec.content) {
+            this.appendTurnBlock('assistant');
+            this.streamAssistantText(rec.content);
+            this.finalizeStreamingBlock();
+          }
+          for (const tc of (rec.tool_calls || [])) {
+            this.appendToolCall({ name: tc.name, call_id: tc.id || tc.call_id, arguments: tc.arguments || tc.input, decision: 'done' });
+          }
         }
       }
     } catch (err) {
