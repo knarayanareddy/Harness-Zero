@@ -276,8 +276,8 @@ export class CardRenderer {
   }
 
   renderApproval(payload, _context) {
-    const reqId = escapeHtml(payload.request_id || payload.id || '');
-    const action = escapeHtml(payload.action || payload.tool || payload.command || 'Action');
+    const reqId = escapeHtml(payload.approval_id || payload.request_id || payload.id || '');
+    const action = escapeHtml(payload.summary || payload.action || payload.tool || payload.command || 'Action');
     const risk = escapeHtml(payload.risk_class || payload.risk || 'HIGH');
     const details = payload.details || payload.arguments ? JSON.stringify(payload.details || payload.arguments, null, 2) : '';
 

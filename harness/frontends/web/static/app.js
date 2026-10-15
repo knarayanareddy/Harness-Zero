@@ -202,10 +202,17 @@ export class HarnessStudioApp {
 
         // Submit to API
         try {
-          const model = document.getElementById('model-select')?.value;
+          // A fresh daemon has no active session: create one instead of sending session_id: null.
+          if (!this.activeSessionId) {
+            await this.createNewSession();
+          }
+          const select = document.getElementById('model-select');
+          const model = select?.value;
+          const provider = select?.selectedOptions?.[0]?.dataset?.provider;
           await this.api.submitTurn(text, {
             session_id: this.activeSessionId,
             model: model || undefined,
+            provider: model && provider ? provider : undefined,
           });
         } catch (err) {
           this.appendNotice(`Submit failed: ${err.message}`, 'error');
@@ -648,20 +655,23 @@ export class HarnessStudioApp {
   }
 
   showApproval(data) {
+    // The kernel's approval events carry `approval_id` (kernel/approvals.py);
+    // older payloads used `request_id`. Accept both so the buttons always work.
+    const reqId = data.approval_id || data.request_id || data.id || '';
     // 1. Append approval card to timeline
-    const card = { kind: 'approval', payload: data };
+    const card = { kind: 'approval', payload: { ...data, request_id: reqId } };
     this.appendCard(card);
 
     // 2. Show top banner for high visibility
     const banner = document.getElementById('approval-banner');
     if (banner) {
       banner.classList.remove('hidden');
-      banner.setAttribute('data-request-id', data.request_id || '');
+      banner.setAttribute('data-request-id', reqId);
     }
   }
 
   resolveApprovalUI(data) {
-    const reqId = data.request_id;
+    const reqId = data.approval_id || data.request_id || data.id || '';
     // Hide top banner if matches
     const banner = document.getElementById('approval-banner');
     if (banner && banner.getAttribute('data-request-id') === reqId) {
@@ -675,7 +685,8 @@ export class HarnessStudioApp {
       card.classList.add('border-gray-700', 'bg-gray-800/40', 'opacity-70');
       const actions = card.querySelector('.flex.justify-end');
       if (actions) {
-        actions.innerHTML = `<span class="text-xs font-semibold uppercase text-gray-400">Resolved: ${escapeHtml(data.decision || 'done')}</span>`;
+        const outcome = data.decision || (data.approved === true ? 'approved' : data.approved === false ? 'denied' : 'done');
+        actions.innerHTML = `<span class="text-xs font-semibold uppercase text-gray-400">Resolved: ${escapeHtml(outcome)}</span>`;
       }
     }
   }
@@ -806,6 +817,7 @@ export class HarnessStudioApp {
         for (const m of models) {
           const opt = document.createElement('option');
           opt.value = m.id || m.model_name || m.name;
+          if (m.provider) opt.dataset.provider = m.provider;
           opt.textContent = `${m.provider ? m.provider + ': ' : ''}${m.id || m.name}`;
           select.appendChild(opt);
         }

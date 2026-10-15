@@ -62,26 +62,46 @@ class Commands:
 
     async def submit_turn(
         self,
-        session_id: str,
-        prompt: str,
+        session_id: str | None = None,
+        prompt: str = "",
         media: list[Any] | None = None,
         options: dict[str, Any] | None = None,
+        model: str | None = None,
+        provider: str | None = None,
+        strategy: str | None = None,
     ) -> TurnResult:
         """
         Submits a user prompt turn to a session.
         Enforces one active turn per session via session lock (raises TurnInProgress / 409).
+
+        ``model`` / ``provider`` / ``strategy`` are accepted as top-level arguments
+        because that is the payload the web client sends (``{prompt, session_id,
+        model}``); they are folded into ``options``. When ``session_id`` is omitted
+        the active session is used, or a new one is created, so a fresh daemon can
+        accept its first prompt without the client having to know about sessions.
         """
-        validate_session_id(session_id)
-        session = self.session_manager.get_session(session_id)
-        if not session:
-            session = await self.session_manager.create_session(session_id=session_id)
+        if not prompt or not str(prompt).strip():
+            raise HarnessError("Missing 'prompt'")
+
+        if session_id:
+            validate_session_id(session_id)
+            session = self.session_manager.get_session(session_id)
+            if not session:
+                session = await self.session_manager.create_session(session_id=session_id)
+        else:
+            session = self.session_manager.active_session or await self.session_manager.create_session()
+
+        turn_options: dict[str, Any] = dict(options or {})
+        for key, value in (("model", model), ("provider", provider), ("strategy", strategy)):
+            if value:
+                turn_options[key] = value
 
         async with session.turn_lock():
             return await self.runner.execute_turn(
                 session=session.info,
                 prompt=prompt,
                 media=media,
-                options=options,
+                options=turn_options or None,
             )
 
     async def cancel_turn(self, session_id: str) -> bool:

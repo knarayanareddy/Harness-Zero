@@ -89,7 +89,7 @@ class ArchitectEditorStrategy:
             if isinstance(block, TextBlock):
                 output_parts.append(block.text)
             elif isinstance(block, ThinkingBlock):
-                thinking_parts.append(block.thinking)
+                thinking_parts.append(block.text)
 
         # -------------------------------------------------------------
         # 3. Phase 2: Editor Execution (Tool Loop)

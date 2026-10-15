@@ -58,20 +58,15 @@ export class HarnessEventStream {
         this._dispatchInternal('connected', {});
       };
 
-      this.eventSource.onmessage = (e) => {
-        if (!e.data || e.data.trim() === '') return;
-        try {
-          const envelope = JSON.parse(e.data);
-          if (e.lastEventId) {
-            this.lastEventId = e.lastEventId;
-          } else if (envelope.id) {
-            this.lastEventId = envelope.id;
-          }
-          this._dispatch(envelope.type || 'message', envelope);
-        } catch (err) {
-          console.warn('[HarnessEventStream] Failed to parse SSE payload:', err, e.data);
-        }
-      };
+      // The daemon sends *named* frames (`event: <type>`). Per the EventSource
+      // spec those never reach `onmessage` (which only sees unnamed frames), so a
+      // listener is attached per known type; unnamed frames still go through
+      // `onmessage`. Types subscribed later are attached in `on()`.
+      this.eventSource.onmessage = (e) => this._onFrame(e);
+      this._attachedTypes = new Set();
+      for (const type of this.listeners.keys()) {
+        this._attachNamedListener(type);
+      }
 
       this.eventSource.onerror = (e) => {
         this.isConnected = false;
@@ -121,7 +116,31 @@ export class HarnessEventStream {
       this.listeners.set(eventType, new Set());
     }
     this.listeners.get(eventType).add(callback);
+    this._attachNamedListener(eventType);
     return () => this.off(eventType, callback);
+  }
+
+  _attachNamedListener(type) {
+    if (!this.eventSource || !type || type.startsWith('$') || type === 'message') return;
+    if (!this._attachedTypes) this._attachedTypes = new Set();
+    if (this._attachedTypes.has(type)) return;
+    this._attachedTypes.add(type);
+    this.eventSource.addEventListener(type, (e) => this._onFrame(e, type));
+  }
+
+  _onFrame(e, namedType = null) {
+    if (!e.data || e.data.trim() === '') return;
+    try {
+      const envelope = JSON.parse(e.data);
+      if (e.lastEventId) {
+        this.lastEventId = e.lastEventId;
+      } else if (envelope.id) {
+        this.lastEventId = envelope.id;
+      }
+      this._dispatch(envelope.type || namedType || 'message', envelope);
+    } catch (err) {
+      console.warn('[HarnessEventStream] Failed to parse SSE payload:', err, e.data);
+    }
   }
 
   off(eventType, callback) {
