@@ -5,8 +5,8 @@ and slash command dispatch (§1, §7).
 from __future__ import annotations
 
 import asyncio
-import uuid
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 from rich.console import Console
@@ -40,7 +40,9 @@ class CliApp:
         self.bus = bus
         self.console = console or Console()
         self.interactive = interactive
-        self.session_id = session_id or f"session_{uuid.uuid4().hex[:12]}"
+        # Sessions are kernel-owned: ``None`` means "the kernel's active session" (the one it resumed at
+        # start) or, when there is none, a session the kernel creates on the first prompt.
+        self.session_id: str | None = session_id
         self.input_fn = input_fn or input
         self._listener_task: asyncio.Task | None = None
 
@@ -100,6 +102,18 @@ class CliApp:
             self.bus.unsubscribe(self._sub.id)
             self._sub = None
 
+    def _resolve_session_id(self) -> str | None:
+        """The session this frontend talks to: an explicit id, else the kernel's active session, else None.
+
+        Called again after a turn submitted without an id, so the frontend follows the session the kernel
+        created for it.
+        """
+        if not self.session_id:
+            active = self.commands.session_manager.active_session
+            if active is not None:
+                self.session_id = active.session_id
+        return self.session_id
+
     async def run_turn(
         self,
         prompt: str,
@@ -107,7 +121,7 @@ class CliApp:
         options: dict[str, Any] | None = None,
     ) -> TurnResult:
         """Executes a single turn with live event streaming."""
-        sid = session_id or self.session_id
+        sid = session_id or self._resolve_session_id()
         await self.start_event_listener()
         try:
             res = await self.commands.submit_turn(
@@ -115,6 +129,7 @@ class CliApp:
                 prompt=prompt,
                 options=options,
             )
+            self._resolve_session_id()
             return res
         finally:
             # Let pending events drain briefly
@@ -125,11 +140,17 @@ class CliApp:
         """Interactive REPL driving turns and slash commands."""
         if session_id:
             self.session_id = session_id
+        current = self._resolve_session_id()
+        session_line = (
+            f"Session: [yellow]{current}[/yellow] (resumed)" if current and not session_id
+            else f"Session: [yellow]{current}[/yellow]" if current
+            else "Session: [dim]none yet — created on your first prompt[/dim]"
+        )
 
         self.console.print(
             Panel(
                 f"[bold cyan]Harness-Zero Kernel CLI Frontend[/bold cyan]\n"
-                f"Session: [yellow]{self.session_id}[/yellow]\n"
+                f"{session_line}\n"
                 f"Workspace: [dim]{self.commands.workspace}[/dim]\n\n"
                 f"Type [bold]/help[/bold] for commands or enter your prompt below.",
                 title="[bold green]Kernel Interactive Session[/bold green]",
@@ -199,13 +220,17 @@ class CliApp:
                     continue
 
                 if user_input == "/sessions":
+                    # Rows are SessionRow: session_id, title, turns, updated_at, active, busy, ...
                     sessions = await self.commands.sessions_list()
                     table = Table(title="Sessions")
                     table.add_column("Session ID", style="cyan")
-                    table.add_column("Created", style="dim")
+                    table.add_column("Title")
+                    table.add_column("Turns", justify="right")
+                    table.add_column("Last activity", style="dim")
                     for s in sessions:
-                        active = " (active)" if s.get("session_id") == self.session_id else ""
-                        table.add_row(f"{s.get('session_id')}{active}", str(s.get("created_at", "")))
+                        active = " (active)" if s.get("active") else ""
+                        when = datetime.fromtimestamp(float(s.get("updated_at") or 0)).strftime("%Y-%m-%d %H:%M")
+                        table.add_row(f"{s.get('session_id')}{active}", s.get("title") or "—", str(s.get("turns", 0)), when)
                     self.console.print(table)
                     continue
 
@@ -242,19 +267,21 @@ class CliApp:
                     continue
 
                 if user_input == "/cancel":
-                    ok = await self.commands.cancel_turn(self.session_id)
+                    sid = self._resolve_session_id()
+                    ok = bool(sid) and await self.commands.cancel_turn(sid)
                     if ok:
                         self.console.print("[yellow]Cancellation signal sent.[/yellow]")
                     else:
                         self.console.print("[dim]No active turn running to cancel.[/dim]")
                     continue
 
-                # Standard prompt submission
+                # Standard prompt submission (no session yet → the kernel creates one)
                 try:
                     await self.commands.submit_turn(
-                        session_id=self.session_id,
+                        session_id=self._resolve_session_id(),
                         prompt=user_input,
                     )
+                    self._resolve_session_id()
                 except Exception as e:
                     self.console.print(f"[bold red]Turn Execution Error: {e}[/bold red]")
 

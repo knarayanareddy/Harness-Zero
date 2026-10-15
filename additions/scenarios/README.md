@@ -104,6 +104,10 @@ expect:
   timeline_order: ["Noting that.", "remember", "Saved."]  # these must appear in this order
   dom_reload: true                         # web: boot the client again on the same session (= page refresh)
   reload_timeline_contains: ["Question one", "Answer one"]  # what the refreshed page must show, with no click
+  dom_new_session: false                   # web: do not click "New session" — the first prompt must create one (session_id: null)
+  dom_restart: true                        # web: stop the daemon, boot a new kernel+server on the same workspace, reload the page
+  restart_timeline_contains: ["Question one", "Answer two"]  # what the page shows after the restart, with no click
+  sessions_after_restart: 1                # sessions.list row count after the restart (the resumed one is `active`)
   auth_required: true                      # web, default: unauthenticated command/ticket/events -> 401
 ```
 
@@ -140,6 +144,7 @@ provider/model id.
 | approval_allow_web_dom | web + DOM | approval card rendered, **Approve** clicked in jsdom, write lands |
 | session_resume_web | web (API) | two turns, `sessions.get` equals what the page would re-render |
 | session_reload_web_dom | web + DOM | two turns in the client, then a page refresh: history visible without a click |
+| daemon_restart_web_dom | web + DOM | no session at boot: first prompt creates one (`session_id: null`), daemon restart + reload resumes it — one row, full history, no click |
 | read_then_edit_web_dom | web + DOM | tool cards with outputs in order, `📝 File Diff` card, refresh keeps the tool calls |
 | memory_remember_web_dom | web + DOM | remember / search_memory cards in order, found fact shown |
 | tirith_blocks_ssrf_web_dom | web + DOM | a policy denial renders as `DENIED` + reason, never `ALLOWED` |

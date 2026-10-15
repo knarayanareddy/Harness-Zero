@@ -20,7 +20,7 @@ from harness.kernel.settings import SettingsStore
 from harness.kernel.validators import validate_session_id
 from harness.sdk.errors import TurnInProgress
 from harness.sdk.events import Event, SessionStarted, SessionSwitched
-from harness.sdk.types import HookEvent, SessionInfo
+from harness.sdk.types import HookEvent, SessionInfo, SessionRow
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,33 @@ class _NullTranscriptStore:
 
     def for_session(self, session_dir: Path | str) -> _NullTranscriptStore:
         return _NullTranscriptStore(session_dir)
+
+
+def _summarize_transcript(path: Path, title_chars: int = 60) -> dict[str, Any]:
+    """Cheap scan of a transcript.jsonl: record count, number of user prompts, and the first prompt as title."""
+    out: dict[str, Any] = {"records": 0, "turns": 0, "title": ""}
+    if not path.exists():
+        return out
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                out["records"] += 1
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if rec.get("role") != "user" or not rec.get("content"):
+                    continue  # tool-result records are user-role with empty content
+                out["turns"] += 1
+                if not out["title"]:
+                    text = " ".join(str(rec["content"]).split())
+                    out["title"] = text[:title_chars] + ("…" if len(text) > title_chars else "")
+    except OSError:
+        pass
+    return out
 
 
 class Session:
@@ -288,12 +315,16 @@ class SessionManager:
         return None
 
     def list_sessions(self) -> list[dict[str, Any]]:
-        """Lists all historical and active sessions in workspace."""
+        """Lists every session in the workspace, most recently updated first.
+
+        Rows are ``harness.sdk.types.SessionRow.to_dict()``: ``session_id, workspace, created_at,
+        updated_at, title, turns, message_count, active, busy``.
+        """
         results = []
         if not self.sessions_dir.exists():
             return results
 
-        for child in sorted(self.sessions_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+        for child in self.sessions_dir.iterdir():
             if not child.is_dir():
                 continue
             sess_id = child.name
@@ -310,24 +341,53 @@ class SessionManager:
                 except Exception:
                     pass
 
-            created_at = meta_data.get("created_at", child.stat().st_ctime)
+            created_at = float(meta_data.get("created_at", child.stat().st_mtime))
             t_file = child / "transcript.jsonl"
-            msg_count = 0
-            if t_file.exists():
-                try:
-                    with open(t_file, encoding="utf-8", errors="replace") as f:
-                        msg_count = sum(1 for line in f if line.strip())
-                except Exception:
-                    pass
+            summary = _summarize_transcript(t_file)
+            updated_at = t_file.stat().st_mtime if t_file.exists() else created_at
+            live = self._sessions.get(sess_id)
 
-            results.append({
-                "session_id": sess_id,
-                "workspace": str(self.workspace),
-                "created_at": created_at,
-                "message_count": msg_count,
-                "active": self.active_session.session_id == sess_id if self.active_session else False,
-            })
+            results.append(
+                SessionRow(
+                    session_id=sess_id,
+                    workspace=str(self.workspace),
+                    created_at=created_at,
+                    updated_at=updated_at,
+                    title=summary["title"],
+                    turns=summary["turns"],
+                    message_count=summary["records"],
+                    active=self.active_session.session_id == sess_id if self.active_session else False,
+                    busy=bool(live and live.is_busy),
+                ).to_dict()
+            )
+        results.sort(key=lambda r: r["updated_at"], reverse=True)
         return results
+
+    async def resume_last(self) -> Session | None:
+        """Makes the most recently updated session that has at least one recorded turn the active one.
+
+        Called at daemon start so a browser refresh — or a daemon restart — lands on the conversation the
+        user was in, instead of a fresh empty session per start. Empty sessions are skipped. A resume is
+        not a start: SESSION_START hooks and ``session.started`` are not fired (they ran when the session
+        was created); ``session.switched`` is published so connected frontends can follow.
+        """
+        for row in self.list_sessions():
+            if row["turns"] <= 0:
+                continue
+            session = self.get_session(row["session_id"])
+            if session is None:
+                continue
+            self.active_session = session
+            if self.bus:
+                self.bus.publish(
+                    Event(
+                        type="session.switched",
+                        session_id=session.session_id,
+                        data=SessionSwitched(session_id=session.session_id, workspace=str(self.workspace)),
+                    )
+                )
+            return session
+        return None
 
     async def switch_session(self, session_id: str) -> Session:
         """Switches the active session, emitting session.switched."""

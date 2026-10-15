@@ -972,6 +972,38 @@ class SessionInfo:
 
 
 @dataclass(slots=True)
+class SessionRow:
+    """One row of ``sessions.list`` — what a session picker renders.
+
+    ``title`` is the first user prompt (≤ 60 chars); ``turns`` counts user prompts; ``message_count`` counts
+    transcript records; ``updated_at`` is the transcript's last write (or ``created_at`` for an empty session).
+    """
+
+    session_id: str
+    workspace: str
+    created_at: float
+    updated_at: float
+    title: str = ""
+    turns: int = 0
+    message_count: int = 0
+    active: bool = False
+    busy: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "session_id": self.session_id,
+            "workspace": self.workspace,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "title": self.title,
+            "turns": self.turns,
+            "message_count": self.message_count,
+            "active": self.active,
+            "busy": self.busy,
+        }
+
+
+@dataclass(slots=True)
 class TaskInfo:
     id: str
     label: str

@@ -3,15 +3,6 @@
     "data": {
       "model": "replay-v1",
       "provider": "replay",
-      "session_id": "session#1",
-      "strategy": "single_loop"
-    },
-    "type": "session.started"
-  },
-  {
-    "data": {
-      "model": "replay-v1",
-      "provider": "replay",
       "session_id": "<session>",
       "strategy": "single_loop"
     },
@@ -189,7 +180,7 @@
           },
           "unified": "<<<<<<< SEARCH\ndef greet(name):\n    return f\"Hello, {name}!\"\n=======\ndef hello(name):\n    return f\"Hello, {name}!\"\n>>>>>>> REPLACE\n"
         },
-        "id": "evt#20",
+        "id": "evt#19",
         "kind": "diff",
         "title": null
       }

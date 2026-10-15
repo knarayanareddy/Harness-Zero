@@ -176,6 +176,14 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
             await server.stop()
             await rt.registry.unload_all()
 
+    restart: dict[str, Any] | None = None
+    if dom and dom_report is not None and sc.expect.get("dom_restart"):
+        # The daemon is restarted on the same workspace (new kernel, new server, new auth token) and the
+        # shipped client is loaded once more without any click: this is what the user sees after
+        # `harness ui` is stopped and started again.
+        restart = await _restart_daemon_and_reload(sc, ws, env_conf)
+        dom_report["restart"] = restart.get("dom") or {}
+
     tools_called = [e.get("data", {}).get("name") or e.get("data", {}).get("tool") for e in sse.events if e.get("type") == "tool.call"]
     return WebRunResult(
         session_id=sid,
@@ -192,8 +200,33 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
             "replay_remaining": provider.remaining,
             "named_sse_frames": sum(1 for f in sse.frames if f["event"] != "message"),
             "unauthenticated": unauth,
+            **({"restart": {k: v for k, v in restart.items() if k != "dom"}} if restart else {}),
         },
     )
+
+
+async def _restart_daemon_and_reload(sc: Scenario, ws: Path, env_conf: Path) -> dict[str, Any]:
+    """Boots a fresh kernel + web server on ``ws`` and loads the client as a page refresh would."""
+    rt = await bootstrap_kernel(workspace=ws, config_dir=env_conf, overrides=base_overrides(sc))
+    rt.registry.register_provider(ReplayProvider.from_file(sc.provider_file, strict=sc.strict_exhaustion), plugin_name="scenario")
+    server = HarnessWebServer(commands=rt.commands, bus=rt.bus, host="127.0.0.1", port=0, sandbox_port=0, workspace=ws)
+    await server.start()
+    base = f"http://127.0.0.1:{server.port}"
+    token = server.auth_token
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    out: dict[str, Any] = {}
+    try:
+        async with httpx.AsyncClient(base_url=base, timeout=30) as client:
+            health = (await client.get("/health", headers=headers)).json()
+            out["active_session_after_restart"] = (health.get("active_session") or {}).get("session_id")
+            rows = (await client.post("/commands/sessions.list", headers=headers, content="{}")).json().get("result") or []
+            out["sessions_after_restart"] = len(rows)
+            out["session_rows"] = [{k: r.get(k) for k in ("title", "turns", "active")} for r in rows]
+            out["dom"] = await _run_dom_lane(base, sc, token, reload=True)
+    finally:
+        await server.stop()
+        await rt.registry.unload_all()
+    return out
 
 
 def _trim(data: Any) -> Any:

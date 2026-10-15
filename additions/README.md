@@ -13,6 +13,11 @@ expectations; the seven web goldens were re-baselined once because the client no
 fresh daemon (a leading `session.started` event). The review of that commit is `review/CODE_REVIEW_158c836.md`;
 its plan P5 moves this suite into `tests/` and CI.
 
+**Update after consolidation P2** (`review/CONSOLIDATION_LOG.md`): that leading `session.started` was the defect
+(an empty session per page load). The kernel now owns the lifecycle — resume on start, lazy create on the first
+prompt — so the same seven goldens lost it again, and a 21st scenario, `daemon_restart_web_dom`, pins the new
+behaviour: two prompts with no session, daemon restart, page reload → one session row, full history, no click.
+
 ## Contents
 
 | path | what it is | use it for |

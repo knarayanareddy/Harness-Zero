@@ -52,17 +52,19 @@ export class HarnessStudioApp {
     await this.populateModels();
     await this.populateStrategies();
 
-    // 4. Load Sessions (or auto-create initial session if daemon is fresh)
-    await this.loadSessions();
-    if (!this.activeSessionId) {
-      await this.createNewSession();
-    } else {
-      await this.reloadTranscript();
-    }
-
-    // 5. Connect SSE Event Stream
+    // 4. Connect the event stream *before* rendering history, so nothing that happens while the
+    //    transcript is being fetched is lost.
     this.setupEventHandlers();
     this.events.connect();
+
+    // 5. Sessions belong to the kernel: it resumes the last conversation on start and creates a session
+    //    lazily on the first prompt (`submit_turn` without session_id). The client never creates one at boot.
+    await this.loadSessions();
+    if (this.activeSessionId) {
+      await this.reloadTranscript();
+    } else {
+      this.showEmptyTimelineHint();
+    }
 
     // 6. Bind DOM UI listeners
     this.bindControls();
@@ -199,8 +201,17 @@ export class HarnessStudioApp {
       this.updateContextInspector(data);
     });
 
-    // Session Switch
+    // Session lifecycle is kernel-owned: a session created lazily for our first prompt announces itself.
+    this.events.on('session.started', (data) => {
+      if (!this.activeSessionId) {
+        this.activeSessionId = data.session_id;
+        this.clearEmptyTimelineHint();
+      }
+      this.loadSessions();
+    });
+
     this.events.on('session.switched', (data) => {
+      if (data.session_id === this.activeSessionId) return;
       this.activeSessionId = data.session_id;
       this.loadSessions();
       this.reloadTranscript();
@@ -232,12 +243,8 @@ export class HarnessStudioApp {
         // Add user block to timeline immediately
         this.appendUserTurn(text);
 
-        // Submit to API
+        // Submit to API (no session yet → the kernel creates one and announces it via session.started)
         try {
-          if (!this.activeSessionId) {
-            await this.createNewSession();
-          }
-
           const modelSelect = document.getElementById('model-select');
           const selectedOption = modelSelect?.selectedOptions?.[0];
           const model = selectedOption?.value || undefined;
@@ -248,7 +255,7 @@ export class HarnessStudioApp {
           if (provider) options.provider = provider;
 
           const res = await this.api.submitTurn(text, {
-            session_id: this.activeSessionId,
+            session_id: this.activeSessionId || undefined,
             options,
           });
 
@@ -544,6 +551,7 @@ export class HarnessStudioApp {
   appendUserTurn(text) {
     const timeline = document.getElementById('timeline');
     if (!timeline) return;
+    this.clearEmptyTimelineHint();
 
     const block = document.createElement('div');
     block.className = 'turn-block turn-user';
@@ -1011,15 +1019,33 @@ export class HarnessStudioApp {
     const list = document.getElementById('session-list');
     if (!list) return;
     try {
+      // Rows are SessionRow (harness/sdk/types.py): {session_id, workspace, created_at, updated_at,
+      // title, turns, message_count, active, busy}; the kernel marks the active one.
       const sessions = await this.api.getSessions();
+      if (!this.activeSessionId) {
+        const active = (sessions || []).find((s) => s.active);
+        if (active) this.activeSessionId = active.session_id;
+      }
       list.innerHTML = '';
-      for (const s of (sessions || [])) {
+      if (!sessions || sessions.length === 0) {
+        list.innerHTML = '<div class="session-empty text-xs">No sessions yet — your first message starts one.</div>';
+        return;
+      }
+      for (const s of sessions) {
         const item = document.createElement('div');
         const isActive = s.session_id === this.activeSessionId;
         item.className = `session-item ${isActive ? 'active' : ''}`;
+        item.dataset.sessionId = s.session_id;
+        const when = s.updated_at ? new Date(s.updated_at * 1000).toLocaleString() : '';
+        const turns = `${s.turns || 0} turn${s.turns === 1 ? '' : 's'}`;
         item.innerHTML = `
-          <span class="truncate">${escapeHtml(s.session_id)}</span>
-          <span class="text-xs opacity-60">${s.busy ? '⏳' : ''}</span>
+          <div class="session-title truncate">${escapeHtml(s.title || 'New session')}</div>
+          <div class="session-meta text-xs">
+            <span class="session-id font-mono">${escapeHtml(s.session_id)}</span>
+            <span class="session-turns">${escapeHtml(turns)}</span>
+            <span class="session-when">${escapeHtml(when)}</span>
+            <span class="session-busy">${s.busy ? '⏳' : ''}</span>
+          </div>
         `;
         item.addEventListener('click', () => this.switchSession(s.session_id));
         list.appendChild(item);
@@ -1027,6 +1053,19 @@ export class HarnessStudioApp {
     } catch (err) {
       console.warn('Failed to load sessions:', err);
     }
+  }
+
+  showEmptyTimelineHint() {
+    const timeline = document.getElementById('timeline');
+    if (!timeline || timeline.querySelector('.timeline-empty')) return;
+    const hint = document.createElement('div');
+    hint.className = 'timeline-empty text-xs';
+    hint.textContent = 'No conversation yet. Type a message below to start a session.';
+    timeline.appendChild(hint);
+  }
+
+  clearEmptyTimelineHint() {
+    document.querySelector('#timeline .timeline-empty')?.remove();
   }
 
   async switchSession(sessionId) {

@@ -17,7 +17,7 @@ what the flow test showed, what moved in the goldens and why). §3 collects defe
 | Phase | Root cause (review §4) | Deliverable | Acceptance |
 |---|---|---|---|
 | **P1** | 4.1 no payload contract; 4.7 ledger/spend bugs; R8 card shape mismatch | Typed payload dataclasses for every event; `EconomicsSnapshot` as the one spend shape; `cards.js` renders the SDK card shape; generalised static contract tests; bus guard in tests | `pytest tests -q` green with `event_contract_guard` on · `harness events schema \| diff docs/events.schema.json -` empty · 20 scenarios strict · Economics: session ≠ lifetime across sessions |
-| **P2** | 4.4 browser-driven sessions | Kernel owns session lifecycle: lazy create on first `submit_turn`, resume on start; web `init()` no longer creates sessions; SSE before transcript reload; richer `sessions.list` | 3 daemon restarts ⇒ 1 session · scenarios strict |
+| **P2** ✔ | 4.4 browser-driven sessions | Kernel owns session lifecycle: lazy create on first `submit_turn`, resume on start; web `init()` no longer creates sessions; SSE before transcript reload; `sessions.list` rows = `SessionRow`; CLI follows the kernel's session too | 3 daemon restarts ⇒ 1 session (`tests/kernel/test_session_lifecycle.py`, scenario `daemon_restart_web_dom`) · 21 scenarios strict |
 | **P3** | 4.2 two styling systems; 4.3 facade remnants | One styling system (compiled Tailwind vendored, CSP-safe) · delete hand-copied utilities + dead classes · artifact cards into the artifact pane · `tool.output.delta` into the tool card · delete terminal drawer and static pills | `python additions/tools/ui_audit.py --strict` exit 0 · `grep -c 'style="' app.js` = 0 · `pytest tests/frontends -q` |
 | **P4** | 4.7 provider truth | `Provider.is_configured()` / `is_reachable()`; `models.list` never raises; Ollama short-timeout + cache; remove `_is_provider_configured` | unit tests for both paths · scenarios strict |
 | **P5** | 4.5 tests in four places | `additions/scenarios` → `tests/scenarios`; delete `ui_smoke` duplicates; delete vacuous S1; CI runs scenarios | `pytest tests -q` includes the 20 scenarios · CI job green |
@@ -172,7 +172,96 @@ Goldens re-baselined once (`HARNESS_REPLAY=update`), then the strict run repeate
   priced sum without the flag. `CostLedger.totals()` returns a `Usage`, which has no room for the flag; revisit if
   a second provider without pricing is added.
 
-### P2 — Kernel-side session lifecycle — pending
+### P2 — Kernel-side session lifecycle — **DONE**
+
+**Baseline** (`ba74b5d`, end of P1): ruff clean · 364 pytest · 20/20 scenarios · 180 conformance.
+
+#### The defect, as the flow test recorded it
+Every web page load created a session (`init()` → `loadSessions()` → `createNewSession()` when nothing was
+active) and the `/sessions` picker showed bare ids with no title, so the user's own conversation was
+unreachable after a refresh or daemon restart. The scenario goldens had faithfully recorded this: each web
+lane golden began with **two** `session.started` events — `session#1`, an empty boot session nobody ever
+used, then `<session>`, the real one. The CLI had the same root cause from the other side: `CliApp` minted
+its own `session_<uuid>` per process, so `harness run` / `harness interactive` never resumed anything and
+the kernel's `active_session` was irrelevant to it.
+
+#### What changed
+
+*Kernel / SDK*
+- `harness/sdk/types.py`: **`SessionRow`** — the one row shape of `sessions.list`: `{session_id, workspace,
+  created_at, updated_at, title, turns, message_count, active, busy}`. Exported from `harness.sdk`.
+- `harness/kernel/session.py`: `_summarize_transcript()` (one cheap pass over `transcript.jsonl`: record
+  count, user-prompt count, first prompt as `title`, 60 chars + `…`); `list_sessions()` builds
+  `SessionRow(...).to_dict()` sorted by `updated_at` desc (creation counts as activity, so a just-created
+  empty session sorts first — intended, that is the one the user is looking at); **`resume_last()`** makes the
+  most recently updated session *with at least one turn* active and publishes `session.switched` (a resume is
+  not a start: no `SESSION_START` hooks, no `session.started`). Empty sessions are never resumed.
+- `harness/kernel/bootstrap.py`: `bootstrap_kernel(resume_session=True)` calls `resume_last()`; pass `False`
+  for an explicitly fresh start.
+- `Commands.submit_turn` without `session_id` already used-or-created the active session (F-series fix); it is
+  now the *only* way a frontend obtains a session implicitly, and the kernel announces it with `session.started`.
+
+*Web client* (`static/app.js`)
+- `init()` order is now health → settings → models/strategies → **SSE connect** → `loadSessions()` →
+  `reloadTranscript()` if the kernel marked a session active, else an empty-timeline hint
+  (`.timeline-empty`). The client never creates a session at boot. SSE is connected *before* the transcript is
+  fetched so nothing emitted in between is lost (previously the stream was attached last).
+- Composer submit sends `session_id: this.activeSessionId || undefined`; a new `session.started` handler adopts
+  the id the kernel chose (when the client has none) and refreshes the picker; `session.switched` ignores
+  same-id notifications. `#btn-new-session` remains the only explicit `sessions.create`.
+- Picker rows render `SessionRow`: `.session-title` (title or "New session"), `.session-meta` with
+  `.session-id`, `.session-turns`, `.session-when` (`updated_at`), `.session-busy`; `.session-empty` when
+  there are none. (Styling of these classes lands in P3 with the rest of the stylesheet work.)
+
+*CLI frontend* (`harness/frontends/cli/app.py`, `harness/cli.py`)
+- `CliApp.session_id` starts as `None` and resolves to the kernel's active session (`_resolve_session_id()`);
+  a turn submitted without an id adopts the session the kernel created. The banner says `(resumed)` or
+  "none yet — created on your first prompt"; `/sessions` prints Title / Turns / Last activity and marks the
+  kernel's `active` row; `/cancel` is a no-op without a session.
+- `harness run` starts a **new** session per invocation (one-shot semantics) unless `--continue/-c`;
+  `harness interactive` **resumes** unless `--new/-n`. Both are `bootstrap_kernel(resume_session=…)`.
+
+*Flow test* (`additions/scenarios`)
+- New scenario **`daemon_restart_web_dom`**: DOM lane sends two prompts with no session (first `submit_turn`
+  carries `session_id: null`, the second carries the kernel-chosen id), then `web_runner.py`
+  `_restart_daemon_and_reload()` stops the daemon, bootstraps a new kernel + server on the same workspace,
+  reloads the page and asserts: `/health.active_session` is that session, `sessions.list` is one row
+  `{title: "Question one", turns: 2, active: true}`, and the timeline shows all four texts on load without a
+  click. Expectation keys `dom_restart`, `restart_timeline_contains`, `sessions_after_restart`.
+- Goldens re-baselined for the seven web scenarios whose events began with the phantom boot session
+  (`approval_allow_web_dom`, `memory_remember_web_dom`, `plain_answer_web`, `read_then_edit_web_dom`,
+  `session_reload_web_dom`, `thinking_then_answer_web`, `tirith_blocks_ssrf_web_dom`): each diff is exactly one
+  `session.started` (`session#1`) removed, nothing else (checked per scenario with a type-count diff against
+  `HEAD`). `tirith_blocks_ssrf_web_dom` was order-dependent before (passed in one strict run, failed the next);
+  with no boot session the capture is deterministic (3/3 strict re-runs).
+
+*Tests*
+- `tests/kernel/test_session_lifecycle.py` (4): three bootstraps on one workspace ⇒ one session, lazily created
+  with `session.started`, resumed twice with `session.switched` and the transcript intact; resume skips empty
+  sessions and `resume_session=False` resumes nothing; `sessions.list` keys == `fields(SessionRow)` and title
+  truncation; CLI frontend across two "processes" ⇒ one session and the second model call sees the first
+  exchange (`ScriptedProvider.assert_requested(contains_text=…)`).
+- `tests/frontends/test_static_contract.py::test_session_picker_reads_session_row_fields_and_boot_creates_no_session`:
+  `loadSessions()` reads only `SessionRow` fields; `init()` contains no `createNewSession`; the
+  `session.started` handler exists and adopts `session_id`.
+
+#### Gate (all hermetic, `HOME`/`HARNESS_CONFIG_DIR` in a temp dir)
+
+| Check | Result |
+|---|---|
+| `ruff check .` | clean |
+| `harness events schema \| diff docs/events.schema.json -` | no diff |
+| `pytest tests -q` (with `event_contract_guard`) | **369 passed** (364 + 4 lifecycle + 1 contract) |
+| `harness plugin test --all` | **180 passed** |
+| `pytest additions/scenarios -q` (strict, DOM lane on) | **21 passed** (20 + `daemon_restart_web_dom`) |
+| Acceptance "3 restarts ⇒ 1 session" | `test_three_restarts_leave_one_session_and_resume_it`; manually: `harness run` ×2 → 2 sessions, `harness run -c` → joins newest (turns 2), next start resumes it, `interactive --new` starts clean |
+
+#### Not done in P2 (deliberately)
+- The picker classes (`.session-title/.session-meta/.session-empty/.timeline-empty`) are unstyled until P3,
+  which replaces the stylesheet wholesale; adding rules to the current `styles.css` would be deleted a phase later.
+- No "resume a specific session" CLI flag: `/switch <id>` and the web picker already cover it.
+- `sessions_index.jsonl` (written by `Session`) is not read by `list_sessions()`; the directory scan is the
+  source of truth. Dropping or using the index is a P6 hygiene item.
 ### P3 — One styling system, no facade — pending
 ### P4 — Provider truth — pending
 ### P5 — One test estate — pending

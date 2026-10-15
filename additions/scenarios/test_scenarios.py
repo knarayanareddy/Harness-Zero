@@ -125,6 +125,23 @@ def _check_expectations(sc, result) -> None:
         text = rep.get("timeline_text_on_load") or ""
         for needle in exp["reload_timeline_not_contains"]:
             assert needle not in text, f"after a page refresh the timeline shows {needle!r}"
+    if exp.get("dom_restart"):
+        rep = (result.dom or {}).get("restart") or {}
+        info = result.extra.get("restart") or {}
+        assert rep, f"restart lane did not run: {result.errors}"
+        text = rep.get("timeline_text_on_load") or ""
+        for needle in exp.get("restart_timeline_contains", []):
+            assert needle in text, (
+                f"after a daemon restart the timeline does not show {needle!r} without a click; on_load={text[:300]!r}; "
+                f"active_session_on_load={rep.get('active_session_on_load')}; health.active_session={info.get('active_session_after_restart')}; "
+                f"rows={info.get('session_rows')}; console={rep.get('console_tail')}"
+            )
+        if "sessions_after_restart" in exp:
+            assert info.get("sessions_after_restart") == exp["sessions_after_restart"], (
+                f"{info.get('sessions_after_restart')} sessions after restart, expected {exp['sessions_after_restart']}: {info.get('session_rows')}"
+            )
+        assert rep.get("active_session_on_load") == result.session_id, "the client did not land on the resumed session"
+        assert not rep.get("empty_user_bubbles")
     if exp.get("dom_turns_completed") and result.dom is not None:
         incomplete = [t for t in result.dom.get("turns", []) if not t.get("completed")]
         assert not incomplete, f"client never saw the turn finish: {incomplete}; sse={result.dom.get('sse_events')[:20]}; submit={result.dom.get('submit_bodies')}; fetch={result.dom.get('fetch_log')[-6:]}"

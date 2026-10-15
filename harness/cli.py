@@ -44,6 +44,8 @@ def main(ctx: click.Context):
 @click.option("--kernel", is_flag=True, default=True, help="Use modular kernel runtime (default: True)")
 @click.option("--verbose", "-v", is_flag=True, default=False, help="Verbose logging")
 @click.option("--log-file", default=None, help="Log file path")
+@click.option("--continue", "-c", "continue_", is_flag=True, default=False,
+              help="Continue the workspace's last conversation instead of starting a new session")
 def run(
     prompt: str,
     workspace: str,
@@ -53,9 +55,10 @@ def run(
     kernel: bool,
     verbose: bool,
     log_file: str | None,
+    continue_: bool,
 ):
     """Execute a single autonomous turn via modular kernel."""
-    asyncio.run(_run_kernel_turn(prompt, Path(workspace), provider, model, mock_script, verbose, log_file))
+    asyncio.run(_run_kernel_turn(prompt, Path(workspace), provider, model, mock_script, verbose, log_file, resume=continue_))
 
 
 async def _run_kernel_turn(
@@ -66,6 +69,7 @@ async def _run_kernel_turn(
     mock_script: str | None,
     verbose: bool,
     log_file: str | None,
+    resume: bool = False,
 ):
     try:
         overrides: dict[str, Any] = {}
@@ -80,6 +84,7 @@ async def _run_kernel_turn(
             log_file=Path(log_file) if log_file else None,
             verbose=verbose,
             overrides=overrides,
+            resume_session=resume,  # one-shot runs start fresh unless --continue
         )
 
         app = CliApp(commands=runtime.commands, bus=runtime.bus, interactive=False)
@@ -112,6 +117,8 @@ async def _run_kernel_turn(
 @click.option("--kernel", is_flag=True, default=True, help="Use modular kernel runtime (default: True)")
 @click.option("--verbose", "-v", is_flag=True, default=False, help="Verbose logging")
 @click.option("--log-file", default=None, help="Log file path")
+@click.option("--new", "-n", "new_session", is_flag=True, default=False,
+              help="Start a new session instead of resuming the workspace's last conversation")
 def interactive(
     workspace: str,
     provider: str | None,
@@ -120,9 +127,10 @@ def interactive(
     kernel: bool,
     verbose: bool,
     log_file: str | None,
+    new_session: bool,
 ):
     """Start an interactive pair-programming session with slash commands."""
-    asyncio.run(_run_kernel_interactive(Path(workspace), provider, model, mock_script, verbose, log_file))
+    asyncio.run(_run_kernel_interactive(Path(workspace), provider, model, mock_script, verbose, log_file, resume=not new_session))
 
 
 async def _run_kernel_interactive(
@@ -132,12 +140,14 @@ async def _run_kernel_interactive(
     mock_script: str | None,
     verbose: bool,
     log_file: str | None,
+    resume: bool = True,
 ):
     try:
         runtime = await bootstrap_kernel(
             workspace=workspace,
             log_file=Path(log_file) if log_file else None,
             verbose=verbose,
+            resume_session=resume,
         )
         if mock_script:
             runtime.settings.set("providers.mock.script_file", mock_script)

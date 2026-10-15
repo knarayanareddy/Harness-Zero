@@ -73,6 +73,7 @@ from harness.sdk.types import (
     RiskClass,
     Role,
     SessionInfo,
+    SessionRow,
     Stability,
     TaskInfo,
     TextBlock,
@@ -153,6 +154,7 @@ __all__ = [
     "Capability",
     "TurnResult",
     "SessionInfo",
+    "SessionRow",
     "TaskInfo",
     # Contracts
     "Plugin",

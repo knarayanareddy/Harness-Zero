@@ -410,3 +410,30 @@ async def test_economics_payload_keys_match_app_js(commands: Commands):
     indicator = _js_function_body(app_js, "updateEconomics")
     assert _member_refs(indicator, "snapshot") <= snapshot_keys, f"updateEconomics reads {sorted(_member_refs(indicator, 'snapshot') - snapshot_keys)}"
     assert "spend_cap_usd" not in indicator and "totals" not in indicator
+
+
+def test_session_picker_reads_session_row_fields_and_boot_creates_no_session():
+    """P2: sessions are kernel-owned. `loadSessions()` renders `SessionRow` keys only, and the client never
+    creates a session at boot or on submit — `submit_turn` without a session id makes the kernel create one,
+    which it announces via `session.started` (regression for review §4.4: three restarts → three empty sessions).
+    """
+    from dataclasses import fields
+
+    from harness.sdk.types import SessionRow
+
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    picker = _js_function_body(app_js, "loadSessions")
+    row_keys = {f.name for f in fields(SessionRow)}
+    assert _member_refs(picker, "s") <= row_keys, f"loadSessions reads s.{sorted(_member_refs(picker, 's') - row_keys)}"
+    assert "s.title" in picker and "s.turns" in picker, "the picker must show a human-readable title and turn count"
+
+    init = _js_function_body(app_js, "init")
+    assert "createNewSession" not in init, "init() must not create a session; the kernel resumes or creates lazily"
+    assert init.index("this.events.connect()") < init.index("this.reloadTranscript()"), "SSE must be connected before the transcript is rendered"
+
+    handlers = _event_handlers(app_js)
+    assert "session.started" in handlers and "activeSessionId" in handlers["session.started"], "the client must adopt the session the kernel created for its first prompt"
+
+    controls = _js_function_body(app_js, "bindControls")
+    assert "createNewSession" not in controls.split("btn-new-session")[0], "submit must not create a session client-side"
+    assert "session_id: this.activeSessionId || undefined" in controls
