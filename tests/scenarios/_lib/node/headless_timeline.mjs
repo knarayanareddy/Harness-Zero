@@ -21,6 +21,7 @@ const NEW_SESSION = process.env.NEW_SESSION === '1';
 const RELOAD = process.env.RELOAD === '1'; // simulate a page refresh on an existing session: no clicks, no prompts
 const APPROVE = process.env.APPROVE === '1';
 const MODEL = process.env.MODEL || '';
+const SETTINGS_PROBE = process.env.SETTINGS_PROBE === '1';
 
 const consoleLog = [];
 const vc = new VirtualConsole();
@@ -182,6 +183,15 @@ report.timeline_children = timeline ? timeline.children.length : null;
 report.timeline_text = timeline ? timeline.textContent.replace(/\s+/g, ' ').trim() : null;
 report.notices = [...window.document.querySelectorAll('#timeline .notice, #timeline [data-level], #timeline .timeline-notice')].map((n) => n.textContent.replace(/\s+/g, ' ').trim()).slice(0, 10);
 report.status_text = txt('#status-text') || null;
+if (SETTINGS_PROBE && window.HarnessApp?.openSettings) {
+  // The settings panel is schema-driven (`settings.schema` → group tabs); the old ui_smoke lane checked this.
+  window.HarnessApp.openSettings();
+  await sleep(1500);
+  report.settings_groups = [...window.document.querySelectorAll('#settings-content [data-group]')].map((b) => b.textContent.replace(/\s+/g, ' ').trim());
+  report.settings_modal_hidden = $('#settings-modal')?.classList.contains('hidden') ?? null; // stylesheets are not fetched in this lane; the cascade is covered by tests/frontends/test_ui_coherence.py
+  window.HarnessApp.closeSettings?.();
+}
+report.console_errors = consoleLog.filter((c) => c.startsWith('[error]') || c.startsWith('[jsdomError]')).slice(0, 10);
 report.sse_events = sseSeen;
 report.submit_bodies = submitBodies;
 report.fetch_log = fetchLog;

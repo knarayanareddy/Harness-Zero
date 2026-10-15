@@ -3,8 +3,8 @@
 Run from the repository root::
 
     . .venv/bin/activate
-    pytest additions/scenarios -q                 # replay (default)
-    HARNESS_REPLAY=update pytest additions/scenarios -q -k name   # accept new goldens
+    pytest tests/scenarios -q                     # replay (default; plain `pytest -q` includes them)
+    HARNESS_REPLAY=update pytest tests/scenarios -q -k name       # accept new goldens
     SCENARIO_DOM=0 pytest …                                    # skip the jsdom lane
 
 A scenario with ``xfail: <reason>`` documents a known bug: the test is expected
@@ -105,6 +105,14 @@ def _check_expectations(sc, result) -> None:
         assert not missing, f"timeline lacks {missing}; timeline={text[:400]!r}"
         idx = [i for _, i in positions]
         assert idx == sorted(idx), f"timeline order is {[n for n, _ in sorted(positions, key=lambda x: x[1])]}, expected {exp['timeline_order']}"
+    if "settings_groups_include" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        groups = result.dom.get("settings_groups") or []
+        missing = [g for g in exp["settings_groups_include"] if g not in groups]
+        assert not missing, f"settings panel lacks group tabs {missing}; has {groups}; console={result.dom.get('console_tail')}"
+        assert result.dom.get("settings_modal_hidden") is False, "settings modal did not open"
+    if exp.get("no_console_errors", True) and result.dom is not None and "console_errors" in result.dom:
+        assert result.dom["console_errors"] == [], f"browser console errors: {result.dom['console_errors']}"
     if "timeline_not_contains" in exp and result.dom is not None:
         text = result.dom.get("timeline_text") or ""
         for needle in exp["timeline_not_contains"]:

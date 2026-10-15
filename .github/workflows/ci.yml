@@ -34,9 +34,9 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install Node dependencies
+      - name: Install Node dependencies (jsdom for the scenario DOM lane, tailwindcss)
         run: |
-          npm install
+          npm ci
 
       - name: Lint with ruff
         run: |
@@ -46,7 +46,9 @@ jobs:
         run: |
           pytest -q tests/kernel/test_import_boundaries.py
 
-      - name: Run hermetic test suite
+      - name: Run hermetic test suite (kernel, plugins, frontends, e2e, scenarios)
+        env:
+          SCENARIO_DOM_WAIT_MS: "6000"
         run: |
           export HOME=$(mktemp -d)
           export HARNESS_CONFIG_DIR=$HOME/.harness
@@ -71,7 +73,7 @@ jobs:
 
       - name: Web UI static audit
         run: |
-          python additions/tools/ui_audit.py --strict
+          python tests/frontends/ui_audit.py --strict
 
       - name: Verify clean working tree
         run: |

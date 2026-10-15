@@ -33,6 +33,7 @@ from .sse import SSEReader
 
 HERE = Path(__file__).parent
 NODE_DIR = HERE / "node"
+REPO_ROOT = HERE.parents[2]  # tests/scenarios/_lib -> repo root; the one package.json (jsdom) lives there
 STATIC_DIR = Path(__import__("harness.frontends.web.server", fromlist=["x"]).__file__).parent / "static"
 
 
@@ -68,8 +69,8 @@ def dom_lane_available() -> tuple[bool, str]:
         return False, "SCENARIO_DOM=0"
     if not shutil.which("node"):
         return False, "node not on PATH"
-    if not (NODE_DIR / "node_modules" / "jsdom").exists():
-        return False, f"jsdom not installed (run: npm --prefix {NODE_DIR} ci)"
+    if not (REPO_ROOT / "node_modules" / "jsdom").exists():
+        return False, f"jsdom not installed (run: npm ci in {REPO_ROOT})"
     return True, ""
 
 
@@ -257,6 +258,9 @@ async def _run_dom_lane(base: str, sc: Scenario, token: str, *, reload: bool = F
             "APPROVE": "1" if sc.expect.get("dom_approves") else "0",
             "RELOAD": "1" if reload else "0",
             "MODEL": MODEL.id,
+            # Open the settings modal after the turns and report the schema-driven group tabs
+            # (absorbs the old tests/frontends/ui_smoke.mjs check).
+            "SETTINGS_PROBE": "1" if (not reload and sc.expect.get("settings_groups_include")) else "0",
         }
     )
     proc = await asyncio.create_subprocess_exec(

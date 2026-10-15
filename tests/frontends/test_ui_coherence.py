@@ -2,7 +2,7 @@
 
 Two checks, no daemon needed:
 
-* the static audit (``additions/tools/ui_audit.py --strict``): every id JS touches exists and every id in the
+* the static audit (``tests/frontends/ui_audit.py --strict``): every id JS touches exists and every id in the
   page is referenced; every class used is defined in ``styles.css`` or the compiled ``vendor/tw.css`` and
   every class ``styles.css`` defines is used; no inline ``style=`` anywhere; exactly those two stylesheets,
   in that order; scripts only from ``/static``;
@@ -23,7 +23,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 STATIC = ROOT / "harness" / "frontends" / "web" / "static"
-AUDIT = ROOT / "additions" / "tools" / "ui_audit.py"
+AUDIT = Path(__file__).with_name("ui_audit.py")
 
 
 def _load_audit():

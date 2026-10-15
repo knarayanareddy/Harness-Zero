@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — P5 one test estate (`review/CONSOLIDATION_LOG.md`)
+- The flow-of-information suite moved from `additions/scenarios` to **`tests/scenarios`** and is part of plain `pytest -q` (kernel, plugins, frontends, e2e and the 21 record/replay scenarios in one invocation; CI runs it with the jsdom DOM lane, `SCENARIO_DOM_WAIT_MS=6000`).
+- One `package.json` at the repository root (`jsdom 24.1.3`, `tailwindcss 3.4.17`; `npm ci`); the nested `tests/scenarios/_lib/node/package.json` is gone and the headless script resolves jsdom from the root install.
+- `tests/frontends/ui_smoke.mjs`, `tests/frontends/test_ui_smoke.py` and `review/tools/ui_smoke.mjs` deleted; their remaining unique checks (settings modal opens with schema-driven group tabs, no browser console errors) are scenario expectations (`settings_groups_include`, `no_console_errors`) asserted by `plain_answer_web`.
+- `tests/e2e/test_scenarios_s1_s6.py::test_scenario_s1_safe_daemon` deleted — it tested a throw-away aiohttp app; the real 401/415/421 checks live in `tests/frontends/test_web_server.py`.
+- `additions/tools/ui_audit.py` → `tests/frontends/ui_audit.py` (still a CLI: `python tests/frontends/ui_audit.py --strict`).
+
 ### Changed — P4 provider truth lives in the provider (`review/CONSOLIDATION_LOG.md`)
 - **SDK contract:** `Provider.is_configured() -> bool` and `async Provider.is_reachable() -> bool | None` are part of `harness.sdk.contracts.Provider`; `list_models()` returns the provider's catalogue with or without credentials (no network call when unconfigured, `ProviderError(kind="auth")` only when real credentials are rejected). `ProviderKit.test_readiness()` checks both; the scaffold and `docs/PORTING_RECIPES.md` show them. **Breaking for third-party providers:** the registry now refuses to register a provider that lacks any contract member (`PluginLoadError` naming them).
 - **`models.list` rows are `harness.sdk.types.ModelRow`:** `{id, display_name, provider, context_tokens, input_usd_per_mtok, output_usd_per_mtok, configured, reachable, status}` with `status` ∈ `ready` / `needs_key` / `unreachable`. Probes run concurrently, a failing provider is logged at DEBUG and skipped, the command never raises. `Commands._is_provider_configured()` (secret-name heuristics) is gone.

@@ -5,11 +5,10 @@
   "type": "module",
   "scripts": {
     "build:css": "tailwindcss -c tailwind.config.cjs -o harness/frontends/web/static/vendor/tw.css",
-    "check:css": "tailwindcss -c tailwind.config.cjs -o /tmp/tw.check.css && cmp -s /tmp/tw.check.css harness/frontends/web/static/vendor/tw.css || (echo 'vendor/tw.css is stale: run npm run build:css' && exit 1)",
-    "test:ui": "node tests/frontends/ui_smoke.mjs"
+    "check:css": "tailwindcss -c tailwind.config.cjs -o /tmp/tw.check.css && cmp -s /tmp/tw.check.css harness/frontends/web/static/vendor/tw.css || (echo 'vendor/tw.css is stale: run npm run build:css' && exit 1)"
   },
   "devDependencies": {
-    "jsdom": "^24.0.0",
+    "jsdom": "24.1.3",
     "tailwindcss": "3.4.17"
   }
 }

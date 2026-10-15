@@ -23,13 +23,18 @@ registry now rejects providers that lack them, so `scenarios/_lib/replay_provide
 web lanes caught the gap: without it the picker lost `replay-v1` and the DOM lane sent prompts with no model).
 `tools/ui_audit.py --strict` became the P3 gate and runs in CI together with `npm run build:css` freshness.
 
+**Update after consolidation P5 — the runnable parts moved into the build.** `additions/scenarios/` is now
+`tests/scenarios/` (part of plain `pytest -q`, CI runs it with the DOM lane) and `additions/tools/ui_audit.py` is
+`tests/frontends/ui_audit.py` (next to `test_ui_coherence.py`, still a CLI). This folder keeps the documents
+(`FLOW_TEST_FINDINGS.md`) and the portable patch; the paths below are historical.
+
 ## Contents
 
 | path | what it is | use it for |
 |---|---|---|
 | `FLOW_TEST_FINDINGS.md` | The executed test's findings F-1 … F-12: symptom, evidence, root cause, fix location, regression test, status. §3 lists every `harness/` file touched. §4 corrects the integration pack. **§5 is the per-subsystem matrix** (plugins, skills, memory, diff/checkpoints, auth, guardrails, sessions, MCP, providers) of what is proven and what is not. | Knowing what is fixed, what is left, and how much to trust each subsystem. |
-| `scenarios/` | 20 record/replay scenarios: real kernel → real web daemon → the shipped `app.js`/`events.js`/`cards.js` in jsdom, model replayed from `provider.jsonl`, goldens per scenario. `scenarios/README.md` documents the schema, the three lanes, how to record from a real provider, and how to move it into `tests/`. | Regression gate for every later change (`pytest additions/scenarios -q`). WS-01 of the integration pack in working form. |
-| `tools/ui_audit.py` | Static coherence audit of the shipped web UI: ids referenced by JS vs `index.html`, CSS classes used but undefined / defined but unused, inline `style=` counts, loaded scripts. `--json` for machines, `--strict` as an acceptance gate (0 missing ids, 0 undefined classes). Added by the `158c836` review (`review/CODE_REVIEW_158c836.md` §4.2, plan P3). | Measuring the styling/facade consolidation; run it before and after UI changes. |
+| `scenarios/` → **now `tests/scenarios/`** | 21 record/replay scenarios: real kernel → real web daemon → the shipped `app.js`/`events.js`/`cards.js` in jsdom, model replayed from `provider.jsonl`, goldens per scenario. `scenarios/README.md` documents the schema, the three lanes, how to record from a real provider, and how to move it into `tests/`. | Regression gate for every later change (`pytest additions/scenarios -q`). WS-01 of the integration pack in working form. |
+| `tools/ui_audit.py` → **now `tests/frontends/ui_audit.py`** | Static coherence audit of the shipped web UI: ids referenced by JS vs `index.html`, CSS classes used but undefined / defined but unused, inline `style=` counts, loaded scripts. `--json` for machines, `--strict` as an acceptance gate (0 missing ids, 0 undefined classes). Added by the `158c836` review (`review/CODE_REVIEW_158c836.md` §4.2, plan P3). | Measuring the styling/facade consolidation; run it before and after UI changes. |
 | `patches/runtime-fixes-vs-main-f32faf1.patch` | `git diff f32faf1 -- harness tests`: all runtime changes of PR #4 (memory/MCP fixes of Addendum A + flow-test fixes F-1…F-12 + the 4 new kernel tests). 22 files, +677/−96. | Porting the fixes onto another checkout: `git apply additions/patches/runtime-fixes-vs-main-f32faf1.patch`. Redundant once PR #4 is merged — kept for reuse elsewhere. |
 
 Related material that stays where the review convention puts it:
@@ -77,11 +82,11 @@ exercised; cancel-mid-turn, compaction, CLI, ACP bridge and the settings UI are 
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate && pip install -q -e ".[dev]"
-npm --prefix additions/scenarios/_lib/node ci                         # jsdom lane, once (node >= 18)
-export HOME=$(mktemp -d) HARNESS_CONFIG_DIR=$HOME/.harness            # hermetic: never your real ~/.harness
-pytest additions/scenarios -q                                         # 20 passed (~2.5 min, DOM lane included)
-SCENARIO_DOM=0 pytest additions/scenarios -q                          # without node
-pytest tests -q                                                       # 357 passed
+npm ci                                                                # jsdom lane, once (node >= 18; single root package.json)
+export HOME=$(mktemp -d); export HARNESS_CONFIG_DIR=$HOME/.harness    # hermetic: never your real ~/.harness (two statements!)
+pytest tests/scenarios -q                                             # 21 passed (~3 min, DOM lane included)
+SCENARIO_DOM=0 pytest tests/scenarios -q                              # without node
+pytest -q                                                             # everything: kernel, plugins, frontends, e2e, scenarios
 ```
 
 `HARNESS_REPLAY=update` rewrites goldens — read the diff before committing one; a golden accepted
@@ -89,9 +94,7 @@ with a bug inside just freezes the bug.
 
 ## Use it later
 
-1. **Adopt the suite:** `git mv additions/scenarios tests/scenarios`, add `tests/scenarios` to
-   `testpaths` in `pyproject.toml`, give CI `node` (or `SCENARIO_DOM=0`). Nothing in the suite depends
-   on its location (repo root is found by walking up to `pyproject.toml` + `harness/`).
+1. **Adopt the suite:** done in consolidation P5 (`tests/scenarios`, in `pytest -q` and CI).
 2. **Record from a real model:** wrap the configured provider in `scenarios/_lib/replay_provider.py::RecordingProvider`
    (refuses to write if a key value appears in the stream), replace `recorded_from: synthetic`.
 3. **Start the workstreams** in `review/dsh-integration/plan.yaml` order; each spec's acceptance

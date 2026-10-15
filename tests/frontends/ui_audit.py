@@ -18,9 +18,9 @@ may be defined in either; only ``styles.css`` is checked for dead rules, because
 compiled file by construction contains only names found in the templates.
 
 Usage:
-    python additions/tools/ui_audit.py                 # human-readable report, exit 0
-    python additions/tools/ui_audit.py --json          # machine-readable
-    python additions/tools/ui_audit.py --strict        # exit 1 on any finding (the P3 gate)
+    python tests/frontends/ui_audit.py                 # human-readable report, exit 0
+    python tests/frontends/ui_audit.py --json          # machine-readable
+    python tests/frontends/ui_audit.py --strict        # exit 1 on any finding (the P3 gate; CI runs it)
 
 ``--strict`` fails on: missing ids, unreferenced ids, undefined classes, unused classes,
 inline style attributes, a stylesheet other than the two above, a stylesheet order other

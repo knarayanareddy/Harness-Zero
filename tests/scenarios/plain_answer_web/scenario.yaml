@@ -10,3 +10,7 @@ expect:
   timeline_contains: ["What is the capital of the Netherlands?", "is Amsterdam."]
   event_types_include: [turn.started, model.text.delta, turn.completed]
   event_types_exclude: [turn.error, turn.cancelled]
+  # The settings modal opens and is schema-driven (group tabs come from `settings.schema`), and the page
+  # logs no console errors — formerly tests/frontends/ui_smoke.mjs.
+  settings_groups_include: ["Models & Providers", "Secrets"]
+  no_console_errors: true

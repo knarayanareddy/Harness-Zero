@@ -6,6 +6,5 @@ compares normalised transcripts / event sequences / rendered timelines against
 committed goldens. Everything here imports only public ``harness.*`` modules;
 nothing patches the kernel.
 
-Integration path: ``git mv additions/scenarios tests/scenarios``
-(see README.md in this directory).
+Lives in ``tests/scenarios`` since consolidation P5 (moved from ``additions/scenarios``; see README.md).
 """

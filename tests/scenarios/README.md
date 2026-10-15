@@ -33,16 +33,16 @@ scenarios/
 
 ```bash
 # from the repo root, inside the project venv
-pytest additions/scenarios -q                       # replay against goldens (default)
-pytest additions/scenarios -q -k web                # only the web/jsdom lane
-HARNESS_REPLAY=update pytest additions/scenarios -q # accept new goldens (inspect the diff!)
-SCENARIO_DOM=0 pytest additions/scenarios -q        # skip the jsdom lane (no node)
+pytest tests/scenarios -q                           # replay against goldens (default; `pytest -q` includes them)
+pytest tests/scenarios -q -k web                    # only the web/jsdom lane
+HARNESS_REPLAY=update pytest tests/scenarios -q     # accept new goldens (inspect the diff!)
+SCENARIO_DOM=0 pytest tests/scenarios -q            # skip the jsdom lane (no node)
 SCENARIO_DOM_WAIT_MS=6000 ...                                     # per-turn wait in the browser lane
 ```
 
-The jsdom lane needs `node` ≥ 18 and a one-time
-`npm --prefix additions/scenarios/_lib/node ci` (lockfile pinned, jsdom 24.1.3;
-`node_modules/` is git-ignored). If node or jsdom is missing the lane is reported in `errors`
+The jsdom lane needs `node` ≥ 18 and a one-time `npm ci` at the repository root (the single
+`package.json`; jsdom pinned in `package-lock.json`, `node_modules/` git-ignored — the headless script
+resolves it by walking up). If node or jsdom is missing the lane is reported in `errors`
 and `timeline_*` / `dom_turns_completed` expectations fail — they never silently pass.
 
 Always run hermetically so your own `~/.harness` cannot leak into a golden; `conftest.py`
@@ -159,9 +159,12 @@ bogus ticket are rejected with 401 (`http.json`, entry `unauthenticated`).
 
 Findings produced by running these live in `../FLOW_TEST_FINDINGS.md`.
 
-## Moving into the build
+## In the build (consolidation P5)
 
-- `git mv additions/scenarios tests/scenarios` (keep `conftest.py`); add
-  `tests/scenarios` to `testpaths`; CI needs `node` for the DOM lane or `SCENARIO_DOM=0`.
-- `_lib/replay_provider.py` is the seed of `harness/sdk/testing/replay.py` (WS-01).
+- The suite lives at `tests/scenarios` and runs with the rest of `pytest -q` (`testpaths = ["tests"]`);
+  CI installs node + `npm ci` for the DOM lane and sets `SCENARIO_DOM_WAIT_MS=6000`.
+- `plain_answer_web` also opens the settings modal and asserts the schema-driven group tabs and a clean
+  browser console (`settings_groups_include`, `no_console_errors`) — the former `ui_smoke` checks.
+- `_lib/replay_provider.py` is the seed of `harness/sdk/testing/replay.py` (WS-01); it implements the full
+  `Provider` contract (`is_configured` / `is_reachable`) because the registry now enforces it.
 - `_lib/normalize.py` rules are the place to add new volatile fields when goldens flap.

@@ -1,7 +1,9 @@
 """
 End-to-End Acceptance Scenarios S1 through S6 (§1.3, KRN-12).
 Verifies the modular kernel and Phase 3a plugins (PLG-01..PLG-10) end-to-end:
-  S1: Safe daemon / endpoint security (auth, content-type, host checks)
+  S1: Safe daemon / endpoint security — removed in consolidation P5: it tested a throw-away aiohttp app,
+      not HarnessWebServer. The real checks live in tests/frontends/test_web_server.py
+      (test_health_and_host_guard: 421; test_auth_guard_and_commands_dispatch: 401, 415).
   S2: Configure & converse with real usage and economics ledger
   S3: Surgical edit inside workspace with diff card, no commit
   S4: Approval gate: interactive prompt or broker deny / approve
@@ -13,9 +15,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-import httpx
 import pytest
-from aiohttp import web
 
 from harness.frontends.cli.app import CliApp
 from harness.kernel.bootstrap import bootstrap_kernel
@@ -52,85 +52,6 @@ async def setup_kernel_environment(tmp_path: Path):
 
 # =============================================================================
 # Scenario S1: Safe Daemon
-# =============================================================================
-@pytest.mark.asyncio
-async def test_scenario_s1_safe_daemon(tmp_path: Path):
-    """
-    S1 Acceptance:
-    - Unauthenticated requests to non-public endpoints return 401.
-    - Non-JSON POST to RPC returns 415.
-    - Invalid Host header returns 403 or 421.
-    - Valid token and valid Host succeeds.
-    """
-    auth_token = "test_secret_token_123"
-    allowed_hosts = ["127.0.0.1", "localhost"]
-
-    @web.middleware
-    async def host_guard_middleware(request: web.Request, handler):
-        host = request.headers.get("Host", "").split(":")[0]
-        if host not in allowed_hosts:
-            return web.Response(status=421, text="Misdirected Request")
-        return await handler(request)
-
-    @web.middleware
-    async def content_type_middleware(request: web.Request, handler):
-        if request.method == "POST":
-            ct = request.headers.get("Content-Type", "").split(";")[0].strip()
-            if ct != "application/json":
-                return web.Response(status=415, text="Unsupported Media Type")
-        return await handler(request)
-
-    @web.middleware
-    async def auth_middleware(request: web.Request, handler):
-        if request.path in ("/health", "/", "/ui"):
-            return await handler(request)
-        token = request.headers.get("X-Harness-Token", "")
-        if token != auth_token:
-            return web.Response(status=401, text="Unauthorized")
-        return await handler(request)
-
-    server_app = web.Application(middlewares=[host_guard_middleware, content_type_middleware, auth_middleware])
-    async def _health(_): return web.Response(text="OK")
-    async def _rpc(_): return web.json_response({"ok": True})
-    server_app.router.add_get("/health", _health)
-    server_app.router.add_post("/rpc", _rpc)
-
-    app_runner = web.AppRunner(server_app)
-    await app_runner.setup()
-    site = web.TCPSite(app_runner, host="127.0.0.1", port=0)
-    await site.start()
-    port = site._server.sockets[0].getsockname()[1]
-    base_url = f"http://127.0.0.1:{port}"
-
-    try:
-        async with httpx.AsyncClient() as client:
-            # 1. Host header validation: evil.example -> 403 or 421
-            res_evil_host = await client.get(f"{base_url}/health", headers={"Host": "evil.example"})
-            assert res_evil_host.status_code in (403, 421), f"Expected 403 or 421, got {res_evil_host.status_code}"
-
-            # 2. Content-Type check on POST: text/plain -> 415
-            res_bad_ct = await client.post(
-                f"{base_url}/rpc",
-                headers={"Content-Type": "text/plain", "X-Harness-Token": auth_token},
-                content=b"{}",
-            )
-            assert res_bad_ct.status_code == 415, f"Expected 415, got {res_bad_ct.status_code}"
-
-            # 3. Unauthenticated POST to RPC -> 401
-            res_no_auth = await client.post(
-                f"{base_url}/rpc",
-                headers={"Content-Type": "application/json"},
-                json={},
-            )
-            assert res_no_auth.status_code == 401, f"Expected 401, got {res_no_auth.status_code}"
-
-            # 4. Valid token and health -> 200
-            res_health = await client.get(f"{base_url}/health")
-            assert res_health.status_code == 200
-    finally:
-        await app_runner.cleanup()
-
-
 # =============================================================================
 # Scenario S2: Configure & Converse with Real Usage / Economics
 # =============================================================================

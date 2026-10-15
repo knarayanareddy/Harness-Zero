@@ -20,7 +20,7 @@ what the flow test showed, what moved in the goldens and why). §3 collects defe
 | **P2** ✔ | 4.4 browser-driven sessions | Kernel owns session lifecycle: lazy create on first `submit_turn`, resume on start; web `init()` no longer creates sessions; SSE before transcript reload; `sessions.list` rows = `SessionRow`; CLI follows the kernel's session too | 3 daemon restarts ⇒ 1 session (`tests/kernel/test_session_lifecycle.py`, scenario `daemon_restart_web_dom`) · 21 scenarios strict |
 | **P3** ✔ | 4.2 two styling systems; 4.3 facade remnants | One styling system: `styles.css` rewritten (components only) + compiled Tailwind `vendor/tw.css` (CSP-safe, committed, CI-checked) · artifact cards into the Artifacts tab · `tool.output.delta` into the tool card · terminal drawer, slash menu and every static pill removed or made live · `.hidden` finally defined (R14) | `python additions/tools/ui_audit.py --strict` exit 0 · `grep -c 'style="' app.js` = 0 · `tests/frontends/test_ui_coherence.py` (audit + jsdom cascade) · 21 scenarios strict |
 | **P4** ✔ | 4.7 provider truth | `Provider.is_configured()` / `is_reachable()` in the SDK contract, implemented by all five providers + `ScriptedProvider`; `models.list` → `ModelRow` with `status` ready / needs_key / unreachable, concurrent probes, never raises, DEBUG only; Ollama 300 ms probe cached 30 s; `_is_provider_configured` deleted; registry rejects providers that skip the contract; picker groups by status | `tests/plugins/test_provider_readiness.py` (hermetic bootstrapped `models.list`) · `test_ollama.py` probe tests · contract tests · 21 scenarios strict |
-| **P5** | 4.5 tests in four places | `additions/scenarios` → `tests/scenarios`; delete `ui_smoke` duplicates; delete vacuous S1; CI runs scenarios | `pytest tests -q` includes the 20 scenarios · CI job green |
+| **P5** ✔ | 4.5 tests in four places | `additions/scenarios` → `tests/scenarios` (in plain `pytest -q`); `ui_audit.py` → `tests/frontends/`; both `ui_smoke.mjs` + `test_ui_smoke.py` deleted, their unique checks absorbed by the DOM lane; vacuous S1 deleted; one `package.json` (jsdom + tailwindcss, `npm ci`); CI runs everything with `SCENARIO_DOM_WAIT_MS=6000` | `pytest -q` → 406 in one invocation (incl. 21 scenarios) · `find . -name package.json -not -path '*/node_modules/*' \| wc -l` = 1 · no `ui_smoke*` |
 | **P6** | 4.6 version/doc drift | CHANGELOG restructure; `/health.version` from `harness.__version__`; README counts; `docs/ARCHITECTURE.md`; research docs under `docs/research/` | `harness --version` == `/health.version` == CHANGELOG top entry |
 
 Order is deliberate: P1 first because every later phase (UI, sessions, providers) needs a stable wire contract to
@@ -458,7 +458,60 @@ Same hermetic daemon: **17 rows in 74 ms** (25 ms cached): `mock → ready`, `ol
   provider has no ready model" — that needs the same `ModelRow` data and belongs with the settings UI.
 - Hosted providers are never probed (`reachable: null`); a bad key still surfaces at call time as
   `turn.error{kind: auth}`, which the client already renders.
-### P5 — One test estate — pending
+### P5 — One test estate — **DONE**
+
+**Baseline** (`a02698b`, end of P4): tests in four places — `tests/{kernel,plugins,frontends,e2e}` (387, in
+CI), `additions/scenarios` (21, *not* in CI, own `conftest.py` and own `_lib/node/package.json`),
+`tests/frontends/ui_smoke.mjs` + `test_ui_smoke.py` (a second jsdom bootstrap on fixed ports 8791/8792),
+`review/tools/ui_smoke.mjs` (a third, from the v0.2.1 review); two `package.json`; `additions/tools/ui_audit.py`
+used by CI but living in a "review material" folder; `tests/e2e/test_scenarios_s1_s6.py::test_scenario_s1_safe_daemon`
+asserting 401/415/421 against a throw-away aiohttp app it built itself.
+
+#### What changed
+- `git mv additions/scenarios tests/scenarios`. Nothing in the suite depended on its location except the
+  jsdom lookup: `web_runner.dom_lane_available()` now checks `<repo>/node_modules/jsdom` (Node resolves
+  modules by walking up from `tests/scenarios/_lib/node/headless_timeline.mjs`, so the root install is the
+  only one needed). `_lib/node/package.json` + lock + `node_modules` deleted. The scenario `conftest.py`
+  keeps its `hermetic_env` fixture (it shadows the root autouse fixture of the same name inside
+  `tests/scenarios`, with the same guarantees plus the returned config path the runners need).
+- `pyproject.toml` already had `testpaths = ["tests"]`, so **plain `pytest -q` now runs kernel + plugins +
+  frontends + e2e + scenarios in one invocation**; the per-scenario `_last_run/` stays git-ignored via
+  `tests/scenarios/.gitignore`.
+- `git mv additions/tools/ui_audit.py tests/frontends/ui_audit.py` — next to `test_ui_coherence.py`, which
+  now imports it by sibling path; still a CLI (`python tests/frontends/ui_audit.py --strict                 # web UI coherent (ids, classes, inline styles, stylesheets)`). README and CI
+  updated.
+- `tests/frontends/ui_smoke.mjs`, `tests/frontends/test_ui_smoke.py`, `review/tools/ui_smoke.mjs` deleted.
+  Their only checks the scenario DOM lane did not already make — the settings modal opens and its group
+  tabs are schema-driven, and the page logs no console errors — moved into the lane: `headless_timeline.mjs`
+  takes `SETTINGS_PROBE=1`, reports `settings_groups`, `settings_modal_hidden`, `console_errors`; new
+  expectation keys `settings_groups_include` and `no_console_errors` (default on); `plain_answer_web`
+  asserts `["Models & Providers", "Secrets"]` and a clean console (the lane sees all five groups:
+  Models & Providers, Security & Sandboxing, Execution & Strategies, Economics & Spend, Secrets).
+- `test_scenario_s1_safe_daemon` deleted; the module docstring points at the real checks
+  (`test_web_server.py::test_health_and_host_guard` → 421, `test_auth_guard_and_commands_dispatch` → 401 + 415).
+- One `package.json`: `jsdom` pinned to the version the lane was validated with (`24.1.3`, previously
+  `^24.0.0` at the root and `24.1.3` in the nested file), `tailwindcss 3.4.17`, `test:ui` script removed;
+  CI uses `npm ci` (lockfile) and runs the hermetic `pytest -q` with `SCENARIO_DOM_WAIT_MS=6000`.
+
+#### Gate (hermetic)
+
+| Check | Result |
+|---|---|
+| `ruff check .` | clean |
+| `harness events schema \| diff docs/events.schema.json -` | no diff |
+| `npm run build:css && git diff --exit-code -- …/vendor/tw.css` | fresh |
+| `python tests/frontends/ui_audit.py --strict                 # web UI coherent (ids, classes, inline styles, stylesheets)` | exit 0 |
+| `SCENARIO_DOM_WAIT_MS=6000 pytest -q` (one invocation) | **406 passed in 5 min 02 s** = 387 − `test_ui_smoke` − S1 + 21 scenarios |
+| `harness plugin test --all` | **180 passed** |
+| `find . -name package.json -not -path '*/node_modules/*' \| wc -l` | 1 |
+| `find . -name 'ui_smoke*'` | nothing |
+
+#### Not done in P5
+- The DOM lane does not fetch stylesheets (jsdom without `resources: "usable"`), so it asserts class state
+  (`settings_modal_hidden`), not computed display; the cascade is covered by `test_ui_coherence.py`.
+- `tests/experimental/` and `tests/fixtures/` were not touched.
+- CI still runs `harness plugin test --all` (= `pytest tests/plugins`) after `pytest -q` — redundant but it is
+  the documented user command; drop it in P6 if the README stops advertising it.
 ### P6 — Version / doc hygiene — pending
 
 ---
@@ -492,13 +545,11 @@ Same hermetic daemon: **17 rows in 74 ms** (25 ms cached): `mock → ready`, `ol
 python3 -m venv .venv && . .venv/bin/activate && pip install -q -e ".[dev]"
 export HOME=$(mktemp -d); export HARNESS_CONFIG_DIR=$HOME/.harness; mkdir -p "$HARNESS_CONFIG_DIR"   # two statements: $HOME must be re-evaluated
 ruff check .
-python -m pytest tests -q                                   # hermetic suite (+ event_contract_guard)
-python -m harness.cli plugin test --all                     # plugin conformance
+npm ci --silent && npm run build:css && git diff --exit-code -- harness/frontends/web/static/vendor/tw.css   # jsdom + tailwind; compiled utilities fresh
+SCENARIO_DOM_WAIT_MS=6000 python -m pytest -q               # everything, one invocation (since P5: kernel, plugins, frontends, e2e, 21 scenarios; event_contract_guard)
+python -m harness.cli plugin test --all                     # plugin conformance (= pytest tests/plugins)
 python -m harness.cli events schema | diff docs/events.schema.json -
-npm install --silent && npm run build:css && git diff --exit-code -- harness/frontends/web/static/vendor/tw.css   # compiled utilities fresh
-python additions/tools/ui_audit.py --strict                 # web UI coherent (ids, classes, inline styles, stylesheets)
-npm --prefix additions/scenarios/_lib/node ci --silent      # jsdom lane deps (once per checkout)
-SCENARIO_DOM_WAIT_MS=6000 python -m pytest additions/scenarios -q          # flow-of-information, strict
-# only when a change is *meant* to move the wire: re-baseline once, inspect `git diff additions/scenarios/*/golden`, then strict again
-HARNESS_REPLAY=update SCENARIO_DOM_WAIT_MS=6000 python -m pytest additions/scenarios -q
+python tests/frontends/ui_audit.py --strict                 # web UI coherent (ids, classes, inline styles, stylesheets)
+# only when a change is *meant* to move the wire: re-baseline once, inspect `git diff tests/scenarios/*/golden`, then strict again
+HARNESS_REPLAY=update SCENARIO_DOM_WAIT_MS=6000 python -m pytest tests/scenarios -q -k <scenario>
 ```
