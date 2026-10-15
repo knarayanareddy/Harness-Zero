@@ -4,7 +4,7 @@ subscribers, so with N subscribers every chunk after the first was appended N
 times ("…is Amsterdam.is Amsterdam.is Amsterdam." in the web UI, which always
 has at least two subscribers: the SSE replay buffer and the browser).
 
-Found by review/dsh-integration/scenarios/plain_answer_web (flow-of-information
+Found by additions/scenarios/plain_answer_web (flow-of-information
 test, FLOW_TEST_FINDINGS.md F-6).
 """
 from __future__ import annotations

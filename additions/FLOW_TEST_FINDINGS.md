@@ -152,11 +152,11 @@ Not part of the suite at all: CLI frontend, ACP bridge, settings UI, artifacts p
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate && pip install -q -e ".[dev]"
-npm --prefix review/dsh-integration/scenarios/_lib/node ci          # jsdom lane, once
+npm --prefix additions/scenarios/_lib/node ci          # jsdom lane, once
 export HOME=$(mktemp -d) HARNESS_CONFIG_DIR=$HOME/.harness           # hermetic
-pytest review/dsh-integration/scenarios -q                            # 20 passed
+pytest additions/scenarios -q                            # 20 passed
 pytest tests -q                                                       # 357 passed
 ```
 
 To see any P0 again, revert one file and run its scenario — e.g. `git stash push -- harness/kernel/bus.py`
-then `pytest review/dsh-integration/scenarios -q -k plain_answer_web` reproduces the triplicated text.
+then `pytest additions/scenarios -q -k plain_answer_web` reproduces the triplicated text.

@@ -5,7 +5,7 @@ Before the fix, ``TurnRunner`` built ``ThinkingBlock(thinking=...)`` while the d
 ``text`` (sdk/types.py), and every consumer (single_loop / architect_editor strategies, the
 Anthropic provider, the runner's legacy loop) read ``block.thinking``. Net effect: any provider
 that emitted a ``ThinkingDelta`` ended the turn in ``turn.error`` and the thinking never reached
-``TurnResult.thinking``. Found by review/dsh-integration/scenarios/thinking_then_answer_web.
+``TurnResult.thinking``. Found by additions/scenarios/thinking_then_answer_web.
 """
 from __future__ import annotations
 

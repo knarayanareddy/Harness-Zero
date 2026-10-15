@@ -1,0 +1,1284 @@
+diff --git a/harness/frontends/web/static/app.js b/harness/frontends/web/static/app.js
+index 41b3e0a..4bc0d80 100644
+--- a/harness/frontends/web/static/app.js
++++ b/harness/frontends/web/static/app.js
+@@ -49,8 +49,12 @@ export class HarnessStudioApp {
+     await this.populateModels();
+     await this.populateStrategies();
+ 
+-    // 4. Load Sessions
++    // 4. Load Sessions (and re-render the active session's history: a page refresh
++    //    must show the conversation again, not the welcome screen)
+     await this.loadSessions();
++    if (this.activeSessionId) {
++      await this.reloadTranscript();
++    }
+ 
+     // 5. Connect SSE Event Stream
+     this.setupEventHandlers();
+@@ -124,6 +128,13 @@ export class HarnessStudioApp {
+ 
+     // Tool execution & cards
+     this.events.on('tool.call', (data) => {
++      // Text streamed before this call stays above the card; text from the next model
++      // call starts a fresh block below it (model.text.delta creates one on demand).
++      if (this.currentAssistantBlock) {
++        const hasContent = (this.currentTextElement?.textContent || '') || this.currentThinkingElement;
++        if (hasContent) this.finalizeStreamingBlock();
++        else { this.currentAssistantBlock.remove(); this.finalizeStreamingBlock(); }
++      }
+       this.appendToolCall(data);
+     });
+ 
+@@ -202,10 +213,17 @@ export class HarnessStudioApp {
+ 
+         // Submit to API
+         try {
+-          const model = document.getElementById('model-select')?.value;
++          // A fresh daemon has no active session: create one instead of sending session_id: null.
++          if (!this.activeSessionId) {
++            await this.createNewSession();
++          }
++          const select = document.getElementById('model-select');
++          const model = select?.value;
++          const provider = select?.selectedOptions?.[0]?.dataset?.provider;
+           await this.api.submitTurn(text, {
+             session_id: this.activeSessionId,
+             model: model || undefined,
++            provider: model && provider ? provider : undefined,
+           });
+         } catch (err) {
+           this.appendNotice(`Submit failed: ${err.message}`, 'error');
+@@ -541,11 +559,17 @@ export class HarnessStudioApp {
+     if (card) {
+       const badge = card.querySelector('.uppercase');
+       if (badge) {
+-        badge.textContent = data.decision || 'ALLOWED';
+-        if (data.decision === 'DENIED') {
++        // Kernel payload: {action: allow|deny|ask, policy, reason, risk} (kernel/gate.py).
++        const action = String(data.action || data.decision || 'allow').toLowerCase();
++        if (action === 'deny' || action === 'denied') {
++          badge.textContent = 'DENIED';
+           badge.className = 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-red-900/60 text-red-300 border border-red-800';
+-        } else if (data.decision === 'APPROVAL_REQUIRED') {
++          if (data.reason) badge.title = data.reason;
++        } else if (action === 'ask' || action === 'approval_required') {
++          badge.textContent = 'APPROVAL REQUIRED';
+           badge.className = 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-amber-900/60 text-amber-300 border border-amber-800';
++        } else {
++          badge.textContent = 'ALLOWED';
+         }
+       }
+     }
+@@ -557,18 +581,19 @@ export class HarnessStudioApp {
+     const card = document.querySelector(`.harness-card-tool[data-call-id="${callId}"]`);
+     if (card) {
+       const badge = card.querySelector('.uppercase');
+-      if (badge && badge.textContent === 'RUNNING') {
++      if (badge && badge.textContent !== 'DENIED') {
+         badge.textContent = data.is_error ? 'ERROR' : 'COMPLETED';
+         badge.className = data.is_error
+           ? 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-red-900/60 text-red-300 border border-red-800'
+           : 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-emerald-900/60 text-emerald-300 border border-emerald-800';
+       }
+ 
+-      // Append result preview if not already present
+-      if (!card.querySelector('.text-emerald-300')) {
+-        const resultStr = escapeHtml(typeof data.result === 'object' ? JSON.stringify(data.result, null, 2) : String(data.result || ''));
++      // Append result preview if not already present (kernel payload: {preview, is_error, metadata}).
++      if (!card.querySelector('.tool-output')) {
++        const value = data.result ?? data.preview ?? data.output ?? '';
++        const resultStr = escapeHtml(typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value));
+         const resDiv = document.createElement('div');
+-        resDiv.className = 'mt-2 text-xs';
++        resDiv.className = 'mt-2 text-xs tool-output';
+         resDiv.innerHTML = `<div class="text-gray-400 font-mono font-medium mb-1">Output:</div><pre class="p-2 bg-gray-950/90 rounded border border-gray-800 text-emerald-300 font-mono overflow-x-auto max-h-48">${resultStr}</pre>`;
+         card.appendChild(resDiv);
+       }
+@@ -648,20 +673,23 @@ export class HarnessStudioApp {
+   }
+ 
+   showApproval(data) {
++    // The kernel's approval events carry `approval_id` (kernel/approvals.py);
++    // older payloads used `request_id`. Accept both so the buttons always work.
++    const reqId = data.approval_id || data.request_id || data.id || '';
+     // 1. Append approval card to timeline
+-    const card = { kind: 'approval', payload: data };
++    const card = { kind: 'approval', payload: { ...data, request_id: reqId } };
+     this.appendCard(card);
+ 
+     // 2. Show top banner for high visibility
+     const banner = document.getElementById('approval-banner');
+     if (banner) {
+       banner.classList.remove('hidden');
+-      banner.setAttribute('data-request-id', data.request_id || '');
++      banner.setAttribute('data-request-id', reqId);
+     }
+   }
+ 
+   resolveApprovalUI(data) {
+-    const reqId = data.request_id;
++    const reqId = data.approval_id || data.request_id || data.id || '';
+     // Hide top banner if matches
+     const banner = document.getElementById('approval-banner');
+     if (banner && banner.getAttribute('data-request-id') === reqId) {
+@@ -675,7 +703,8 @@ export class HarnessStudioApp {
+       card.classList.add('border-gray-700', 'bg-gray-800/40', 'opacity-70');
+       const actions = card.querySelector('.flex.justify-end');
+       if (actions) {
+-        actions.innerHTML = `<span class="text-xs font-semibold uppercase text-gray-400">Resolved: ${escapeHtml(data.decision || 'done')}</span>`;
++        const outcome = data.decision || (data.approved === true ? 'approved' : data.approved === false ? 'denied' : 'done');
++        actions.innerHTML = `<span class="text-xs font-semibold uppercase text-gray-400">Resolved: ${escapeHtml(outcome)}</span>`;
+       }
+     }
+   }
+@@ -806,6 +835,7 @@ export class HarnessStudioApp {
+         for (const m of models) {
+           const opt = document.createElement('option');
+           opt.value = m.id || m.model_name || m.name;
++          if (m.provider) opt.dataset.provider = m.provider;
+           opt.textContent = `${m.provider ? m.provider + ': ' : ''}${m.id || m.name}`;
+           select.appendChild(opt);
+         }
+@@ -875,7 +905,10 @@ export class HarnessStudioApp {
+   }
+ 
+   async switchSession(sessionId) {
+-    if (sessionId === this.activeSessionId) return;
++    if (sessionId === this.activeSessionId) {
++      await this.reloadTranscript();
++      return;
++    }
+     try {
+       await this.api.switchSession(sessionId);
+       this.activeSessionId = sessionId;
+@@ -908,11 +941,17 @@ export class HarnessStudioApp {
+       for (const rec of (sData.records || [])) {
+         const type = rec.type || rec.role;
+         if (type === 'USER_INPUT' || type === 'user') {
+-          this.appendUserTurn(rec.content || '');
++          // Tool results are stored as user-role records with empty content: no empty bubble for them.
++          if (rec.content) this.appendUserTurn(rec.content);
+         } else if (type === 'PLANNER_RESPONSE' || type === 'MODEL' || type === 'assistant') {
+-          this.appendTurnBlock('assistant');
+-          this.streamAssistantText(rec.content || '');
+-          this.finalizeStreamingBlock();
++          if (rec.content) {
++            this.appendTurnBlock('assistant');
++            this.streamAssistantText(rec.content);
++            this.finalizeStreamingBlock();
++          }
++          for (const tc of (rec.tool_calls || [])) {
++            this.appendToolCall({ name: tc.name, call_id: tc.id || tc.call_id, arguments: tc.arguments || tc.input, decision: 'done' });
++          }
+         }
+       }
+     } catch (err) {
+diff --git a/harness/frontends/web/static/cards.js b/harness/frontends/web/static/cards.js
+index 0912025..46b8938 100644
+--- a/harness/frontends/web/static/cards.js
++++ b/harness/frontends/web/static/cards.js
+@@ -276,8 +276,8 @@ export class CardRenderer {
+   }
+ 
+   renderApproval(payload, _context) {
+-    const reqId = escapeHtml(payload.request_id || payload.id || '');
+-    const action = escapeHtml(payload.action || payload.tool || payload.command || 'Action');
++    const reqId = escapeHtml(payload.approval_id || payload.request_id || payload.id || '');
++    const action = escapeHtml(payload.summary || payload.action || payload.tool || payload.command || 'Action');
+     const risk = escapeHtml(payload.risk_class || payload.risk || 'HIGH');
+     const details = payload.details || payload.arguments ? JSON.stringify(payload.details || payload.arguments, null, 2) : '';
+ 
+@@ -317,7 +317,7 @@ export class CardRenderer {
+           <span class="px-2 py-0.5 rounded text-xs font-mono uppercase bg-blue-900/40 text-blue-300 border border-blue-800/50">${escapeHtml(decision)}</span>
+         </div>
+         ${argsStr ? `<details class="mt-2 text-xs"><summary class="text-gray-400 cursor-pointer font-mono">Arguments</summary><pre class="p-2 mt-1 bg-gray-900/80 rounded border border-gray-800 text-gray-300 font-mono overflow-x-auto">${argsStr}</pre></details>` : ''}
+-        ${resultStr ? `<div class="mt-2 text-xs"><div class="text-gray-400 font-mono font-medium mb-1">Output:</div><pre class="p-2 bg-gray-950/90 rounded border border-gray-800 text-emerald-300 font-mono overflow-x-auto max-h-48">${resultStr}</pre></div>` : ''}
++        ${resultStr ? `<div class="mt-2 text-xs tool-output"><div class="text-gray-400 font-mono font-medium mb-1">Output:</div><pre class="p-2 bg-gray-950/90 rounded border border-gray-800 text-emerald-300 font-mono overflow-x-auto max-h-48">${resultStr}</pre></div>` : ''}
+       </div>
+     `;
+   }
+diff --git a/harness/frontends/web/static/events.js b/harness/frontends/web/static/events.js
+index 9708ddd..02c49e9 100644
+--- a/harness/frontends/web/static/events.js
++++ b/harness/frontends/web/static/events.js
+@@ -58,20 +58,15 @@ export class HarnessEventStream {
+         this._dispatchInternal('connected', {});
+       };
+ 
+-      this.eventSource.onmessage = (e) => {
+-        if (!e.data || e.data.trim() === '') return;
+-        try {
+-          const envelope = JSON.parse(e.data);
+-          if (e.lastEventId) {
+-            this.lastEventId = e.lastEventId;
+-          } else if (envelope.id) {
+-            this.lastEventId = envelope.id;
+-          }
+-          this._dispatch(envelope.type || 'message', envelope);
+-        } catch (err) {
+-          console.warn('[HarnessEventStream] Failed to parse SSE payload:', err, e.data);
+-        }
+-      };
++      // The daemon sends *named* frames (`event: <type>`). Per the EventSource
++      // spec those never reach `onmessage` (which only sees unnamed frames), so a
++      // listener is attached per known type; unnamed frames still go through
++      // `onmessage`. Types subscribed later are attached in `on()`.
++      this.eventSource.onmessage = (e) => this._onFrame(e);
++      this._attachedTypes = new Set();
++      for (const type of this.listeners.keys()) {
++        this._attachNamedListener(type);
++      }
+ 
+       this.eventSource.onerror = (e) => {
+         this.isConnected = false;
+@@ -121,9 +116,33 @@ export class HarnessEventStream {
+       this.listeners.set(eventType, new Set());
+     }
+     this.listeners.get(eventType).add(callback);
++    this._attachNamedListener(eventType);
+     return () => this.off(eventType, callback);
+   }
+ 
++  _attachNamedListener(type) {
++    if (!this.eventSource || !type || type.startsWith('$') || type === 'message') return;
++    if (!this._attachedTypes) this._attachedTypes = new Set();
++    if (this._attachedTypes.has(type)) return;
++    this._attachedTypes.add(type);
++    this.eventSource.addEventListener(type, (e) => this._onFrame(e, type));
++  }
++
++  _onFrame(e, namedType = null) {
++    if (!e.data || e.data.trim() === '') return;
++    try {
++      const envelope = JSON.parse(e.data);
++      if (e.lastEventId) {
++        this.lastEventId = e.lastEventId;
++      } else if (envelope.id) {
++        this.lastEventId = envelope.id;
++      }
++      this._dispatch(envelope.type || namedType || 'message', envelope);
++    } catch (err) {
++      console.warn('[HarnessEventStream] Failed to parse SSE payload:', err, e.data);
++    }
++  }
++
+   off(eventType, callback) {
+     const handlers = this.listeners.get(eventType);
+     if (handlers) {
+diff --git a/harness/kernel/bus.py b/harness/kernel/bus.py
+index c2b0a31..06f102e 100644
+--- a/harness/kernel/bus.py
++++ b/harness/kernel/bus.py
+@@ -101,7 +101,9 @@ class EventBus:
+         Never drops non-delta lifecycle events.
+         """
+         is_delta = event.type in DELTA_EVENT_TYPES
++        original = event
+         for sub in list(self._subscribers.values()):
++            event = original
+             if not sub.matches(event.type):
+                 continue
+ 
+@@ -112,12 +114,28 @@ class EventBus:
+                 # Verify delta stream correlation (e.g. same call_id or stream)
+                 same_call = sub._last_delta.data.get("call_id") == event.data.get("call_id")
+                 same_stream = sub._last_delta.data.get("stream") == event.data.get("stream")
+-                if same_call and same_stream:
++                same_turn = sub._last_delta.turn_id == event.turn_id
++                if same_call and same_stream and same_turn:
+                     prev_text = sub._last_delta.data.get("text", "")
+                     new_text = event.data.get("text", "")
++                    # `_last_delta` is this subscriber's private copy (see below), so the
++                    # merge never touches the Event instance shared with other subscribers.
+                     sub._last_delta.data["text"] = prev_text + new_text
+                     continue
+ 
++            if is_delta:
++                # Each subscriber queues its own copy of a delta. Coalescing mutates the
++                # queued copy in place; mutating the shared instance would append every
++                # later chunk once per subscriber (text duplicated N times in the UI).
++                event = Event(
++                    type=event.type,
++                    data=dict(event.data),
++                    id=event.id,
++                    ts=event.ts,
++                    session_id=event.session_id,
++                    turn_id=event.turn_id,
++                )
++
+             # If queue is full:
+             if sub.queue.full():
+                 sub.lagging = True
+diff --git a/harness/kernel/commands.py b/harness/kernel/commands.py
+index 16a4b1c..16ba728 100644
+--- a/harness/kernel/commands.py
++++ b/harness/kernel/commands.py
+@@ -62,26 +62,46 @@ class Commands:
+ 
+     async def submit_turn(
+         self,
+-        session_id: str,
+-        prompt: str,
++        session_id: str | None = None,
++        prompt: str = "",
+         media: list[Any] | None = None,
+         options: dict[str, Any] | None = None,
++        model: str | None = None,
++        provider: str | None = None,
++        strategy: str | None = None,
+     ) -> TurnResult:
+         """
+         Submits a user prompt turn to a session.
+         Enforces one active turn per session via session lock (raises TurnInProgress / 409).
++
++        ``model`` / ``provider`` / ``strategy`` are accepted as top-level arguments
++        because that is the payload the web client sends (``{prompt, session_id,
++        model}``); they are folded into ``options``. When ``session_id`` is omitted
++        the active session is used, or a new one is created, so a fresh daemon can
++        accept its first prompt without the client having to know about sessions.
+         """
+-        validate_session_id(session_id)
+-        session = self.session_manager.get_session(session_id)
+-        if not session:
+-            session = await self.session_manager.create_session(session_id=session_id)
++        if not prompt or not str(prompt).strip():
++            raise HarnessError("Missing 'prompt'")
++
++        if session_id:
++            validate_session_id(session_id)
++            session = self.session_manager.get_session(session_id)
++            if not session:
++                session = await self.session_manager.create_session(session_id=session_id)
++        else:
++            session = self.session_manager.active_session or await self.session_manager.create_session()
++
++        turn_options: dict[str, Any] = dict(options or {})
++        for key, value in (("model", model), ("provider", provider), ("strategy", strategy)):
++            if value:
++                turn_options[key] = value
+ 
+         async with session.turn_lock():
+             return await self.runner.execute_turn(
+                 session=session.info,
+                 prompt=prompt,
+                 media=media,
+-                options=options,
++                options=turn_options or None,
+             )
+ 
+     async def cancel_turn(self, session_id: str) -> bool:
+diff --git a/harness/kernel/runner.py b/harness/kernel/runner.py
+index 7f12c64..71efc4c 100644
+--- a/harness/kernel/runner.py
++++ b/harness/kernel/runner.py
+@@ -84,7 +84,7 @@ class SingleLoopStrategy:
+                 if isinstance(block, TextBlock):
+                     final_output += block.text
+                 elif isinstance(block, ThinkingBlock):
+-                    final_thinking += block.thinking
++                    final_thinking += block.text
+ 
+             if "usage" in assistant_msg.metadata:
+                 total_usage = total_usage + Usage.from_dict(assistant_msg.metadata["usage"])
+@@ -139,6 +139,9 @@ class SingleLoopStrategy:
+                 metadata={"tool_results": True},
+             )
+             await k.record(result_msg)
++        else:
++            # Iteration cap exhausted while the model was still calling tools (see single_loop).
++            stop_reason = "max_iterations"
+ 
+         return TurnResult(
+             output=final_output,
+@@ -507,7 +510,7 @@ class KernelServicesImpl:
+ 
+         content_blocks = []
+         if thinking_parts:
+-            content_blocks.append(ThinkingBlock(thinking="".join(thinking_parts)))
++            content_blocks.append(ThinkingBlock(text="".join(thinking_parts)))
+         if text_parts:
+             content_blocks.append(TextBlock(text="".join(text_parts)))
+         for tc in tool_calls_dict.values():
+diff --git a/harness/plugins/bridges/mcp_client/plugin.py b/harness/plugins/bridges/mcp_client/plugin.py
+index 7fefd30..b8800b8 100644
+--- a/harness/plugins/bridges/mcp_client/plugin.py
++++ b/harness/plugins/bridges/mcp_client/plugin.py
+@@ -35,7 +35,14 @@ class MCPClientBridgePlugin:
+         settings = getattr(ctx, "settings", None)
+         raw_servers: Any = None
+         if settings:
+-            raw_servers = settings.get("plugins.mcp-client.servers") or settings.get("extensions.mcp_servers")
++            # Own namespace first (`plugins.bridge-mcp-client.servers`, which the
++            # PluginSettingsView resolves from the bare key), then the legacy
++            # global keys that earlier docs/examples used.
++            raw_servers = (
++                settings.get("servers")
++                or settings.get("plugins.mcp-client.servers")
++                or settings.get("extensions.mcp_servers")
++            )
+ 
+         # Normalize server configurations
+         server_configs: list[dict[str, Any]] = []
+diff --git a/harness/plugins/bridges/mcp_client/tools.py b/harness/plugins/bridges/mcp_client/tools.py
+index 9f826ee..aec39e2 100644
+--- a/harness/plugins/bridges/mcp_client/tools.py
++++ b/harness/plugins/bridges/mcp_client/tools.py
+@@ -8,7 +8,7 @@ from collections.abc import Callable
+ from typing import Any
+ 
+ from harness.sdk.context import ToolContext
+-from harness.sdk.contracts import ToolCall, ToolSpec
++from harness.sdk.contracts import ToolSpec
+ from harness.sdk.types import Capability, RiskClass, TextBlock, ToolResult
+ 
+ from .client import MCPClient
+@@ -16,22 +16,33 @@ from .client import MCPClient
+ logger = logging.getLogger(__name__)
+ 
+ 
++def _flag(annotations: dict[str, Any], *names: str) -> bool:
++    """True if any of the given annotation keys is explicitly truthy."""
++    return any(bool(annotations.get(n)) for n in names)
++
++
+ def derive_risk_class(annotations: dict[str, Any] | None) -> RiskClass:
+     """
+-    Maps MCP tool annotations to Harness RiskClass (§10):
+-    - readOnly -> READ
+-    - destructive -> DESTRUCTIVE
+-    - openWorld -> NETWORK
+-    - else -> WRITE
++    Maps MCP tool annotations to Harness RiskClass (§10).
++
++    The MCP specification names these ``readOnlyHint`` / ``destructiveHint`` /
++    ``openWorldHint`` (ToolAnnotations); the un-suffixed and snake_case spellings
++    are accepted for servers that predate the spec. Unannotated tools are WRITE
++    so they go through approval in ``ask`` mode.
++
++    - readOnlyHint   -> READ
++    - destructiveHint -> DESTRUCTIVE
++    - openWorldHint  -> NETWORK
++    - else           -> WRITE
+     """
+     if not annotations:
+         return RiskClass.WRITE
+ 
+-    if annotations.get("readOnly") or annotations.get("read_only"):
++    if _flag(annotations, "readOnlyHint", "readOnly", "read_only"):
+         return RiskClass.READ
+-    if annotations.get("destructive"):
++    if _flag(annotations, "destructiveHint", "destructive"):
+         return RiskClass.DESTRUCTIVE
+-    if annotations.get("openWorld") or annotations.get("open_world"):
++    if _flag(annotations, "openWorldHint", "openWorld", "open_world"):
+         return RiskClass.NETWORK
+ 
+     return RiskClass.WRITE
+@@ -63,12 +74,18 @@ def create_mcp_tool_spec(server_name: str, mcp_tool: dict[str, Any]) -> ToolSpec
+ 
+ def create_mcp_tool_handler(
+     client: MCPClient, original_tool_name: str
+-) -> Callable[[ToolCall, ToolContext], Any]:
+-    """Generates an async tool execution handler bridging to MCP client.call_tool()."""
++) -> Callable[[dict[str, Any], ToolContext], Any]:
++    """
++    Generates an async tool execution handler bridging to MCP client.call_tool().
++
++    Signature is the kernel's tool-handler contract: ``handler(args: dict, ctx)``
++    (see ``ToolGate`` -> ``handler(current_args, tool_ctx)``), the same as every
++    built-in tool. It must NOT take a ``ToolCall``.
++    """
+ 
+-    async def _handler(call: ToolCall, ctx: ToolContext) -> ToolResult:
++    async def _handler(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
+         try:
+-            res = await client.call_tool(original_tool_name, call.arguments)
++            res = await client.call_tool(original_tool_name, dict(args or {}))
+             content_items = res.get("content", [])
+             text_blocks: list[TextBlock] = []
+ 
+@@ -120,15 +137,16 @@ READ_RESOURCE_SPEC = ToolSpec(
+ 
+ def create_read_resource_handler(
+     clients: dict[str, MCPClient]
+-) -> Callable[[ToolCall, ToolContext], Any]:
+-    """Handler for read_resource tool querying active MCP clients."""
++) -> Callable[[dict[str, Any], ToolContext], Any]:
++    """Handler for read_resource tool querying active MCP clients (``handler(args, ctx)`` contract)."""
+ 
+-    async def _handler(call: ToolCall, ctx: ToolContext) -> ToolResult:
+-        uri = call.arguments.get("uri")
++    async def _handler(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
++        args = args or {}
++        uri = args.get("uri")
+         if not uri:
+             return ToolResult.error("Missing required argument: 'uri'")
+ 
+-        server_target = call.arguments.get("server")
++        server_target = args.get("server")
+         target_clients = (
+             [clients[server_target]]
+             if server_target and server_target in clients
+diff --git a/harness/plugins/context/memories/source.py b/harness/plugins/context/memories/source.py
+index 142af2a..768c4bc 100644
+--- a/harness/plugins/context/memories/source.py
++++ b/harness/plugins/context/memories/source.py
+@@ -7,6 +7,7 @@ import logging
+ import sqlite3
+ from typing import Any
+ 
++from harness.sdk.paths import memory_db_path
+ from harness.sdk.types import ContextBlock, Stability
+ 
+ logger = logging.getLogger(__name__)
+@@ -20,16 +21,14 @@ class MemoriesContextSource:
+     name: str = "memories"
+ 
+     async def blocks(self, ctx: Any) -> list[ContextBlock]:
+-        data_dir = getattr(ctx, "data_dir", None)
+-        if not data_dir:
+-            workspace = getattr(ctx, "workspace", None)
+-            if workspace:
+-                data_dir = workspace / ".harness"
+-
+-        if not data_dir:
++        workspace = getattr(ctx, "workspace", None)
++        if not workspace:
+             return []
+ 
+-        db_path = data_dir / "memory.db"
++        # Same file the `remember` tool writes and the FTS5 store indexes
++        # (see harness.sdk.paths). HookContext carries no data_dir, and the
++        # per-plugin data_dir would be the wrong place anyway.
++        db_path = memory_db_path(workspace)
+         if not db_path.exists():
+             return []
+ 
+diff --git a/harness/plugins/providers/anthropic/provider.py b/harness/plugins/providers/anthropic/provider.py
+index e5a48e8..61b7f1b 100644
+--- a/harness/plugins/providers/anthropic/provider.py
++++ b/harness/plugins/providers/anthropic/provider.py
+@@ -201,7 +201,7 @@ class AnthropicProvider:
+                 elif isinstance(block, ThinkingBlock):
+                     content_blocks.append({
+                         "type": "thinking",
+-                        "thinking": block.thinking,
++                        "thinking": block.text,
+                     })
+ 
+             if content_blocks:
+diff --git a/harness/plugins/stores/fts5_search/plugin.py b/harness/plugins/stores/fts5_search/plugin.py
+index 94efb99..e0a80cf 100644
+--- a/harness/plugins/stores/fts5_search/plugin.py
++++ b/harness/plugins/stores/fts5_search/plugin.py
+@@ -5,6 +5,7 @@ from __future__ import annotations
+ 
+ from harness.sdk.context import PluginContext
+ from harness.sdk.manifest import PluginManifest
++from harness.sdk.paths import memory_db_path, sessions_dir
+ 
+ from .index import FTS5SearchIndex
+ 
+@@ -17,10 +18,13 @@ class Fts5SearchPlugin:
+         self.store: FTS5SearchIndex | None = None
+ 
+     async def setup(self, ctx: PluginContext) -> None:
+-        db_path = ctx.data_dir / "memory.db"
++        # Shared workspace memory database (see harness.sdk.paths): the
++        # `remember`/`search_memory` tools and the `memories` context source
++        # open the same file, so it must NOT live under the plugin-private
++        # data_dir.
++        db_path = memory_db_path(ctx.workspace)
+         self.store = FTS5SearchIndex(db_path)
+-        sessions_dir = ctx.data_dir / "sessions"
+-        self.store.maybe_reindex_from_sessions(sessions_dir)
++        self.store.maybe_reindex_from_sessions(sessions_dir(ctx.workspace))
+         ctx.register_store("search", self.store)
+ 
+     async def teardown(self) -> None:
+diff --git a/harness/plugins/strategies/architect_editor/strategy.py b/harness/plugins/strategies/architect_editor/strategy.py
+index 44a35df..861fd13 100644
+--- a/harness/plugins/strategies/architect_editor/strategy.py
++++ b/harness/plugins/strategies/architect_editor/strategy.py
+@@ -89,7 +89,7 @@ class ArchitectEditorStrategy:
+             if isinstance(block, TextBlock):
+                 output_parts.append(block.text)
+             elif isinstance(block, ThinkingBlock):
+-                thinking_parts.append(block.thinking)
++                thinking_parts.append(block.text)
+ 
+         # -------------------------------------------------------------
+         # 3. Phase 2: Editor Execution (Tool Loop)
+diff --git a/harness/plugins/strategies/single_loop/strategy.py b/harness/plugins/strategies/single_loop/strategy.py
+index 1ac9aa9..b576c38 100644
+--- a/harness/plugins/strategies/single_loop/strategy.py
++++ b/harness/plugins/strategies/single_loop/strategy.py
+@@ -65,7 +65,7 @@ class SingleLoopStrategy:
+                 if isinstance(block, TextBlock):
+                     final_output += block.text
+                 elif isinstance(block, ThinkingBlock):
+-                    final_thinking += block.thinking
++                    final_thinking += block.text
+ 
+             if "usage" in assistant_msg.metadata:
+                 total_usage = total_usage + Usage.from_dict(assistant_msg.metadata["usage"])
+@@ -140,6 +140,10 @@ class SingleLoopStrategy:
+                 metadata={"tool_results": True},
+             )
+             await k.record(result_msg)
++        else:
++            # The loop ran out of iterations while the model was still calling tools.
++            # Say so instead of reporting a normal `end_turn` (silent truncation hides runaway loops).
++            stop_reason = "max_iterations"
+ 
+         return TurnResult(
+             output=final_output,
+diff --git a/harness/plugins/tools/memory/tools.py b/harness/plugins/tools/memory/tools.py
+index 6bcec78..b54dca1 100644
+--- a/harness/plugins/tools/memory/tools.py
++++ b/harness/plugins/tools/memory/tools.py
+@@ -11,13 +11,14 @@ from typing import Any
+ 
+ from harness.sdk.cards import Card
+ from harness.sdk.context import ToolContext
++from harness.sdk.paths import memory_db_path
+ from harness.sdk.types import RiskClass, TextBlock, ToolResult, ToolSpec
+ 
+ logger = logging.getLogger(__name__)
+ 
+ SEARCH_MEMORY_SPEC = ToolSpec(
+     name="search_memory",
+-    description="Searches previous session turns, transcripts, and conversations using full-text search.",
++    description="Searches remembered facts and previous session turns/transcripts using full-text search.",
+     input_schema={
+         "type": "object",
+         "properties": {
+@@ -72,6 +73,27 @@ def _safe_query(query: str) -> str:
+     return " ".join(f'"{t}"' for t in tokens) if tokens else ""
+ 
+ 
++def _search_facts(cursor: sqlite3.Cursor, query: str, limit: int) -> list[tuple[int, str, str]]:
++    """Case-insensitive token match over `remembered_facts` (all tokens must appear in key or text)."""
++    tokens = [t.lower() for t in re.findall(r"\w+", query)]
++    if not tokens:
++        return []
++    where = " AND ".join("(lower(text) LIKE ? OR lower(key) LIKE ?)" for _ in tokens)
++    params: list[Any] = []
++    for t in tokens:
++        params.extend([f"%{t}%", f"%{t}%"])
++    params.append(limit)
++    try:
++        cursor.execute(
++            f"SELECT id, key, text FROM remembered_facts WHERE {where} ORDER BY id DESC LIMIT ?",
++            params,
++        )
++        return [(int(r[0]), str(r[1]), str(r[2])) for r in cursor.fetchall()]
++    except sqlite3.OperationalError:
++        # Table absent: database created by the FTS store before any `remember`.
++        return []
++
++
+ class SearchMemoryHandler:
+     """Handles search_memory tool execution."""
+ 
+@@ -83,7 +105,9 @@ class SearchMemoryHandler:
+         if not query:
+             return ToolResult(content=[TextBlock(text="Error: query parameter cannot be empty")], is_error=True)
+ 
+-        db_path = ctx.data_dir / "memory.db"
++        # Shared workspace memory database (harness.sdk.paths), NOT the
++        # tool-private data_dir: `remember` and the FTS5 store write here.
++        db_path = memory_db_path(ctx.workspace)
+         if not db_path.exists():
+             return ToolResult(content=[TextBlock(text=f"No memories or transcripts found matching '{query}'.")])
+ 
+@@ -92,8 +116,10 @@ class SearchMemoryHandler:
+             return ToolResult(content=[TextBlock(text=f"No results found for query '{query}'.")])
+ 
+         conn = sqlite3.connect(str(db_path))
++        facts: list[tuple[int, str, str]] = []
+         try:
+             cursor = conn.cursor()
++            facts = _search_facts(cursor, query, limit)
+             if scope == "session" and hasattr(ctx, "session_id") and ctx.session_id:
+                 cursor.execute(
+                     """
+@@ -121,15 +147,22 @@ class SearchMemoryHandler:
+             rows = cursor.fetchall()
+         except sqlite3.OperationalError as e:
+             logger.debug("FTS search error: %s", e)
+-            return ToolResult(content=[TextBlock(text=f"No results found for query '{query}'.")])
++            rows = []
+         finally:
+             conn.close()
+ 
+-        if not rows:
++        if not rows and not facts:
+             return ToolResult(content=[TextBlock(text=f"No results found for query '{query}'.")])
+ 
+-        lines = [f"Found {len(rows)} matches for '{query}':\n"]
++        lines = [f"Found {len(facts) + len(rows)} matches for '{query}':\n"]
+         table_rows = []
++        for fact_id, key, text in facts:
++            # No square brackets around the key: the CLI renders previews with
++            # rich markup, which would swallow `[codename]` as a style tag.
++            label = f"fact #{fact_id}"
++            body = f"{key}: {text}" if key else text
++            lines.append(f"- {label}: {body}")
++            table_rows.append([label, "remember", body])
+         for r in rows:
+             conv_id, step_idx, source, _, snippet, _ = r
+             lines.append(f"- [{conv_id} step {step_idx}] {snippet}")
+@@ -157,7 +190,9 @@ class RememberHandler:
+         if not text:
+             return ToolResult(content=[TextBlock(text="Error: text parameter cannot be empty")], is_error=True)
+ 
+-        db_path = ctx.data_dir / "memory.db"
++        # Shared workspace memory database (harness.sdk.paths) so that
++        # `search_memory` and the `memories` context source can read it back.
++        db_path = memory_db_path(ctx.workspace)
+         db_path.parent.mkdir(parents=True, exist_ok=True)
+         conn = sqlite3.connect(str(db_path))
+         try:
+diff --git a/harness/sdk/paths.py b/harness/sdk/paths.py
+new file mode 100644
+index 0000000..012ac3e
+--- /dev/null
++++ b/harness/sdk/paths.py
+@@ -0,0 +1,38 @@
++"""
++Canonical workspace-relative paths shared by the kernel and plugins.
++
++The kernel hands every tool its own ``data_dir`` (``.harness/tools/<tool>``)
++and every plugin its own (``.harness/plugins/<plugin>``). That is the right
++default for private state, but a few artefacts are *shared* by design — the
++session transcripts and the workspace memory database are written by one
++component and read by others. Those must resolve to a single location
++regardless of which plugin or context source asks, so they live here.
++"""
++from __future__ import annotations
++
++from pathlib import Path
++
++HARNESS_DIR_NAME = ".harness"
++MEMORY_DB_NAME = "memory.db"
++SESSIONS_DIR_NAME = "sessions"
++
++
++def harness_dir(workspace: Path | str) -> Path:
++    """``<workspace>/.harness`` — root of all per-workspace state."""
++    return Path(workspace) / HARNESS_DIR_NAME
++
++
++def memory_db_path(workspace: Path | str) -> Path:
++    """
++    ``<workspace>/.harness/memory.db`` — the single SQLite file holding the
++    FTS5 transcript index *and* remembered facts.
++
++    Written by the ``store-fts5-search`` plugin and the ``remember`` tool;
++    read by the ``search_memory`` tool and the ``memories`` context source.
++    """
++    return harness_dir(workspace) / MEMORY_DB_NAME
++
++
++def sessions_dir(workspace: Path | str) -> Path:
++    """``<workspace>/.harness/sessions`` — one sub-directory per session."""
++    return harness_dir(workspace) / SESSIONS_DIR_NAME
+diff --git a/tests/fixtures/mcp_echo_server.py b/tests/fixtures/mcp_echo_server.py
+index efa9d34..ea07ed2 100644
+--- a/tests/fixtures/mcp_echo_server.py
++++ b/tests/fixtures/mcp_echo_server.py
+@@ -47,7 +47,7 @@ def handle_request(req: dict) -> dict | None:
+                             },
+                             "required": ["message"],
+                         },
+-                        "annotations": {"readOnly": True},
++                        "annotations": {"readOnlyHint": True},
+                     },
+                     {
+                         "name": "mutate_data",
+@@ -59,7 +59,7 @@ def handle_request(req: dict) -> dict | None:
+                             },
+                             "required": ["target"],
+                         },
+-                        "annotations": {"destructive": True},
++                        "annotations": {"destructiveHint": True},
+                     },
+                     {
+                         "name": "fail_tool",
+diff --git a/tests/kernel/test_bus_delta_fanout.py b/tests/kernel/test_bus_delta_fanout.py
+new file mode 100644
+index 0000000..a2bfb76
+--- /dev/null
++++ b/tests/kernel/test_bus_delta_fanout.py
+@@ -0,0 +1,70 @@
++"""
++Regression: EventBus delta coalescing mutated the Event instance shared by all
++subscribers, so with N subscribers every chunk after the first was appended N
++times ("…is Amsterdam.is Amsterdam.is Amsterdam." in the web UI, which always
++has at least two subscribers: the SSE replay buffer and the browser).
++
++Found by additions/scenarios/plain_answer_web (flow-of-information
++test, FLOW_TEST_FINDINGS.md F-6).
++"""
++from __future__ import annotations
++
++import asyncio
++
++import pytest
++
++from harness.kernel.bus import EventBus
++from harness.sdk.events import Event
++
++
++async def _drain(sub, n: int) -> list[Event]:
++    out = []
++    for _ in range(n):
++        out.append(await asyncio.wait_for(sub.get(), timeout=1))
++    return out
++
++
++@pytest.mark.asyncio
++async def test_each_subscriber_sees_every_chunk_exactly_once():
++    bus = EventBus()
++    subs = [bus.subscribe(interactive=False) for _ in range(3)]
++
++    chunks = ["The capital of the Netherlands ", "is Amsterdam.", " Really."]
++    originals = [Event(type="model.text.delta", data={"text": c}, turn_id="t1") for c in chunks]
++    for ev in originals:
++        bus.publish(ev)
++    bus.publish(Event(type="turn.completed", data={}, turn_id="t1"))
++
++    for sub in subs:
++        texts = ""
++        while True:
++            ev = await asyncio.wait_for(sub.get(), timeout=1)
++            if ev.type == "turn.completed":
++                break
++            texts += ev.data["text"]
++        assert texts == "".join(chunks), texts
++
++    # The published instances are never mutated.
++    assert [e.data["text"] for e in originals] == chunks
++
++
++@pytest.mark.asyncio
++async def test_coalescing_still_merges_queued_deltas_per_subscriber():
++    bus = EventBus()
++    sub = bus.subscribe(interactive=False)
++    for c in ("a", "b", "c"):
++        bus.publish(Event(type="model.text.delta", data={"text": c}, turn_id="t1"))
++    # Nothing consumed yet → the three chunks were merged into one queued delta.
++    assert sub.qsize() == 1
++    ev = await sub.get()
++    assert ev.data["text"] == "abc"
++
++
++@pytest.mark.asyncio
++async def test_deltas_from_different_turns_are_not_merged():
++    bus = EventBus()
++    sub = bus.subscribe(interactive=False)
++    bus.publish(Event(type="model.text.delta", data={"text": "turn one"}, turn_id="t1"))
++    bus.publish(Event(type="model.text.delta", data={"text": "turn two"}, turn_id="t2"))
++    got = await _drain(sub, 2)
++    assert [e.data["text"] for e in got] == ["turn one", "turn two"]
+diff --git a/tests/kernel/test_mcp_tool_through_kernel.py b/tests/kernel/test_mcp_tool_through_kernel.py
+new file mode 100644
+index 0000000..b809df8
+--- /dev/null
++++ b/tests/kernel/test_mcp_tool_through_kernel.py
+@@ -0,0 +1,93 @@
++"""
++An MCP tool executed through the real kernel (registry -> gate -> handler).
++
++Regression for review/CODE_REVIEW_v0.2.1.md Addendum A.2: the bridge handlers
++were written as `handler(call: ToolCall, ctx)` while the gate calls
++`handler(args: dict, ctx)`, so every MCP tool failed inside the kernel with
++"'dict' object has no attribute 'arguments'" although the plugin's unit tests
++(which invoked the handler directly with a ToolCall) were green.
++
++Also covers: the plugin reads its own settings namespace
++(`plugins.bridge-mcp-client.servers`) and spec-standard annotations
++(`readOnlyHint`) classify the tool as READ, so it runs without approval in the
++default `ask` mode.
++"""
++from __future__ import annotations
++
++import sys
++from pathlib import Path
++
++import pytest
++
++from harness.kernel.bootstrap import bootstrap_kernel
++from harness.sdk.testing.scripted import ScriptedProvider
++from harness.sdk.types import (
++    Done,
++    ModelInfo,
++    RiskClass,
++    TextBlock,
++    TextDelta,
++    ToolCallEnd,
++    ToolResultBlock,
++)
++
++ECHO_SERVER = Path(__file__).resolve().parents[1] / "fixtures" / "mcp_echo_server.py"
++MODEL = ModelInfo(id="scripted-v1", display_name="Scripted", context_tokens=128000,
++                  input_usd_per_mtok=0.0, output_usd_per_mtok=0.0)
++
++
++@pytest.mark.asyncio
++async def test_mcp_tool_call_executes_through_the_gate(tmp_path: Path):
++    ws = tmp_path / "ws"
++    ws.mkdir()
++    conf = tmp_path / "conf"
++    conf.mkdir()
++
++    rt = await bootstrap_kernel(
++        workspace=ws,
++        config_dir=conf,
++        overrides={
++            # The plugin's own namespace (resolved by PluginSettingsView from the bare key "servers").
++            "plugins.bridge-mcp-client.servers": {
++                "echo": {"command": sys.executable, "args": [str(ECHO_SERVER)]},
++            },
++        },
++    )
++    try:
++        spec = rt.registry.get_tool_spec("mcp__echo__echo")
++        assert spec is not None, sorted(rt.registry.tools)
++        # `readOnlyHint: true` in the fixture -> READ -> no approval needed in `ask` mode.
++        assert spec.risk_class == RiskClass.READ
++        assert rt.registry.get_tool_spec("mcp__echo__mutate_data").risk_class == RiskClass.DESTRUCTIVE
++
++        provider = ScriptedProvider(models=[MODEL])
++        provider.add_response([
++            TextDelta(text="Calling echo."),
++            ToolCallEnd(id="c1", name="mcp__echo__echo", arguments={"message": "through the kernel"}),
++            Done(stop_reason="tool_use"),
++        ])
++        provider.add_response([TextDelta(text="Echo done."), Done(stop_reason="end_turn")])
++        rt.registry.register_provider(provider, plugin_name="test_scripted")
++
++        session = await rt.session_manager.create_session()
++        result = await rt.runner.execute_turn(
++            session=session.info,
++            prompt="echo something via MCP",
++            options={"provider": "scripted", "model": MODEL.id},
++        )
++        assert "Echo done." in result.output
++
++        # The model saw a *successful* tool result containing the echoed text.
++        tool_results = [
++            b
++            for m in provider.requests[1].messages
++            for b in m.content
++            if isinstance(b, ToolResultBlock)
++        ]
++        assert len(tool_results) == 1, provider.requests[1].messages
++        text = "\n".join(c.text for c in tool_results[0].content if isinstance(c, TextBlock))
++        assert "through the kernel" in text, text
++        assert "MCP tool error" not in text and "Approval denied" not in text, text
++        assert not tool_results[0].is_error
++    finally:
++        await rt.registry.unload_all()
+diff --git a/tests/kernel/test_memory_roundtrip.py b/tests/kernel/test_memory_roundtrip.py
+new file mode 100644
+index 0000000..f1636c1
+--- /dev/null
++++ b/tests/kernel/test_memory_roundtrip.py
+@@ -0,0 +1,118 @@
++"""
++Kernel-level round-trip for the workspace memory substrate.
++
++Regression for review/CODE_REVIEW_v0.2.1.md Addendum A.1: `remember`,
++`search_memory`, the FTS5 store and the `memories` context source each used a
++different directory (`.harness/tools/<tool>/`, `.harness/plugins/<plugin>/`,
++`.harness/`), so a remembered fact could never be searched or injected. The
++plugin unit tests did not catch it because they handed every component the same
++mocked `data_dir`. This test only uses the real kernel wiring.
++"""
++from __future__ import annotations
++
++from pathlib import Path
++
++import pytest
++
++from harness.kernel.bootstrap import bootstrap_kernel
++from harness.sdk.paths import memory_db_path
++from harness.sdk.testing.scripted import ScriptedProvider
++from harness.sdk.types import (
++    Done,
++    ModelInfo,
++    TextBlock,
++    TextDelta,
++    ToolCallEnd,
++    ToolResultBlock,
++    Usage,
++    UsageEvent,
++)
++
++MODEL = ModelInfo(
++    id="scripted-v1",
++    display_name="Scripted",
++    context_tokens=128000,
++    input_usd_per_mtok=0.0,
++    output_usd_per_mtok=0.0,
++)
++
++
++def _scripted() -> ScriptedProvider:
++    return ScriptedProvider(models=[MODEL])
++
++
++def _tool_result_texts(provider: ScriptedProvider) -> list[str]:
++    """All tool_result texts the model was shown across every request."""
++    out: list[str] = []
++    for req in provider.requests:
++        for m in req.messages:
++            for b in m.content:
++                if isinstance(b, ToolResultBlock):
++                    for inner in b.content:
++                        if isinstance(inner, TextBlock):
++                            out.append(inner.text)
++    return out
++
++
++def _request_text(provider: ScriptedProvider, index: int) -> str:
++    req = provider.requests[index]
++    parts = [b.text for b in req.system]
++    for m in req.messages:
++        parts.extend(b.text for b in m.content if isinstance(b, TextBlock))
++    return "\n".join(parts)
++
++
++@pytest.mark.asyncio
++async def test_remember_search_and_context_injection_share_one_database(tmp_path: Path):
++    ws = tmp_path / "ws"
++    ws.mkdir()
++    conf = tmp_path / "conf"
++    conf.mkdir()
++    options = {"provider": "scripted", "model": MODEL.id}
++
++    # ---- Process 1: the model remembers a fact --------------------------------
++    rt1 = await bootstrap_kernel(workspace=ws, config_dir=conf)
++    p1 = _scripted()
++    p1.add_response([
++        TextDelta(text="Noting that."),
++        ToolCallEnd(id="c1", name="remember", arguments={"text": "Project codename is Falcon", "key": "codename"}),
++        UsageEvent(usage=Usage(input_tokens=10, output_tokens=5)),
++        Done(stop_reason="tool_use"),
++    ])
++    p1.add_response([TextDelta(text="Saved."), Done(stop_reason="end_turn")])
++    rt1.registry.register_provider(p1, plugin_name="test_scripted")
++    s1 = await rt1.session_manager.create_session()
++    r1 = await rt1.runner.execute_turn(session=s1.info, prompt="Remember the codename is Falcon", options=options)
++    assert "Saved." in r1.output
++    assert any("remembered fact" in t.lower() for t in _tool_result_texts(p1)), _tool_result_texts(p1)
++    await rt1.registry.unload_all()
++
++    # Exactly one memory database, at the canonical shared path.
++    dbs = sorted(p.relative_to(ws).as_posix() for p in ws.rglob("memory.db"))
++    assert dbs == [".harness/memory.db"], dbs
++    assert memory_db_path(ws).exists()
++
++    # ---- Process 2 (fresh bootstrap = new daemon): search finds the fact ------
++    rt2 = await bootstrap_kernel(workspace=ws, config_dir=conf)
++    p2 = _scripted()
++    p2.add_response([
++        ToolCallEnd(id="c2", name="search_memory", arguments={"query": "Falcon"}),
++        Done(stop_reason="tool_use"),
++    ])
++    p2.add_response([TextDelta(text="Found it."), Done(stop_reason="end_turn")])
++    rt2.registry.register_provider(p2, plugin_name="test_scripted")
++    s2 = await rt2.session_manager.create_session()
++    r2 = await rt2.runner.execute_turn(session=s2.info, prompt="What is the codename?", options=options)
++    assert "Found it." in r2.output
++
++    results = [t for t in _tool_result_texts(p2) if "Falcon" in t]
++    assert results, f"search_memory did not surface the remembered fact: {_tool_result_texts(p2)}"
++    assert "fact #1" in results[0] and "codename" in results[0], results[0]
++    # Transcript of process 1 is indexed in the same database too (FTS over turns).
++    assert "step" in results[0]
++
++    # ---- The `memories` context source injects the fact into a NEW session ----
++    first_request = _request_text(p2, 0)
++    assert "Remembered Facts" in first_request, first_request[:2000]
++    assert "Project codename is Falcon" in first_request
++    await rt2.registry.unload_all()
+diff --git a/tests/kernel/test_thinking_block_roundtrip.py b/tests/kernel/test_thinking_block_roundtrip.py
+new file mode 100644
+index 0000000..ba3191e
+--- /dev/null
++++ b/tests/kernel/test_thinking_block_roundtrip.py
+@@ -0,0 +1,92 @@
++"""
++Regression test: a model response that streams thinking deltas must complete the turn.
++
++Before the fix, ``TurnRunner`` built ``ThinkingBlock(thinking=...)`` while the dataclass field is
++``text`` (sdk/types.py), and every consumer (single_loop / architect_editor strategies, the
++Anthropic provider, the runner's legacy loop) read ``block.thinking``. Net effect: any provider
++that emitted a ``ThinkingDelta`` ended the turn in ``turn.error`` and the thinking never reached
++``TurnResult.thinking``. Found by additions/scenarios/thinking_then_answer_web.
++"""
++from __future__ import annotations
++
++from pathlib import Path
++
++import pytest
++
++from harness.kernel.bootstrap import bootstrap_kernel
++from harness.sdk.testing.scripted import ScriptedProvider
++from harness.sdk.types import (
++    Done,
++    ModelInfo,
++    Role,
++    TextDelta,
++    ThinkingBlock,
++    ThinkingDelta,
++    TurnResult,
++    Usage,
++    UsageEvent,
++)
++
++
++@pytest.mark.asyncio
++async def test_thinking_deltas_complete_the_turn_and_are_not_fed_back_as_text(tmp_path: Path):
++    ws = tmp_path / "workspace"
++    ws.mkdir()
++    conf = tmp_path / ".harness"
++    conf.mkdir()
++    runtime = await bootstrap_kernel(workspace=ws, config_dir=conf)
++
++    provider = ScriptedProvider(
++        models=[ModelInfo(id="m", display_name="m", context_tokens=100000, input_usd_per_mtok=0, output_usd_per_mtok=0)]
++    )
++    provider.add_response([
++        ThinkingDelta(text="The user wants a short answer."),
++        TextDelta(text="Forty-two."),
++        UsageEvent(usage=Usage(input_tokens=10, output_tokens=5)),
++        Done(stop_reason="end_turn"),
++    ])
++    provider.add_response([
++        TextDelta(text="Still forty-two."),
++        UsageEvent(usage=Usage(input_tokens=20, output_tokens=5)),
++        Done(stop_reason="end_turn"),
++    ])
++    runtime.registry.register_provider(provider, plugin_name="test_scripted")
++
++    seen: list[str] = []
++    sub = runtime.bus.subscribe()
++
++    session = await runtime.session_manager.create_session()
++    result = await runtime.runner.execute_turn(
++        session=session.info,
++        prompt="Give me a short answer.",
++        options={"provider": "scripted", "model": "m"},
++    )
++    assert isinstance(result, TurnResult)
++    assert result.output == "Forty-two."
++    assert result.thinking == "The user wants a short answer."
++
++    # Drain the bus: the turn must end in turn.completed, never turn.error.
++    while not sub.queue.empty():
++        seen.append(sub.queue.get_nowait().type)
++    assert "turn.completed" in seen, seen
++    assert "turn.error" not in seen, seen
++    assert "model.thinking.delta" in seen, seen
++
++    # Second turn: the model must never be shown its own reasoning as plain assistant prose.
++    # (Known gap, not fixed here: TurnRunner.record() does not persist `thinking` into the
++    # TranscriptRecord, so the ThinkingBlock restoration path in kernel/context.py is currently
++    # unreachable and reloaded sessions lose the reasoning card. See FLOW_TEST_FINDINGS F-10.)
++    await runtime.runner.execute_turn(
++        session=session.info,
++        prompt="Again?",
++        options={"provider": "scripted", "model": "m"},
++    )
++    req = provider.requests[-1]
++    assistant_msgs = [m for m in req.messages if m.role == Role.ASSISTANT]
++    assert assistant_msgs, "history missing the first assistant message"
++    first = assistant_msgs[0]
++    assert first.text() == "Forty-two."
++    assert "The user wants a short answer." not in first.text()
++    for b in first.content:
++        if isinstance(b, ThinkingBlock):
++            assert b.text == "The user wants a short answer."
+diff --git a/tests/plugins/bridges/test_mcp_client.py b/tests/plugins/bridges/test_mcp_client.py
+index d010a76..cb43691 100644
+--- a/tests/plugins/bridges/test_mcp_client.py
++++ b/tests/plugins/bridges/test_mcp_client.py
+@@ -16,7 +16,7 @@ from harness.plugins.bridges.mcp_client import (
+     create_mcp_tool_spec,
+     derive_risk_class,
+ )
+-from harness.sdk.contracts import ToolCall, ToolSpec
++from harness.sdk.contracts import ToolSpec
+ from harness.sdk.testing import ToolKit
+ from harness.sdk.types import RiskClass, ToolResult
+ 
+@@ -40,6 +40,12 @@ class MockPluginContext:
+ 
+ def test_derive_risk_class():
+     """Maps MCP tool annotations to Harness RiskClass."""
++    # Spec-standard ToolAnnotations names (MCP 2025-03-26)
++    assert derive_risk_class({"readOnlyHint": True}) == RiskClass.READ
++    assert derive_risk_class({"destructiveHint": True}) == RiskClass.DESTRUCTIVE
++    assert derive_risk_class({"openWorldHint": True}) == RiskClass.NETWORK
++    assert derive_risk_class({"readOnlyHint": False, "destructiveHint": False}) == RiskClass.WRITE
++    # Legacy spellings still accepted
+     assert derive_risk_class({"readOnly": True}) == RiskClass.READ
+     assert derive_risk_class({"destructive": True}) == RiskClass.DESTRUCTIVE
+     assert derive_risk_class({"openWorld": True}) == RiskClass.NETWORK
+@@ -148,16 +154,15 @@ async def test_s14_mcp_bridge_plugin_and_disconnect_status(tmp_path: Path):
+         # Execute tool through registered handler
+         echo_handler = next(h for s, h in ctx.tools if s.name == "mcp__echo__echo")
+         tool_ctx = MockToolContext(workspace=tmp_path)
+-        call = ToolCall(id="call_mcp_1", name="mcp__echo__echo", arguments={"message": "S14 test message"})
+-        result: ToolResult = await echo_handler(call, tool_ctx)
++        # Kernel contract: ToolGate invokes handler(args: dict, ctx) — not a ToolCall.
++        result: ToolResult = await echo_handler({"message": "S14 test message"}, tool_ctx)
+ 
+         assert not result.is_error
+         assert "echo: S14 test message" in result.content[0].text
+ 
+         # Test read_resource handler
+         read_res_handler = next(h for s, h in ctx.tools if s.name == "read_resource")
+-        call_res = ToolCall(id="call_res_1", name="read_resource", arguments={"uri": "memo://today"})
+-        res_result: ToolResult = await read_res_handler(call_res, tool_ctx)
++        res_result: ToolResult = await read_res_handler({"uri": "memo://today"}, tool_ctx)
+         assert not res_result.is_error
+         assert "memo://today" in res_result.content[0].text
+ 
+@@ -200,8 +205,7 @@ async def test_toolkit_conformance_for_mcp_tools(tmp_path: Path):
+         kit.test_declared_risk_class_bound(spec)
+ 
+         tool_ctx = MockToolContext(workspace=tmp_path)
+-        call = ToolCall(id="call_t1", name="mcp__echo__echo", arguments={"message": "conformance test"})
+-        res = await handler(call, tool_ctx)
++        res = await handler({"message": "conformance test"}, tool_ctx)
+         assert not res.is_error
+         assert "echo: conformance test" in res.content[0].text
+     finally:
+diff --git a/tests/plugins/test_memory_plugins.py b/tests/plugins/test_memory_plugins.py
+index d1da3ad..ce7eefe 100644
+--- a/tests/plugins/test_memory_plugins.py
++++ b/tests/plugins/test_memory_plugins.py
+@@ -85,7 +85,7 @@ async def test_fts5_remember_and_context_source(tmp_path: Path):
+ 
+     # ContextSource verification
+     ctx_mock = MagicMock()
+-    ctx_mock.data_dir = tmp_path / ".harness"
++    ctx_mock.workspace = tmp_path
+ 
+     source = MemoriesContextSource()
+     blocks = await source.blocks(ctx_mock)
+@@ -112,7 +112,7 @@ async def test_memory_tools_execution(tmp_path: Path):
+     # 1. Test remember tool
+     remember_handler = RememberHandler()
+     ctx_mock = MagicMock(spec=ToolContext)
+-    ctx_mock.data_dir = data_dir
++    ctx_mock.workspace = tmp_path  # tools resolve <workspace>/.harness/memory.db
+ 
+     rem_res = await remember_handler(
+         {"text": "Always deploy to production using staging canary", "key": "deployment"},

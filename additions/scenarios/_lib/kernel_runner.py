@@ -62,12 +62,19 @@ def base_overrides(sc: Scenario) -> dict[str, Any]:
     return ov
 
 
+def repo_root() -> Path:
+    """The checkout that contains this suite (works from review/, additions/ or tests/)."""
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "pyproject.toml").exists() and (parent / "harness").is_dir():
+            return parent
+    raise RuntimeError("scenario suite is not inside a Harness-Zero checkout (no pyproject.toml + harness/ above it)")
+
+
 def _substitute(obj: Any) -> Any:
     """Expands ``${PYTHON}`` and ``${REPO}`` in scenario config values."""
     import sys
 
-    repo = Path(__file__).resolve().parents[4]
-    table = {"${PYTHON}": sys.executable, "${REPO}": str(repo)}
+    table = {"${PYTHON}": sys.executable, "${REPO}": str(repo_root())}
     if isinstance(obj, dict):
         return {k: _substitute(v) for k, v in obj.items()}
     if isinstance(obj, list):

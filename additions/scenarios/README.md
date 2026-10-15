@@ -2,9 +2,10 @@
 
 Executable end-to-end tests that push a prompt through the **real** kernel, the **real** web
 daemon and the **real** shipped browser client, with the model replaced by a recording.
-This is WS-01 of the integration pack, built to run against the kernel *as it is today*
-(it imports the installed `harness.*` packages and touches nothing else), so it can be moved
-into `tests/` with a `git mv` once adopted.
+This is WS-01 of the integration pack (`review/dsh-integration/WS-01_record_replay_tests.md`), built to
+run against the kernel *as it is today* (it imports the installed `harness.*` packages and touches
+nothing else), so it can be moved into `tests/` with a `git mv` once adopted. Nothing in here depends
+on its own location: the repo root is found by walking up to `pyproject.toml` + `harness/`.
 
 ```
 scenarios/
@@ -32,15 +33,15 @@ scenarios/
 
 ```bash
 # from the repo root, inside the project venv
-pytest review/dsh-integration/scenarios -q                       # replay against goldens (default)
-pytest review/dsh-integration/scenarios -q -k web                # only the web/jsdom lane
-HARNESS_REPLAY=update pytest review/dsh-integration/scenarios -q # accept new goldens (inspect the diff!)
-SCENARIO_DOM=0 pytest review/dsh-integration/scenarios -q        # skip the jsdom lane (no node)
+pytest additions/scenarios -q                       # replay against goldens (default)
+pytest additions/scenarios -q -k web                # only the web/jsdom lane
+HARNESS_REPLAY=update pytest additions/scenarios -q # accept new goldens (inspect the diff!)
+SCENARIO_DOM=0 pytest additions/scenarios -q        # skip the jsdom lane (no node)
 SCENARIO_DOM_WAIT_MS=6000 ...                                     # per-turn wait in the browser lane
 ```
 
 The jsdom lane needs `node` ≥ 18 and a one-time
-`npm --prefix review/dsh-integration/scenarios/_lib/node ci` (lockfile pinned, jsdom 24.1.3;
+`npm --prefix additions/scenarios/_lib/node ci` (lockfile pinned, jsdom 24.1.3;
 `node_modules/` is git-ignored). If node or jsdom is missing the lane is reported in `errors`
 and `timeline_*` / `dom_turns_completed` expectations fail — they never silently pass.
 
@@ -155,7 +156,7 @@ Findings produced by running these live in `../FLOW_TEST_FINDINGS.md`.
 
 ## Moving into the build
 
-- `git mv review/dsh-integration/scenarios tests/scenarios` (keep `conftest.py`); add
+- `git mv additions/scenarios tests/scenarios` (keep `conftest.py`); add
   `tests/scenarios` to `testpaths`; CI needs `node` for the DOM lane or `SCENARIO_DOM=0`.
 - `_lib/replay_provider.py` is the seed of `harness/sdk/testing/replay.py` (WS-01).
 - `_lib/normalize.py` rules are the place to add new volatile fields when goldens flap.

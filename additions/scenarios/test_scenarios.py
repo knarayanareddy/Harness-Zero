@@ -3,8 +3,8 @@
 Run from the repository root::
 
     . .venv/bin/activate
-    pytest review/dsh-integration/scenarios -q                 # replay (default)
-    HARNESS_REPLAY=update pytest review/dsh-integration/scenarios -q -k name   # accept new goldens
+    pytest additions/scenarios -q                 # replay (default)
+    HARNESS_REPLAY=update pytest additions/scenarios -q -k name   # accept new goldens
     SCENARIO_DOM=0 pytest …                                    # skip the jsdom lane
 
 A scenario with ``xfail: <reason>`` documents a known bug: the test is expected
