@@ -7,6 +7,7 @@ with strict CSP, host header guards, and replayable SSE event stream.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import hmac
 import json
 import logging
@@ -27,6 +28,27 @@ from harness.sdk.errors import HarnessError
 from harness.sdk.events import Event
 
 logger = logging.getLogger("harness.frontends.web.server")
+
+
+def _json_dumps(obj: Any) -> str:
+    def _default(o: Any) -> Any:
+        if hasattr(o, "to_dict") and callable(o.to_dict):
+            return o.to_dict()
+        if dataclasses.is_dataclass(o) and not isinstance(o, type):
+            return dataclasses.asdict(o)
+        if isinstance(o, Path):
+            return str(o)
+        if isinstance(o, (set, frozenset)):
+            return list(o)
+        if hasattr(o, "value"):
+            return o.value
+        raise TypeError(f"Object of type {o.__class__.__name__} is not JSON serializable")
+
+    return json.dumps(obj, default=_default)
+
+
+def _json_response(data: Any, status: int = 200, **kwargs) -> web.Response:
+    return web.json_response(data, status=status, dumps=_json_dumps, **kwargs)
 
 
 class HarnessWebServer:
@@ -306,33 +328,33 @@ class HarnessWebServer:
 
         try:
             result = await self.commands.dispatch(name, args)
-            return web.json_response({"result": result, "status": "ok"})
+            return _json_response({"result": result, "status": "ok"})
         except HarnessError as e:
-            return web.json_response({"error": str(e), "status": "error"}, status=400)
+            return _json_response({"error": str(e), "status": "error"}, status=400)
         except Exception as e:
             logger.exception(f"Unexpected error executing command '{name}': {e}")
-            return web.json_response({"error": str(e), "status": "error"}, status=500)
+            return _json_response({"error": str(e), "status": "error"}, status=500)
 
     async def _handle_rpc(self, request: web.Request) -> web.Response:
         """Generic JSON-RPC bridge accepting {command: str, args: dict}."""
         try:
             body = await request.json()
         except Exception as e:
-            return web.json_response({"error": f"Invalid JSON: {e}"}, status=400)
+            return _json_response({"error": f"Invalid JSON: {e}"}, status=400)
 
         cmd = body.get("command") or body.get("method")
         if not cmd:
-            return web.json_response({"error": "Missing 'command' or 'method'"}, status=400)
+            return _json_response({"error": "Missing 'command' or 'method'"}, status=400)
         args = body.get("args") or body.get("params") or {}
 
         try:
             result = await self.commands.dispatch(cmd, args)
-            return web.json_response({"result": result, "status": "ok"})
+            return _json_response({"result": result, "status": "ok"})
         except HarnessError as e:
-            return web.json_response({"error": str(e), "status": "error"}, status=400)
+            return _json_response({"error": str(e), "status": "error"}, status=400)
         except Exception as e:
             logger.exception(f"Unexpected error executing command '{cmd}': {e}")
-            return web.json_response({"error": str(e), "status": "error"}, status=500)
+            return _json_response({"error": str(e), "status": "error"}, status=500)
 
     async def _handle_events(self, request: web.Request) -> web.StreamResponse:
         """
@@ -491,15 +513,19 @@ class HarnessWebServer:
             try:
                 while True:
                     evt = await subscriber.get()
-                    if evt.type == "model.delta":
-                        await send_sse("text_delta", {"delta": evt.data.get("delta", "")})
+                    if evt.type in ("model.text.delta", "model.delta"):
+                        delta_text = evt.data.get("text") or evt.data.get("delta", "")
+                        await send_sse("text_delta", {"delta": delta_text})
                     elif evt.type == "model.thinking.delta":
-                        await send_sse("thinking_delta", {"delta": evt.data.get("delta", "")})
+                        delta_text = evt.data.get("text") or evt.data.get("delta", "")
+                        await send_sse("thinking_delta", {"delta": delta_text})
                     elif evt.type == "tool.call":
                         await send_sse("tool_call", {"call": evt.data})
                     elif evt.type == "tool.result":
                         await send_sse("tool_result", {"result": evt.data})
-                    elif evt.type == "turn.completed":
+                    elif evt.type == "approval.required":
+                        await send_sse("approval_required", evt.data)
+                    elif evt.type in ("turn.completed", "turn.error", "turn.cancelled"):
                         break
             except asyncio.CancelledError:
                 pass
@@ -511,19 +537,30 @@ class HarnessWebServer:
         try:
             await send_sse("turn_start", {"prompt": prompt, "mode": mode, "model": model})
             session = self.commands.session_manager.active_session
-            session_id = session.session_id if session else None
+            if not session:
+                session = await self.commands.session_manager.create_session()
+            session_id = session.session_id
+
+            options: dict[str, Any] = {}
+            if model:
+                options["model"] = model
+            if body.get("provider"):
+                options["provider"] = body["provider"]
+            if mode:
+                options["mode"] = mode
 
             result = await self.commands.submit_turn(
-                prompt=prompt,
                 session_id=session_id,
-                model=model,
+                prompt=prompt,
+                options=options,
             )
 
             await send_sse("turn_complete", {
                 "result": {
                     "output": result.output if hasattr(result, "output") else str(result),
                     "thinking": getattr(result, "thinking", ""),
-                    "tool_calls": getattr(result, "tool_calls", []),
+                    "tool_calls": getattr(result, "tool_calls", 0),
+                    "error": getattr(result, "error", None),
                 }
             })
         except Exception as e:
@@ -685,37 +722,40 @@ class HarnessWebServer:
     async def _handle_sessions_list(self, request: web.Request) -> web.Response:
         sessions = self.commands.session_manager.list_sessions()
         active = self.commands.session_manager.active_session
-        return web.json_response({
+        formatted_sessions = [
+            s if isinstance(s, dict) else s.info.to_dict() for s in sessions
+        ]
+        return _json_response({
             "active_session_id": active.session_id if active else None,
-            "sessions": [s.info.to_dict() for s in sessions],
+            "sessions": formatted_sessions,
         })
 
     async def _handle_session_get(self, request: web.Request) -> web.Response:
         session_id = request.match_info.get("session_id", "")
         session = self.commands.session_manager.get_session(session_id)
         if not session:
-            return web.json_response({"error": "Session not found"}, status=404)
-        history = session.get_history()
-        return web.json_response({
+            return _json_response({"error": "Session not found"}, status=404)
+        history = await session.get_history()
+        return _json_response({
             "session_id": session_id,
             "is_current": session == self.commands.session_manager.active_session,
             "history": history,
         })
 
     async def _handle_session_new(self, request: web.Request) -> web.Response:
-        session = self.commands.session_manager.create_session()
-        return web.json_response({"status": "created", "session_id": session.session_id})
+        session = await self.commands.session_manager.create_session()
+        return _json_response({"status": "created", "session_id": session.session_id})
 
     async def _handle_session_switch(self, request: web.Request) -> web.Response:
         try:
             body = await request.json()
             sid = body.get("session_id")
             if not sid:
-                return web.json_response({"error": "Missing session_id"}, status=400)
-            self.commands.session_manager.switch_session(sid)
-            return web.json_response({"status": "switched", "session_id": sid})
+                return _json_response({"error": "Missing session_id"}, status=400)
+            await self.commands.session_manager.switch_session(sid)
+            return _json_response({"status": "switched", "session_id": sid})
         except Exception as e:
-            return web.json_response({"error": str(e)}, status=400)
+            return _json_response({"error": str(e)}, status=400)
 
     async def _handle_economics(self, request: web.Request) -> web.Response:
         session = self.commands.session_manager.active_session

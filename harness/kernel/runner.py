@@ -311,19 +311,28 @@ class KernelServicesImpl:
         target_name = name or self.options.get("provider") or (
             self.settings.get("kernel.provider", "") if self.settings else ""
         )
-        provider = self.registry.get_provider(target_name)
-        if not provider:
-            # Fallback to first available provider
-            providers = self.registry.get_all_providers()
-            if providers:
-                return providers[0]
+        if target_name and target_name != "default":
+            provider = self.registry.get_provider(target_name)
+            if provider:
+                return provider
             raise ProviderError(
-                provider=target_name or "unknown",
+                provider=target_name,
                 model=self.options.get("model", "unknown"),
-                kind="unavailable",
-                message=f"No provider found matching '{target_name}'",
+                kind="unconfigured",
+                message=f"No provider found matching '{target_name}'. Configure your provider in settings or pass --provider.",
             )
-        return provider
+
+        # No specific provider requested: allow single test/scripted provider if present
+        providers = self.registry.get_all_providers()
+        if len(providers) == 1 and providers[0].name in ("scripted", "mock", "test"):
+            return providers[0]
+
+        raise ProviderError(
+            provider="unconfigured",
+            model=self.options.get("model", "unknown"),
+            kind="unconfigured",
+            message="No model provider configured. Set kernel.provider in settings (e.g. 'anthropic', 'openai', 'gemini') or pass --provider.",
+        )
 
     async def _calculate_cost(
         self, provider: Provider, model: str, usage: Usage
@@ -816,6 +825,18 @@ class TurnRunner:
                     )
                 )
             return TurnResult(output="", error=str(e), stop_reason="spend_cap_exceeded")
+        except ProviderError as e:
+            logger.warning(f"Provider configuration error: {e}")
+            if self.bus:
+                self.bus.publish(
+                    Event(
+                        type="turn.error",
+                        session_id=session.session_id,
+                        turn_id=turn_id,
+                        data={"message": str(e), "kind": e.kind, "retryable": False},
+                    )
+                )
+            return TurnResult(output="", error=str(e), stop_reason="error")
         except Exception as e:
             logger.exception(f"Turn execution error: {e}")
             if self.bus:

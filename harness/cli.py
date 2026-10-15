@@ -21,6 +21,7 @@ from rich.table import Table
 from harness import __version__
 from harness.frontends.cli import CliApp
 from harness.kernel.bootstrap import bootstrap_kernel
+from harness.sdk.errors import HarnessError, ProviderError
 
 console = Console()
 
@@ -87,6 +88,14 @@ async def _run_kernel_turn(
         result = await app.run_turn(prompt, options=options)
         if result.output:
             console.print(Panel(Markdown(result.output), title="[bold magenta]Agent Response[/bold magenta]", border_style="green"))
+    except ProviderError as e:
+        console.print(Panel(
+            f"[bold yellow]Provider Error ({e.kind}):[/bold yellow] {e.message}",
+            title="[bold yellow]Model Provider Configuration[/bold yellow]",
+            border_style="yellow",
+        ))
+    except HarnessError as e:
+        console.print(Panel(f"[bold red]{e}[/bold red]", title="[bold red]Kernel Error[/bold red]", border_style="red"))
     except Exception as e:
         console.print(f"[bold red]Kernel execution error: {e}[/bold red]")
 

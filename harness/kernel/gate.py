@@ -305,7 +305,8 @@ class PolicyGate:
         # Step 1: Resolve tool spec and validate input arguments
         # ---------------------------------------------------------
         if call.name not in self.registry.tools:
-            res = ToolResult.error(f"unknown tool '{call.name}'")
+            err_msg = f"unknown tool '{call.name}'"
+            res = ToolResult.error(err_msg)
             if self.bus:
                 self.bus.publish(
                     Event(
@@ -316,6 +317,8 @@ class PolicyGate:
                             "name": call.name,
                             "is_error": True,
                             "duration_ms": 0.0,
+                            "preview": err_msg,
+                            "metadata": {},
                         },
                     )
                 )
@@ -328,7 +331,8 @@ class PolicyGate:
         try:
             validate_schema_value(call.arguments, spec.input_schema, path=call.name)
         except SettingsValidationError as err:
-            res = ToolResult.error(f"Invalid arguments for tool '{spec.name}': {err}")
+            err_msg = f"Invalid arguments for tool '{spec.name}': {err}"
+            res = ToolResult.error(err_msg)
             if self.bus:
                 self.bus.publish(
                     Event(
@@ -339,6 +343,8 @@ class PolicyGate:
                             "name": spec.name,
                             "is_error": True,
                             "duration_ms": 0.0,
+                            "preview": err_msg[:2048],
+                            "metadata": {},
                         },
                     )
                 )
@@ -381,6 +387,8 @@ class PolicyGate:
                             )
                     if outcome.action == "block":
                         reason = outcome.reason or "Blocked by hook"
+                        err_msg = f"blocked by hook {hook.name}: {reason}"
+                        dur_ms = (time.time() - start_time) * 1000
                         if self.bus:
                             self.bus.publish(
                                 Event(
@@ -395,7 +403,21 @@ class PolicyGate:
                                     },
                                 )
                             )
-                        return ToolResult.error(f"blocked by hook {hook.name}: {reason}")
+                            self.bus.publish(
+                                Event(
+                                    type="tool.result",
+                                    session_id=session_id,
+                                    data={
+                                        "call_id": call_id,
+                                        "name": spec.name,
+                                        "is_error": True,
+                                        "duration_ms": dur_ms,
+                                        "preview": err_msg[:2048],
+                                        "metadata": {"blocked_by": hook.name},
+                                    },
+                                )
+                            )
+                        return ToolResult.error(err_msg)
                     if outcome.action == "mutate" and outcome.arguments is not None:
                         current_args.update(outcome.arguments)
                 except Exception as err:
@@ -453,6 +475,8 @@ class PolicyGate:
 
         if denials:
             first_deny = denials[0]
+            err_msg = f"Action denied: {first_deny.reason}"
+            dur_ms = (time.time() - start_time) * 1000
             if self.bus:
                 self.bus.publish(
                     Event(
@@ -467,7 +491,21 @@ class PolicyGate:
                         },
                     )
                 )
-            return ToolResult.error(f"Action denied: {first_deny.reason}")
+                self.bus.publish(
+                    Event(
+                        type="tool.result",
+                        session_id=session_id,
+                        data={
+                            "call_id": call_id,
+                            "name": spec.name,
+                            "is_error": True,
+                            "duration_ms": dur_ms,
+                            "preview": err_msg[:2048],
+                            "metadata": {"policy": first_deny.policy},
+                        },
+                    )
+                )
+            return ToolResult.error(err_msg)
 
         # ---------------------------------------------------------
         # Step 4 & 5: Approvals (when ASK is returned)
@@ -507,7 +545,24 @@ class PolicyGate:
             )
 
             if not approved:
-                return ToolResult.error(f"Approval denied: {appr_reason}")
+                err_msg = f"Approval denied: {appr_reason}"
+                dur_ms = (time.time() - start_time) * 1000
+                if self.bus:
+                    self.bus.publish(
+                        Event(
+                            type="tool.result",
+                            session_id=session_id,
+                            data={
+                                "call_id": call_id,
+                                "name": spec.name,
+                                "is_error": True,
+                                "duration_ms": dur_ms,
+                                "preview": err_msg[:2048],
+                                "metadata": {"approval": "denied"},
+                            },
+                        )
+                    )
+                return ToolResult.error(err_msg)
 
         # Action is allowed
         if self.bus and not asks:
@@ -650,6 +705,13 @@ class PolicyGate:
             cards=list(result.cards) if result.cards else [],
         )
 
+        preview_text = ""
+        for b in final_result.content:
+            if isinstance(b, TextBlock):
+                preview_text += b.text
+        if len(preview_text) > 2048:
+            preview_text = preview_text[:2048] + "..."
+
         if self.bus:
             if result.cards:
                 for card in result.cards:
@@ -669,6 +731,8 @@ class PolicyGate:
                         "name": spec.name,
                         "is_error": final_result.is_error,
                         "duration_ms": duration_ms,
+                        "preview": preview_text,
+                        "metadata": final_metadata,
                     },
                 )
             )
