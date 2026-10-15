@@ -14,6 +14,7 @@ import logging
 import os
 import secrets
 import subprocess
+import time
 import uuid
 from collections import deque
 from collections.abc import Callable
@@ -83,6 +84,10 @@ class HarnessWebServer:
         self._replay_sub: Subscriber | None = None
         self._replay_task: asyncio.Task | None = None
 
+        # Short-lived single-use auth tickets for SSE/EventSource (§2.2)
+        self._auth_tickets: dict[str, float] = {}
+        self._purge_workspace_secrets()
+
         # Setup primary API and sandbox web apps
         self.app = web.Application(
             middlewares=[self._host_guard, self._auth_guard],
@@ -151,16 +156,35 @@ class HarnessWebServer:
         )
 
         if not is_public:
+            authenticated = False
+
             # 1. Bearer / X-Harness-Token check
             token = request.headers.get("X-Harness-Token")
             if not token:
                 auth_header = request.headers.get("Authorization", "")
                 if auth_header.startswith("Bearer "):
                     token = auth_header[7:].strip()
-            if not token and "token" in request.query:
-                token = request.query.get("token")
 
-            if not token or not hmac.compare_digest(token, self.auth_token):
+            if token and hmac.compare_digest(token, self.auth_token):
+                authenticated = True
+
+            # 2. HttpOnly Cookie check
+            if not authenticated:
+                cookie_token = request.cookies.get("harness_token")
+                if cookie_token and hmac.compare_digest(cookie_token, self.auth_token):
+                    authenticated = True
+
+            # 3. Single-use ticket check (e.g. for EventSource / SSE)
+            if not authenticated and "ticket" in request.query:
+                ticket = request.query.get("ticket")
+                if ticket:
+                    now = time.time()
+                    expiry = self._auth_tickets.pop(ticket, None)
+                    if expiry and now <= expiry:
+                        authenticated = True
+
+            # Master token in query string is strictly disallowed to prevent token leaks in URLs/history
+            if not authenticated:
                 return web.json_response({"error": "unauthorized"}, status=401)
 
             # 2. Mutating requests CSRF / Origin / Content-Type enforcement
@@ -244,6 +268,7 @@ class HarnessWebServer:
         self.app.router.add_get("/", self._handle_index)
         self.app.router.add_get("/ui", self._handle_index)
         self.app.router.add_get("/health", self._handle_health)
+        self.app.router.add_post("/auth/ticket", self._handle_auth_ticket)
         self.app.router.add_get("/events", self._handle_events)
         self.app.router.add_post("/commands/{name}", self._handle_command)
         self.app.router.add_post("/rpc", self._handle_rpc)
@@ -280,8 +305,17 @@ class HarnessWebServer:
         if self.static_dir.exists():
             self.app.router.add_static("/static/", path=str(self.static_dir), name="static")
 
+    async def _handle_auth_ticket(self, request: web.Request) -> web.Response:
+        """Issues a 60-second single-use ticket for EventSource / SSE connection."""
+        now = time.time()
+        # Clean expired tickets
+        self._auth_tickets = {t: exp for t, exp in self._auth_tickets.items() if exp > now}
+        ticket = secrets.token_urlsafe(32)
+        self._auth_tickets[ticket] = now + 60.0
+        return _json_response({"ticket": ticket, "expires_in": 60})
+
     async def _handle_index(self, request: web.Request) -> web.Response:
-        """Serves the rich studio index.html with tokens injected."""
+        """Serves the rich studio index.html with tokens injected and sets HttpOnly cookie."""
         index_file = self.static_dir / "index.html"
         token_script = f"<script>window.__HARNESS_TOKEN__ = {json.dumps(self.auth_token)};</script>"
         if index_file.exists():
@@ -292,14 +326,24 @@ class HarnessWebServer:
                 html = html.replace("</head>", f"  {token_script}\n</head>", 1)
             else:
                 html = f"{token_script}\n{html}"
-            return web.Response(text=html, content_type="text/html")
-        # Minimal skeleton if static dir is not yet populated
-        content = (
-            "<!DOCTYPE html>"
-            f"<html lang='en'><head><meta charset='UTF-8'><title>Harness Studio</title>{token_script}</head>"
-            "<body><div id='app'>Harness Studio Loading...</div></body></html>"
+            response = web.Response(text=html, content_type="text/html")
+        else:
+            # Minimal skeleton if static dir is not yet populated
+            content = (
+                "<!DOCTYPE html>"
+                f"<html lang='en'><head><meta charset='UTF-8'><title>Harness Studio</title>{token_script}</head>"
+                "<body><div id='app'>Harness Studio Loading...</div></body></html>"
+            )
+            response = web.Response(text=content, content_type="text/html")
+
+        response.set_cookie(
+            "harness_token",
+            self.auth_token,
+            httponly=True,
+            samesite="Strict",
+            path="/",
         )
-        return web.Response(text=content, content_type="text/html")
+        return response
 
     async def _handle_health(self, request: web.Request) -> web.Response:
         """Reports server status, active session, spend, and sandbox origin."""
@@ -750,8 +794,11 @@ class HarnessWebServer:
         try:
             body = await request.json()
             sid = body.get("session_id")
-            if not sid:
-                return _json_response({"error": "Missing session_id"}, status=400)
+            if not sid or "/" in sid or "\\" in sid or ".." in sid:
+                return _json_response({"error": "Invalid session_id"}, status=400)
+            session = self.commands.session_manager.get_session(sid)
+            if not session:
+                return _json_response({"error": "Session not found"}, status=404)
             await self.commands.session_manager.switch_session(sid)
             return _json_response({"status": "switched", "session_id": sid})
         except Exception as e:
@@ -831,9 +878,39 @@ class HarnessWebServer:
             "providers": providers,
         })
 
+    def _purge_workspace_secrets(self) -> None:
+        """Purges any plaintext api_keys from workspace settings and enforces 0600 mode (§4.3 #1)."""
+        sf = self.workspace / ".harness" / "settings.json"
+        if not sf.exists():
+            return
+        try:
+            try:
+                os.chmod(sf, 0o600)
+            except Exception:
+                pass
+            data = json.loads(sf.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and "api_keys" in data:
+                api_keys = data.pop("api_keys", {})
+                if isinstance(api_keys, dict):
+                    for prov, key in api_keys.items():
+                        if key and isinstance(key, str) and not key.startswith("●"):
+                            self.commands.secrets.set(f"{prov.lower()}_api_key", key)
+                            self.commands.secrets.set(f"{prov.upper()}_API_KEY", key)
+                sf.write_text(json.dumps(data, indent=2), encoding="utf-8")
+                try:
+                    os.chmod(sf, 0o600)
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.warning(f"Error purging workspace secrets from {sf}: {e}")
+
     def _settings_file(self) -> Path:
         harness_dir = self.workspace / ".harness"
         harness_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(harness_dir, 0o700)
+        except Exception:
+            pass
         return harness_dir / "settings.json"
 
     def _get_cowork_settings(self) -> dict[str, Any]:
@@ -844,6 +921,25 @@ class HarnessWebServer:
                 stored = json.loads(sf.read_text(encoding="utf-8"))
             except Exception:
                 pass
+
+        if isinstance(stored, dict):
+            stored.pop("api_keys", None)
+            stored.pop("configured_providers", None)
+            stored.pop("has_api_keys", None)
+
+        providers_status = {}
+        for prov in ("openai", "anthropic", "gemini", "openrouter", "deepseek", "tirith"):
+            has = (
+                self.commands.secrets.has(f"{prov}_api_key")
+                or self.commands.secrets.has(f"{prov.upper()}_API_KEY")
+            )
+            providers_status[prov] = has
+
+        cur_perm = self.commands.settings.get("kernel.security.permission_mode", "ask")
+        cur_spend = self.commands.settings.get("kernel.security.spend_cap_usd", 5.0)
+        cur_destr = self.commands.settings.get("kernel.security.destructive_blocking", True)
+        cur_prov = self.commands.settings.get("kernel.provider", "mock")
+        cur_model = self.commands.settings.get("kernel.model", "mock-default")
 
         defaults = {
             "general": {
@@ -907,24 +1003,38 @@ class HarnessWebServer:
                 "repomap_page_rank": True,
                 "token_budget_strategy": "adaptive",
             },
+            "security": {
+                "default_permission_mode": cur_perm,
+                "destructive_command_blocking": cur_destr,
+                "tirith_ssrf_shield": True,
+                "session_spend_cap_usd": cur_spend,
+            },
             "models": {
-                "default_provider": self.commands.settings.get("kernel.provider", "mock"),
-                "default_model": self.commands.settings.get("kernel.model", "mock-default"),
+                "default_provider": cur_prov,
+                "default_model": cur_model,
                 "temperature": 0.2,
                 "max_tokens": 4096,
             },
+            "configured_providers": dict(providers_status),
+            "has_api_keys": dict(providers_status),
         }
 
         for k, v in stored.items():
+            if k in ("configured_providers", "has_api_keys", "api_keys"):
+                continue
             if isinstance(v, dict) and k in defaults and isinstance(defaults[k], dict):
                 defaults[k].update(v)
             else:
                 defaults[k] = v
+
+        defaults["configured_providers"] = dict(providers_status)
+        defaults["has_api_keys"] = dict(providers_status)
         return defaults
 
     async def _handle_settings_get(self, request: web.Request) -> web.Response:
         settings = self._get_cowork_settings()
-        return web.json_response(settings)
+        settings.pop("api_keys", None)
+        return _json_response(settings)
 
     async def _handle_settings_post(self, request: web.Request) -> web.Response:
         try:
@@ -941,19 +1051,66 @@ class HarnessWebServer:
 
             keys = body.get("api_keys")
             if isinstance(keys, dict):
-                cur.setdefault("api_keys", {}).update({k: v for k, v in keys.items() if v})
-            provider = body.get("default_provider")
-            model = body.get("default_model")
+                for prov, key in keys.items():
+                    if key and isinstance(key, str) and not key.startswith("●"):
+                        self.commands.secrets.set(f"{prov.lower()}_api_key", key)
+                        self.commands.secrets.set(f"{prov.upper()}_API_KEY", key)
+
+            # Wire security toggles into kernel SettingsStore (§4.3 #3)
+            sec = body.get("security")
+            if isinstance(sec, dict):
+                perm_mode = sec.get("default_permission_mode")
+                if perm_mode in ("allow", "ask", "plan", "bypass"):
+                    self.commands.settings.set("kernel.security.permission_mode", perm_mode)
+                spend_cap = sec.get("session_spend_cap_usd")
+                if spend_cap is not None:
+                    try:
+                        self.commands.settings.set("kernel.security.spend_cap_usd", float(spend_cap))
+                    except (ValueError, TypeError):
+                        pass
+                destr = sec.get("destructive_command_blocking")
+                if destr is not None:
+                    self.commands.settings.set("kernel.security.destructive_blocking", bool(destr))
+
+            provider = body.get("default_provider") or (body.get("models", {}).get("default_provider") if isinstance(body.get("models"), dict) else None)
+            model = body.get("default_model") or (body.get("models", {}).get("default_model") if isinstance(body.get("models"), dict) else None)
             if provider:
                 self.commands.settings.set("kernel.provider", provider)
             if model:
                 self.commands.settings.set("kernel.model", model)
 
+            # Never persist api_keys in workspace settings.json; enforce mode 0600 (§4.3 #1)
+            to_save = dict(cur)
+            to_save.pop("api_keys", None)
+            to_save.pop("configured_providers", None)
+            to_save.pop("has_api_keys", None)
             sf = self._settings_file()
-            sf.write_text(json.dumps(cur, indent=2), encoding="utf-8")
-            return web.json_response({"status": "saved", "settings": cur, "active_provider": provider})
+            sf.write_text(json.dumps(to_save, indent=2), encoding="utf-8")
+            try:
+                os.chmod(sf, 0o600)
+            except Exception:
+                pass
+
+            # Update configured_providers in response
+            providers_status = {}
+            for prov in ("openai", "anthropic", "gemini", "openrouter", "deepseek", "tirith"):
+                has = (
+                    self.commands.secrets.has(f"{prov}_api_key")
+                    or self.commands.secrets.has(f"{prov.upper()}_API_KEY")
+                )
+                providers_status[prov] = has
+            cur["configured_providers"] = providers_status
+            cur["has_api_keys"] = providers_status
+
+            return _json_response({
+                "status": "saved",
+                "settings": cur,
+                "active_provider": provider,
+                "configured_providers": providers_status,
+                "has_api_keys": providers_status,
+            })
         except Exception as e:
-            return web.json_response({"error": str(e)}, status=400)
+            return _json_response({"error": str(e)}, status=400)
 
     async def _handle_search_code(self, request: web.Request) -> web.Response:
         try:

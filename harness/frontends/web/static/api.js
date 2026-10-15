@@ -84,6 +84,18 @@ export class HarnessAPI {
     return await res.json();
   }
 
+  async getAuthTicket() {
+    const res = await fetch(`${this.baseUrl}/auth/ticket`, {
+      method: 'POST',
+      headers: this._headers(),
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) {
+      return null;
+    }
+    return await res.json();
+  }
+
   async submitTurn(prompt, options = {}) {
     return this.command('submit_turn', { prompt, ...options });
   }

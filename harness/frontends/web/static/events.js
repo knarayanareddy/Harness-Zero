@@ -17,21 +17,31 @@ export class HarnessEventStream {
     this.isManualDisconnect = false;
   }
 
-  connect() {
+  async connect() {
     this.isManualDisconnect = false;
     if (this.eventSource) {
       this.disconnect();
     }
 
-    const token = this.api.token;
     let url = `${this.api.baseUrl}/events`;
     const params = new URLSearchParams();
-    if (token) {
-      params.set('token', token);
-    }
     if (this.lastEventId) {
       params.set('last_event_id', this.lastEventId);
     }
+
+    // Exchange token for a single-use short-lived SSE ticket (§2.2, §4.3 #5)
+    // or rely on the HttpOnly harness_token cookie set on page load.
+    if (this.api && typeof this.api.getAuthTicket === 'function') {
+      try {
+        const ticketData = await this.api.getAuthTicket();
+        if (ticketData && ticketData.ticket) {
+          params.set('ticket', ticketData.ticket);
+        }
+      } catch (err) {
+        // Fallback to cookie authentication
+      }
+    }
+
     const query = params.toString();
     if (query) {
       url += `?${query}`;
