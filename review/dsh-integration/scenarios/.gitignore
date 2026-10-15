@@ -1,0 +1,3 @@
+# Per-run artefacts (actual output on golden mismatch, summary.json). Goldens live in <scenario>/golden/.
+_last_run/
+__pycache__/

@@ -1,0 +1,16 @@
+name: approval_deny_no_approver_kernel
+kind: kernel
+summary: Same WRITE in `ask` mode with no interactive subscriber on the bus — must be denied immediately (fail closed) and the model told.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: ask
+turns:
+  - prompt: "Create notes.txt"
+expect:
+  tools_called: [write_to_file]
+  files:
+    notes.txt: {exists: false}
+  event_types_include: [tool.decision]
+  event_types_exclude: [approval.resolved]
+  model_saw: ["non-interactive"]
+  reload_equals_live: true

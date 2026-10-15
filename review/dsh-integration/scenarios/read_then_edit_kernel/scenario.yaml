@@ -1,0 +1,22 @@
+name: read_then_edit_kernel
+kind: kernel
+summary: view_file then edit_file (SEARCH/REPLACE); the file changes on disk, the model sees the tool results, a diff card is emitted.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: allow
+workspace_files:
+  app.py: |
+    def greet(name):
+        return f"Hello, {name}!"
+
+    if __name__ == "__main__":
+        print(greet("world"))
+turns:
+  - prompt: "Rename greet() to hello() in app.py"
+expect:
+  tools_called: [view_file, edit_file]
+  files:
+    app.py: {contains: "def hello(", not_contains: "def greet("}
+  event_types_include: [tool.call, tool.decision, tool.result, ui.card]
+  model_saw: ["def greet(name)"]
+  reload_equals_live: true

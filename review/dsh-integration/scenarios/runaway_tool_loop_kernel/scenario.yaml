@@ -1,0 +1,16 @@
+name: runaway_tool_loop_kernel
+kind: kernel
+summary: The model keeps calling the same tool; the kernel's iteration guard must end the turn and say so — and the replay must not be silently padded.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: allow
+workspace_files:
+  app.py: "print('x')\n"
+turns:
+  - prompt: "Loop forever"
+expect:
+  replay_consumed: false
+  no_errors: false
+  event_types_include: [tool.call]
+  stop_reasons: [max_iterations]
+  reload_equals_live: true

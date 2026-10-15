@@ -1,0 +1,11 @@
+name: session_resume_web
+kind: web
+summary: Two turns over HTTP with the browser's payload shape, then sessions.get — the history a page refresh would render must contain both turns.
+recorded_from: synthetic
+turns:
+  - prompt: "First question"
+  - prompt: "Second question"
+expect:
+  dom_lane: false
+  event_types_include: [turn.started, turn.completed]
+  event_types_exclude: [turn.error, turn.cancelled]

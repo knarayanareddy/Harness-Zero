@@ -1,0 +1,12 @@
+{"t": "TextDelta", "text": "Let me look at the file first."}
+{"arguments": {"file_path": "app.py"}, "id": "c1", "name": "view_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"diff": "<<<<<<< SEARCH\ndef greet(name):\n    return f\"Hello, {name}!\"\n=======\ndef hello(name):\n    return f\"Hello, {name}!\"\n>>>>>>> REPLACE\n", "file_path": "app.py"}, "id": "c2", "name": "edit_file", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"t": "TextDelta", "text": "Renamed greet() to hello() in app.py."}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "end_turn", "t": "Done"}

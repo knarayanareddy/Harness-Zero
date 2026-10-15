@@ -1,0 +1,96 @@
+[
+  {
+    "command": "auth.ticket",
+    "request": {},
+    "response": {
+      "ticket": true
+    },
+    "status": 200
+  },
+  {
+    "command": "events.sse",
+    "request": {},
+    "response": {},
+    "status": 200
+  },
+  {
+    "command": "health",
+    "request": {},
+    "response": {
+      "active_session": false
+    },
+    "status": 200
+  },
+  {
+    "command": "sessions.create",
+    "request": {},
+    "response": {
+      "result": {
+        "metadata": "…",
+        "session_id": "<session>"
+      },
+      "status": "ok"
+    },
+    "status": 200
+  },
+  {
+    "command": "submit_turn",
+    "request": {
+      "model": "replay-v1",
+      "prompt": "First question",
+      "session_id": "<session>"
+    },
+    "response": {
+      "result": {
+        "cards": "…",
+        "changed_files": "…",
+        "error": null,
+        "output": "First answer.",
+        "stop_reason": "end_turn",
+        "thinking": "…",
+        "tool_calls": "…",
+        "usage": "…"
+      },
+      "status": "ok"
+    },
+    "status": 200
+  },
+  {
+    "command": "submit_turn",
+    "request": {
+      "model": "replay-v1",
+      "prompt": "Second question",
+      "session_id": "<session>"
+    },
+    "response": {
+      "result": {
+        "cards": "…",
+        "changed_files": "…",
+        "error": null,
+        "output": "Second answer, and I remember the first.",
+        "stop_reason": "end_turn",
+        "thinking": "…",
+        "tool_calls": "…",
+        "usage": "…"
+      },
+      "status": "ok"
+    },
+    "status": 200
+  },
+  {
+    "command": "sessions.get",
+    "request": {
+      "session_id": "<session>"
+    },
+    "response": {
+      "result": {
+        "busy": "…",
+        "metadata": "…",
+        "records": "…",
+        "session_id": "<session>"
+      },
+      "status": "ok"
+    },
+    "status": 200
+  }
+]

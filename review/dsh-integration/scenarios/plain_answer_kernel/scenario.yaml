@@ -1,0 +1,11 @@
+name: plain_answer_kernel
+kind: kernel
+summary: A streamed text answer through Commands.submit_turn; transcript persisted and identical after a restart.
+recorded_from: synthetic
+turns:
+  - prompt: "What is the capital of the Netherlands?"
+expect:
+  tools_called: []
+  event_types_include: [turn.started, model.started, model.text.delta, model.completed, turn.completed]
+  model_saw: ["What is the capital of the Netherlands?"]
+  reload_equals_live: true

@@ -1,0 +1,10 @@
+{
+  "name": "harness-scenario-dom-lane",
+  "private": true,
+  "version": "0.1.0",
+  "description": "jsdom lane for Harness-Zero scenario tests: runs the shipped web client headlessly against the in-process daemon.",
+  "type": "module",
+  "dependencies": {
+    "jsdom": "24.1.3"
+  }
+}

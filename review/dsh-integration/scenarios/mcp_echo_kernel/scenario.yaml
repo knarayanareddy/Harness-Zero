@@ -1,0 +1,16 @@
+name: mcp_echo_kernel
+kind: kernel
+summary: An MCP tool (stdio echo fixture) executes through the gate; regression for review Addendum A.2 as a scenario.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: allow
+mcp_servers:
+  echo:
+    command: "${PYTHON}"
+    args: ["${REPO}/tests/fixtures/mcp_echo_server.py"]
+turns:
+  - prompt: "Echo 'through the kernel' via MCP"
+expect:
+  tools_called: [mcp__echo__echo]
+  model_saw: ["through the kernel"]
+  reload_equals_live: true

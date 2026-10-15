@@ -1,0 +1,16 @@
+{"t": "TextDelta", "text": "Noting that."}
+{"arguments": {"key": "codename", "text": "Project codename is Falcon"}, "id": "c1", "name": "remember", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"t": "TextDelta", "text": "Saved."}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "end_turn", "t": "Done"}
+
+{"arguments": {"query": "Falcon"}, "id": "c2", "name": "search_memory", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"t": "TextDelta", "text": "Found it: the codename is Falcon."}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "end_turn", "t": "Done"}

@@ -1,0 +1,15 @@
+name: approval_allow_kernel
+kind: kernel
+summary: A WRITE tool in `ask` mode; a scripted human approves via Commands.resolve_approval; the write happens.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: ask
+turns:
+  - prompt: "Create notes.txt"
+approvals: [approve]
+expect:
+  tools_called: [write_to_file]
+  files:
+    notes.txt: {contains: "approved write"}
+  event_types_include: [approval.required, approval.resolved, tool.result]
+  reload_equals_live: true
