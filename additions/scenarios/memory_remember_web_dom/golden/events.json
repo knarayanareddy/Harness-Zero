@@ -3,6 +3,15 @@
     "data": {
       "model": "replay-v1",
       "provider": "replay",
+      "session_id": "session#1",
+      "strategy": "single_loop"
+    },
+    "type": "session.started"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay",
       "session_id": "<session>",
       "strategy": "single_loop"
     },
@@ -96,7 +105,7 @@
           "body": "Permanently remembered fact #1 [codename]: Project codename is Falcon",
           "level": "info"
         },
-        "id": "evt#12",
+        "id": "evt#13",
         "kind": "notice",
         "title": null
       }
@@ -252,7 +261,7 @@
             ]
           ]
         },
-        "id": "evt#27",
+        "id": "evt#28",
         "kind": "table",
         "title": "Memory Search: Falcon"
       }

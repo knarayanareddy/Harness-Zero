@@ -475,13 +475,17 @@ export class HarnessStudioApp {
     const container = document.getElementById('economics-view');
     if (!container) return;
     try {
-      const data = await this.api.command('economics');
-      const sessionUsd = (data.session_usd || 0).toFixed(4);
-      const capUsd = (data.cap_usd || 5.00).toFixed(2);
-      const inputTok = data.token_usage?.input || 0;
-      const outputTok = data.token_usage?.output || 0;
-      const totalTok = data.token_usage?.total || 0;
-      const totalSpend = (data.totals?.total_cost_usd || data.session_usd || 0).toFixed(4);
+      // Payload shape is the `economics` command's: {spend_cap_usd, totals: Usage.to_dict()}
+      // (see Commands.economics / CostLedger.totals). `totals` is null until the first
+      // model call is recorded; `totals.cost_usd` is null when pricing is unknown.
+      const data = await this.api.economics(this.activeSessionId);
+      const totals = data.totals || {};
+      const capUsd = data.spend_cap_usd != null ? `$${Number(data.spend_cap_usd).toFixed(2)}` : '—';
+      const inputTok = totals.input_tokens || 0;
+      const outputTok = totals.output_tokens || 0;
+      const totalTok = inputTok + outputTok + (totals.cache_read_tokens || 0) + (totals.reasoning_tokens || 0);
+      const sessionUsd = totals.cost_usd != null ? `$${Number(totals.cost_usd).toFixed(4)}` : (totalTok > 0 ? 'unknown pricing' : '$0.0000');
+      const totalSpend = sessionUsd;
 
       container.innerHTML = `
         <div class="economics-card" style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:16px;">
@@ -489,11 +493,11 @@ export class HarnessStudioApp {
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
             <div style="background:#09090b; padding:10px; border-radius:6px; border:1px solid #27272a;">
               <div style="font-size:11px; color:#a1a1aa;">Session Spend / Cap</div>
-              <div style="font-size:18px; font-weight:700; color:#34d399; margin-top:4px;">$${escapeHtml(sessionUsd)} / $${escapeHtml(capUsd)}</div>
+              <div style="font-size:18px; font-weight:700; color:#34d399; margin-top:4px;">${escapeHtml(sessionUsd)} / ${escapeHtml(capUsd)}</div>
             </div>
             <div style="background:#09090b; padding:10px; border-radius:6px; border:1px solid #27272a;">
               <div style="font-size:11px; color:#a1a1aa;">Lifetime Total Cost</div>
-              <div style="font-size:18px; font-weight:700; color:#f4f4f5; margin-top:4px;">$${escapeHtml(totalSpend)}</div>
+              <div style="font-size:18px; font-weight:700; color:#f4f4f5; margin-top:4px;">${escapeHtml(totalSpend)}</div>
             </div>
           </div>
           <div style="font-size:12px; color:#a1a1aa; margin-bottom:8px;">Session Token Consumption:</div>
@@ -819,12 +823,12 @@ export class HarnessStudioApp {
     const elem = document.getElementById('economics-indicator');
     if (!elem || !spendData) return;
     const cap = spendData.cap_usd !== undefined ? `$${Number(spendData.cap_usd).toFixed(2)}` :
-                spendData.spend_cap_usd !== undefined ? `$${Number(spendData.spend_cap_usd).toFixed(2)}` : '$5.00';
+                spendData.spend_cap_usd != null ? `$${Number(spendData.spend_cap_usd).toFixed(2)}` : '—';
     let totalVal = 0.0;
     if (spendData.session_usd !== undefined) {
       totalVal = Number(spendData.session_usd);
-    } else if (spendData.totals?.total_cost_usd !== undefined) {
-      totalVal = Number(spendData.totals.total_cost_usd);
+    } else if (spendData.totals?.cost_usd != null) {
+      totalVal = Number(spendData.totals.cost_usd);
     }
     const total = `$${totalVal.toFixed(4)}`;
 

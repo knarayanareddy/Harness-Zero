@@ -239,3 +239,43 @@ def test_events_subscription_contract():
         if app_type.startswith("$"):
             continue
         assert app_type in schema_types, f"app.js listens to unknown event type '{app_type}' not in schema"
+
+
+def _js_function_body(source: str, name: str) -> str:
+    """Returns the text of the first class method ``name(...) {`` up to the next method at the same indent."""
+    m = re.search(rf"^  (?:async )?{re.escape(name)}\([^)]*\)\s*\{{", source, re.M)
+    assert m, f"{name} not found in app.js"
+    rest = source[m.end():]
+    nxt = re.search(r"^  (?:async )?[A-Za-z_]\w*\([^)]*\)\s*\{", rest, re.M)
+    return rest[: nxt.start()] if nxt else rest
+
+
+async def test_economics_payload_keys_match_app_js(commands: Commands):
+    """The keys app.js reads from the `economics` command must be keys the kernel actually emits.
+
+    Regression: 158c836 rendered `data.session_usd`, `data.cap_usd`, `data.token_usage.*` and
+    `data.totals.total_cost_usd`; the command returns `{spend_cap_usd, totals: Usage.to_dict()}`,
+    so the Economics tab always showed $0.0000 / $5.00 and 0 tokens.
+    """
+    from harness.sdk.types import Usage
+
+    payload = await commands.economics()
+    top_keys = set(payload.keys())
+    totals_keys = set(Usage().to_dict().keys())
+    # `cost.updated` event payload (harness/kernel/runner.py) — the header indicator consumes both shapes.
+    cost_event_keys = {"turn_usd", "session_usd", "cap_usd", "unknown_pricing"}
+
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+
+    tab = _js_function_body(app_js, "renderEconomicsTab")
+    top_refs = set(re.findall(r"\bdata\.([a-z_]+)", tab))
+    totals_refs = set(re.findall(r"\btotals\.([a-z_]+)", tab))
+    assert top_refs <= top_keys, f"renderEconomicsTab reads {sorted(top_refs - top_keys)} but economics returns {sorted(top_keys)}"
+    assert totals_refs <= totals_keys, f"renderEconomicsTab reads totals.{sorted(totals_refs - totals_keys)} but Usage.to_dict() has {sorted(totals_keys)}"
+    assert "token_usage" not in tab and "total_cost_usd" not in tab
+
+    indicator = _js_function_body(app_js, "updateEconomics")
+    ind_top = set(re.findall(r"\bspendData\.([a-z_]+)", indicator)) - {"totals"}
+    ind_totals = set(re.findall(r"\btotals\??\.([a-z_]+)", indicator))
+    assert ind_top <= (top_keys | cost_event_keys), f"updateEconomics reads unknown keys {sorted(ind_top - top_keys - cost_event_keys)}"
+    assert ind_totals <= totals_keys, f"updateEconomics reads totals.{sorted(ind_totals - totals_keys)}"

@@ -3,6 +3,15 @@
     "data": {
       "model": "replay-v1",
       "provider": "replay",
+      "session_id": "session#1",
+      "strategy": "single_loop"
+    },
+    "type": "session.started"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay",
       "session_id": "<session>",
       "strategy": "single_loop"
     },
