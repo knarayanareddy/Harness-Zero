@@ -1,6 +1,6 @@
 # Machine-readable index of the DeepSeek-Harness integration pack.
 # Source of truth for sequencing; the WS-*.md files are the source of truth for design.
-# Status values: specified | in_progress | landed | dropped
+# Status values: specified | in_progress | executed | landed | dropped
 version: 1
 baseline:
   harness_zero_commit: f43c272
@@ -26,9 +26,9 @@ workstreams:
   - id: WS-01
     title: Record/replay golden tests
     doc: WS-01_record_replay_tests.md
-    status: in_progress  # working implementation in additions/scenarios (11 scenarios, 3 lanes); left: record CLI flag, git mv to tests/scenarios, CI job
-    implementation: additions/scenarios
-    effort_days: 1  # remaining
+    status: executed  # 25 scenarios in 3 lanes under tests/scenarios, goldens + `HARNESS_REPLAY=record|replay|update`, record-path tests, CI job (node + jsdom, replay only), docs/testing/SCENARIOS.md. Deviations (reasons in review/CONSOLIDATION_LOG.md §P11b): providers keyed `replay` not `scenario`; headless script lives in the suite, not tools/; `_last_run/` ignored by tests/scenarios/.gitignore.
+    implementation: tests/scenarios
+    effort_days: 1
     depends_on: [P0]
     principles: [P5, P1]
     dsh_refs: [packages/testing/llm-replay, packages/testing/session-snapshot, client/testing]

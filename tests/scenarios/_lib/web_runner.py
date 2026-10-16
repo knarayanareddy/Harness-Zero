@@ -10,6 +10,7 @@ Two lanes, both against the same in-process server:
   ES modules run in jsdom against the server; the composer is driven and the
   timeline text is captured (``headless_timeline.mjs``).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -25,9 +26,10 @@ import httpx
 from harness.frontends.web.server import HarnessWebServer
 from harness.kernel.bootstrap import bootstrap_kernel
 
+from . import record
 from .kernel_runner import ScriptedApprover, base_overrides, seed_workspace
 from .normalize import Normalizer, collapse_deltas
-from .replay_provider import MODEL, ReplayProvider, golden_view, request_summary
+from .replay_provider import PROVIDER_NAME, golden_view, request_summary, scenario_model
 from .scenario import Scenario
 from .sse import SSEReader
 
@@ -83,8 +85,10 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
     seed_workspace(ws, sc.workspace_files)
 
     rt = await bootstrap_kernel(workspace=ws, config_dir=env_conf, overrides=base_overrides(sc))
-    provider = ReplayProvider.from_file(sc.provider_file, strict=sc.strict_exhaustion)
-    rt.registry.register_provider(provider, plugin_name="scenario")
+    # A handle, not a bare provider: in record mode it is a tee in front of the real provider, and
+    # `base_overrides` already pointed `kernel.model` at the recording source so the client's chip offers
+    # models the wrapped provider actually serves.
+    provider = record.install_provider(sc, rt)
 
     server = HarnessWebServer(commands=rt.commands, bus=rt.bus, host="127.0.0.1", port=0, sandbox_port=0, workspace=ws)
     await server.start()
@@ -100,7 +104,11 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
     live_records: list[dict[str, Any]] = []
     reloaded: list[dict[str, Any]] = []
     dom_report: dict[str, Any] | None = None
-    approver = ScriptedApprover(rt.bus, rt.commands, sc.approvals) if sc.approvals and not (dom and sc.expect.get("dom_approves")) else None
+    approver = (
+        ScriptedApprover(rt.bus, rt.commands, sc.approvals)
+        if sc.approvals and not (dom and sc.expect.get("dom_approves"))
+        else None
+    )
 
     async with httpx.AsyncClient(base_url=base, timeout=30) as client:
 
@@ -128,14 +136,23 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
         # Browser SSE connection (ticket flow exactly like events.js)
         r = await client.post("/auth/ticket", headers=headers, content="{}")
         ticket = r.json().get("ticket") if r.status_code == 200 else None
-        http_log.append({"command": "auth.ticket", "request": {}, "status": r.status_code, "response": {"ticket": bool(ticket)}})
+        http_log.append(
+            {"command": "auth.ticket", "request": {}, "status": r.status_code, "response": {"ticket": bool(ticket)}}
+        )
         sse = SSEReader(client, f"/events?ticket={ticket}" if ticket else "/events", headers={} if ticket else headers)
         await sse.start()
         http_log.append({"command": "events.sse", "request": {}, "status": sse.status, "response": {}})
 
         try:
             health = (await client.get("/health", headers=headers)).json()
-            http_log.append({"command": "health", "request": {}, "status": 200, "response": {"active_session": bool(health.get("active_session"))}})
+            http_log.append(
+                {
+                    "command": "health",
+                    "request": {},
+                    "status": 200,
+                    "response": {"active_session": bool(health.get("active_session"))},
+                }
+            )
 
             if dom:
                 ok, why = dom_lane_available()
@@ -154,7 +171,10 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
                     terminal = lambda e: e.get("type") in ("turn.completed", "turn.error", "turn.cancelled")  # noqa: E731
                     for turn in sc.turns:
                         # Exactly what app.js sends: prompt, session_id and the selected model.
-                        body = {"prompt": turn.prompt, "session_id": sid, "model": turn.model or MODEL.id}
+                        # In record mode the model the client picks is the recording source's; an explicit
+                        # `turn.model` still wins, exactly as in the kernel runner.
+                        fallback_model = record.record_model_id() if record.is_recording() else scenario_model(sc).id
+                        body = {"prompt": turn.prompt, "session_id": sid, "model": turn.model or fallback_model}
                         seen_terminal = sse.count(terminal)
                         status, data = await call("submit_turn", body)
                         if status != 200:
@@ -187,6 +207,9 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
             await server.stop()
             await rt.registry.unload_all()
 
+    # The recording has to be on disk before a second boot replays against it.
+    provider.finish()
+
     # `reload_equals_live`: the same session read back through a *second* boot, so the comparison is
     # across processes and not just across two API calls on one kernel. This is the property a user
     # actually depends on after `harness ui` is restarted: what the log holds is all the client needs.
@@ -207,8 +230,10 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
         restart = await _restart_daemon_and_reload(sc, ws, env_conf)
         dom_report["restart"] = restart.get("dom") or {}
 
-    live_vs_reloaded_equal = None if not sc.expect.get("reload_equals_live") else (
-        json.dumps(live_records, sort_keys=True) == json.dumps(reloaded, sort_keys=True)
+    live_vs_reloaded_equal = (
+        None
+        if not sc.expect.get("reload_equals_live")
+        else (json.dumps(live_records, sort_keys=True) == json.dumps(reloaded, sort_keys=True))
     )
 
     # `dom_reload_contains_live_lines`: the refreshed page paints the session log, so every line the live
@@ -222,7 +247,11 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
             line.strip() for line in live_text.splitlines() if line.strip() and line.strip() not in back_text
         ]
 
-    tools_called = [e.get("data", {}).get("name") or e.get("data", {}).get("tool") for e in sse.events if e.get("type") == "tool.call"]
+    tools_called = [
+        e.get("data", {}).get("name") or e.get("data", {}).get("tool")
+        for e in sse.events
+        if e.get("type") == "tool.call"
+    ]
     return WebRunResult(
         session_id=sid,
         workspace=ws,
@@ -248,7 +277,8 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
 async def _restart_daemon_and_reload(sc: Scenario, ws: Path, env_conf: Path) -> dict[str, Any]:
     """Boots a fresh kernel + web server on ``ws`` and loads the client as a page refresh would."""
     rt = await bootstrap_kernel(workspace=ws, config_dir=env_conf, overrides=base_overrides(sc))
-    rt.registry.register_provider(ReplayProvider.from_file(sc.provider_file, strict=sc.strict_exhaustion), plugin_name="scenario")
+    # A replay boot, never a recording boot: it runs no turns, but it still has to find the recording.
+    record.install_replay(sc, rt)
     server = HarnessWebServer(commands=rt.commands, bus=rt.bus, host="127.0.0.1", port=0, sandbox_port=0, workspace=ws)
     await server.start()
     base = f"http://127.0.0.1:{server.port}"
@@ -259,7 +289,9 @@ async def _restart_daemon_and_reload(sc: Scenario, ws: Path, env_conf: Path) -> 
         async with httpx.AsyncClient(base_url=base, timeout=30) as client:
             health = (await client.get("/health", headers=headers)).json()
             out["active_session_after_restart"] = (health.get("active_session") or {}).get("session_id")
-            rows = (await client.post("/commands/sessions.list", headers=headers, content="{}")).json().get("result") or []
+            rows = (await client.post("/commands/sessions.list", headers=headers, content="{}")).json().get(
+                "result"
+            ) or []
             out["sessions_after_restart"] = len(rows)
             out["session_rows"] = [{k: r.get(k) for k in ("title", "turns", "active")} for r in rows]
             out["dom"] = await _run_dom_lane(base, sc, token, reload=True)
@@ -277,7 +309,10 @@ def _trim(data: Any) -> Any:
             if k in ("records",):
                 out[k] = f"<{len(v)} records>"
             elif k in ("result",) and isinstance(v, dict):
-                out[k] = {kk: (vv if kk in ("session_id", "status", "output", "stop_reason", "error") else "…") for kk, vv in v.items()}
+                out[k] = {
+                    kk: (vv if kk in ("session_id", "status", "output", "stop_reason", "error") else "…")
+                    for kk, vv in v.items()
+                }
             else:
                 out[k] = v if isinstance(v, (str, int, float, bool)) or v is None else "…"
         return out
@@ -296,7 +331,10 @@ async def _run_dom_lane(base: str, sc: Scenario, token: str, *, reload: bool = F
             "NEW_SESSION": "0" if reload else ("1" if sc.expect.get("dom_new_session", True) else "0"),
             "APPROVE": "1" if sc.expect.get("dom_approves") else "0",
             "RELOAD": "1" if reload else "0",
-            "MODEL": MODEL.id,
+            "MODEL": record.record_model_id() if record.is_recording() else scenario_model(sc).id,
+            # Which provider the chip must pick when more than one lists that id (see headless_timeline.mjs).
+            # The client sends the selected option's provider, so this decides which provider answers.
+            "MODEL_PROVIDER": PROVIDER_NAME,
             # Open the settings modal after the turns and report the schema-driven group tabs
             # (absorbs the old tests/frontends/ui_smoke.mjs check).
             "SETTINGS_PROBE": "1" if (not reload and sc.expect.get("settings_groups_include")) else "0",
@@ -319,5 +357,9 @@ async def _run_dom_lane(base: str, sc: Scenario, token: str, *, reload: bool = F
     try:
         report = json.loads(text[text.index("{") :])
     except Exception:
-        report = {"error": "unparseable headless output", "stdout": text[-2000:], "stderr": err.decode("utf-8", "replace")[-2000:]}
+        report = {
+            "error": "unparseable headless output",
+            "stdout": text[-2000:],
+            "stderr": err.decode("utf-8", "replace")[-2000:],
+        }
     return report

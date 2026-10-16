@@ -21,6 +21,7 @@ const NEW_SESSION = process.env.NEW_SESSION === '1';
 const RELOAD = process.env.RELOAD === '1'; // simulate a page refresh on an existing session: no clicks, no prompts
 const APPROVE = process.env.APPROVE === '1';
 const MODEL = process.env.MODEL || '';
+const MODEL_PROVIDER = process.env.MODEL_PROVIDER || '';
 const SETTINGS_PROBE = process.env.SETTINGS_PROBE === '1';
 
 const consoleLog = [];
@@ -151,9 +152,22 @@ if (NEW_SESSION) { $('#btn-new-session')?.click(); await sleep(800); }
 report.active_session_before_send = window.HarnessApp?.activeSessionId || null;
 if (MODEL && $('#model-select')) {
   const sel = $('#model-select');
-  if ([...sel.options].some((o) => o.value === MODEL)) sel.value = MODEL;
+  const matches = [...sel.options].filter((o) => o.value === MODEL);
+  if (matches.length > 1 && MODEL_PROVIDER) {
+    // Several providers can list the same model id (a fixture recorded from `mock` is served by `mock-v1`,
+    // which the built-in mock also offers), and the chip's choice decides which provider the client names in
+    // its submit — i.e. which provider answers and what the events golden says. Scope it explicitly instead of
+    // letting option order decide. `option.selected` rather than `sel.value`, which would take the first match.
+    const right = matches.find((o) => o.dataset.provider === MODEL_PROVIDER);
+    if (right) right.selected = true;
+  } else if (matches.length) {
+    sel.value = MODEL;
+  }
 }
 report.model_selected = $('#model-select')?.value || null;
+// …and which provider that selection belongs to, because that is what the client puts in its submit body:
+// a scenario that records 0 streams (the request resolved past the recorder) shows up here.
+report.model_selected_provider = $('#model-select')?.selectedOptions?.[0]?.dataset?.provider || null;
 
 const turns = [];
 for (const prompt of PROMPTS) {

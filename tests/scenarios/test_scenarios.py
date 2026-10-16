@@ -17,13 +17,28 @@ from pathlib import Path
 
 import pytest
 from _lib.kernel_runner import run_kernel_scenario
-from _lib.scenario import compare_golden, discover, load_scenario
+from _lib.scenario import compare_golden, discover, kind_of, load_scenario
 from _lib.web_runner import run_web_scenario
 
 from harness.sdk.events import validate_event
 
 ROOT = Path(__file__).parent
 SCENARIOS = discover(ROOT)
+
+
+def _params(root: Path) -> list[pytest.ParameterSet]:
+    """One param per scenario, marked so `-m web` picks the browser lanes and `-m scenario` picks the suite.
+
+    Marking happens at collection, from the yaml's `kind` alone: `load_scenario` validates the whole file and
+    a broken scenario has to fail as a test, not as a collection error that hides the other 24.
+    """
+    out: list[pytest.ParameterSet] = []
+    for d in discover(root):
+        marks = [pytest.mark.scenario]
+        if kind_of(d) == "web":
+            marks.append(pytest.mark.web)
+        out.append(pytest.param(d, marks=marks))
+    return out
 
 
 def _subset(want, have) -> bool:
@@ -160,7 +175,7 @@ def _check_expectations(sc, result) -> None:
         assert not incomplete, f"client never saw the turn finish: {incomplete}; sse={result.dom.get('sse_events')[:20]}; submit={result.dom.get('submit_bodies')}; fetch={result.dom.get('fetch_log')[-6:]}"
 
 
-@pytest.mark.parametrize("scenario_dir", SCENARIOS, ids=lambda p: p.name)
+@pytest.mark.parametrize("scenario_dir", _params(ROOT), ids=lambda p: p.name)
 async def test_scenario(scenario_dir: Path, tmp_path: Path, hermetic_env: Path, request: pytest.FixtureRequest):
     sc = load_scenario(scenario_dir)
     if sc.xfail:

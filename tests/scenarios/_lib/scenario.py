@@ -64,6 +64,19 @@ def load_scenario(path: Path) -> Scenario:
     )
 
 
+def kind_of(directory: Path) -> str:
+    """The `kind` field of a scenario, read without loading it.
+
+    Collection needs it to attach the `web` marker, and it must never raise: a half-written scenario should
+    fail its own test, not take the whole file's collection down with it.
+    """
+    try:
+        data = yaml.safe_load((directory / "scenario.yaml").read_text(encoding="utf-8")) or {}
+        return str(data.get("kind") or "kernel")
+    except Exception:  # noqa: BLE001 - deliberately total
+        return "kernel"
+
+
 def discover(root: Path) -> list[Path]:
     return sorted(p for p in root.iterdir() if p.is_dir() and (p / "scenario.yaml").exists())
 

@@ -195,6 +195,7 @@ Documents that describe **this** system, in the order to read them:
 - [`docs/architecture/CONTRACTS.md`](docs/architecture/CONTRACTS.md): the SDK protocols plugins implement (`Provider`, `ToolHandler`, `Policy`, stores, strategies, hooks), domain types and boundary invariants.
 - [`docs/architecture/SESSION_LOG.md`](docs/architecture/SESSION_LOG.md): the session log as the single source of truth — record kinds and anatomy, log-before-execute and fail-closed append, `derive_messages`, the client's one-renderer reload path, and the v1→v2 upgrade policy.
 - [`docs/catalog/`](docs/catalog/PLUGINS.md): the generated catalogues — plugins, tools, settings, events, commands and the web client contract (`harness catalog gen`, gated by `harness catalog --check`).
+- [`docs/testing/SCENARIOS.md`](docs/testing/SCENARIOS.md): the record/replay scenario suite — how to run a scenario, record a real provider's stream, and update goldens without freezing a bug.
 - [`docs/PORTING_RECIPES.md`](docs/PORTING_RECIPES.md): authoring new plugins, with conformance kits.
 - [`docs/events.schema.json`](docs/events.schema.json): generated event schema (`harness events schema`); [`CHANGELOG.md`](CHANGELOG.md) for what changed when.
 

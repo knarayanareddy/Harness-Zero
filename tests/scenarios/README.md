@@ -7,6 +7,10 @@ run against the kernel *as it is today* (it imports the installed `harness.*` pa
 nothing else), so it can be moved into `tests/` with a `git mv` once adopted. Nothing in here depends
 on its own location: the repo root is found by walking up to `pyproject.toml` + `harness/`.
 
+The contributor-facing how-to (add / record / update, and the failure playbook) is
+[`docs/testing/SCENARIOS.md`](../../docs/testing/SCENARIOS.md). This file is the in-suite reference: the
+`scenario.yaml` schema, the lanes and the inventory.
+
 ```
 scenarios/
 ├── conftest.py              hermetic HOME / HARNESS_CONFIG_DIR per test, strips *_API_KEY
@@ -120,13 +124,21 @@ a bug is present just freezes the bug (`thinking_then_answer_web` was first acce
 
 ## Recording from a real provider
 
-`_lib/replay_provider.py::RecordingProvider` wraps any registered provider and writes the
-stream to `provider.jsonl` while the scenario runs; it refuses to write if any `*_API_KEY` /
-`*_TOKEN` value appears in the text. The built-in recordings are synthetic
-(`make_recordings.py`) because this sandbox has no model access; the codec is identical, so
-the kernel cannot tell the difference. When the recorder is wired into a CLI flag
-(`HARNESS_REPLAY=record`, WS-01 acceptance), replace `recorded_from: synthetic` with the
-provider/model id.
+`HARNESS_REPLAY=record` swaps the fixture provider for a tee: `_lib/record.py` takes the provider named by
+`HARNESS_RECORD_PROVIDER` out of the registry, registers `RecordingProvider` under the fixture's own key
+(`replay`) in its place, and writes `provider.jsonl` plus a `provider.requests.json` sidecar
+(`{"provider", "model", "requests"}`) as the scenario runs. `HARNESS_RECORD_MODEL` picks the model; the
+replay side reads the id back out of the sidecar (`scenario_model`), which is what keeps a recording made
+against `claude-…` replayable by someone else. The tee keeps the name `replay` and the wrapped provider
+steps aside deliberately: key it differently and `kernel.provider` never reaches it, leave the wrapped one
+registered and the request resolves past it — a run then records nothing and still looks green.
+`RecordingProvider` refuses to write a stream containing the value of any `*_API_KEY` / `*_TOKEN`, and
+`ProviderHandle.finish()` runs before any restart or reload lane.
+
+The built-in recordings are synthetic (`make_recordings.py`), because this sandbox has no model access; the
+codec is identical, so the kernel cannot tell the difference, and `recorded_from` says which is which.
+`test_record_replay.py` records into a scratch copy and asserts record and replay agree — in the kernel
+lane and through the browser.
 
 ## Scenario inventory
 
@@ -153,6 +165,10 @@ provider/model id.
 | shell_exec_denied_without_approver_kernel | kernel | `run_command` in `ask` mode with nobody approving → fails closed |
 | secret_redacted_from_model_kernel | kernel | stored secret + `sk-…` pattern redacted before the model sees them |
 | tirith_blocks_ssrf_kernel | kernel | metadata-endpoint `curl` denied by Tirith in allow mode |
+| edit_without_read_blocked_kernel | kernel | WS-03 loop hygiene: an `edit_file` on a file never read is denied, with the reason in the tool result |
+| repeat_call_reminder_kernel | kernel | WS-03 loop hygiene: the same call twice in a row gets a reminder instead of a second execution |
+| huge_tool_output_pruned_and_spilled_kernel | kernel | WS-03 loop hygiene: oversized output is truncated in the model's view and the full text spills to a file |
+| reload_equals_live_web_dom | web + DOM | WS-04c: the live DOM timeline and the reloaded one are the same set of lines, approvals and cards included |
 
 Every web scenario additionally records that unauthenticated `/commands/*`, `/auth/ticket`, `/events` and a
 bogus ticket are rejected with 401 (`http.json`, entry `unauthenticated`).
@@ -165,6 +181,7 @@ Findings produced by running these live in `../FLOW_TEST_FINDINGS.md`.
   CI installs node + `npm ci` for the DOM lane and sets `SCENARIO_DOM_WAIT_MS=6000`.
 - `plain_answer_web` also opens the settings modal and asserts the schema-driven group tabs and a clean
   browser console (`settings_groups_include`, `no_console_errors`) — the former `ui_smoke` checks.
-- `_lib/replay_provider.py` is the seed of `harness/sdk/testing/replay.py` (WS-01); it implements the full
-  `Provider` contract (`is_configured` / `is_reachable`) because the registry now enforces it.
+- the providers live in `harness/sdk/testing/replay.py` (WS-01) and `_lib/replay_provider.py` is a thin
+  view of them; they implement the full `Provider` contract (`is_configured` / `is_reachable`) because the
+  registry enforces it.
 - `_lib/normalize.py` rules are the place to add new volatile fields when goldens flap.

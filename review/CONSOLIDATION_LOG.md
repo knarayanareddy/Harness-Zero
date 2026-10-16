@@ -676,6 +676,8 @@ Plus one that only showed up under load: a timed-out `run_command` left its chil
 | R31 | `tests/scenarios/_lib/normalize.py` | Goldens pinned `model.started.request_tokens_estimate` = prompt chars ÷ 4, which includes the tmp workspace path — flipped 73 → 74 when the pytest tmp counter reached three digits (the unexplained transient failure of P3). | P6: key dropped from goldens (22 files, only those lines) |
 | R42 | `kernel/approvals.py` → bus | `approval.resolved` omitted `session_id`, so a client that filters events by session left the approval card pending until the page was reloaded. | P10b: the payload carries it; `approval_allow_web_dom` pins the resolved card |
 | R43 | `frontends/web/static/app.js` | The reload path rendered `sessions.get` history by **role**, and the payload it re-derived contained only user/assistant text and tool results. Approvals, policy decisions, tool cards and the compaction summary were therefore invisible after a refresh — the log held them, the client had no case for them. A `plugin · risk` subtitle also existed only on the live `tool.call` event, so even a card that survived reloaded thinner. | P11: `renderRecord(rec)` switches on `rec.kind` and reuses the live painters; `tool.decision` gained `plugin` on the event and in the record; scenario `reload_equals_live_web_dom` asserts every live line survives a refresh |
+| R45 | `tests/scenarios/_lib/` (record path) | In record mode the tee was registered *alongside* the provider it wrapped, under the fixture's key. `app.js` sends the provider of the selected model, so a browser-lane request resolved to the real `mock` plugin, the recorder saw nothing, and `provider.jsonl` came out 1 byte with the run still green — the emptiness only surfaced later, as `ReplayExhausted: … recorded 0 requests` in the replay phase. Keying the tee as `mock` is refused outright (`_register_provider`: duplicate name). | P11b: the tee keeps the fixture key and the wrapped provider is popped from `runtime.registry.providers` for the run; `test_record_then_replay_in_the_web_lane` asserts the recording is non-empty and that both lanes agree, so a silent no-op recording fails the same test that wrote it |
+| R46 | `tests/scenarios/_lib/node/headless_timeline.mjs` | The model chip was selected by **id** alone. A recorded fixture's id (`mock-v1`) is also served by the built-in mock, so the browser lane replayed against the plugin rather than the fixture: `turn.started` said `provider: "mock"` where the kernel lane said `"replay"`, and the two runs' goldens could never agree. Selecting by `sel.value = id` compounds it — jsdom takes the first option with that value, i.e. option order decides what a test means. | P11b: `MODEL_PROVIDER` scopes the selection to the fixture's provider (only when several providers list the id), the chosen option's provider is reported as `model_selected_provider`, and the sidecar's model id is what replay pins (`scenario_model`) |
 | R44 | `plugins/stores/fts5_search/` | Two related bugs. The row projection read v1 field names (`type`, `source`), so every row the runner indexed from a v2 record said `UNKNOWN`/`UNKNOWN` and `search_memory`'s Source column was decoration; and the only rebuild path ran when the table was empty, so a workspace whose index had gone stale had no repair — there was no CLI entry point at all. | P11: one `record_row()` shared by the live hook and the rebuild; `rebuild_from_sessions` is unconditional; new `harness sessions reindex`; `test_the_search_index_is_rebuildable_from_the_log` |
 
 ---
@@ -896,3 +898,42 @@ that raises on the third append). Both properties are pinned by kernel tests ins
 where a monkeypatched store is cheap and a recorded session would be theatre. §3.6's `checkpoint.created`
 records stay out of scope for WS-04 (they belong with WS-07's diff view), and `settings.changed` records are
 declared but unwritten; the generated table shows both as `0 scenario(s)` rather than the docs claiming them.
+
+## P11b — WS-01: the record path, and the replay machinery promoted to the SDK
+
+**Spec.** `WS-01_record_replay_tests.md`, the parts still open after the suite landed: the recorder wired into
+`HARNESS_REPLAY=record`, `harness/sdk/testing/replay.py` as the public home of both providers,
+`ScriptedProvider(strict_exhaustion=…)`, pytest markers, the two fail-first unit-test files §5 lists, and
+`docs/testing/SCENARIOS.md`.
+
+**Built.** `_lib/record.py` (mode detection, the tee install, `ProviderHandle.finish()`) → the SDK
+(`harness/sdk/testing/replay.py`), `_lib/replay_provider.py` and `_lib/codec.py` reduced to views, both runners
+wired so a scenario boots either mode without knowing which it is in, `test_record_replay.py` (4 tests),
+`tests/kernel/test_replay_provider.py` (10), `tests/scenarios/test_normalize.py` (6), markers
+`scenario`/`web` in `pyproject.toml` with `kind_of()` supplying them at collection, and the contributor doc.
+
+**Evidence.** `SCENARIO_DOM_WAIT_MS=6000 pytest -q` → 539 passed (523 at P11 + 4 record-path + 10 SDK replay
++ 6 normaliser + … see the gate line in the commit). The goldens of all 25 scenarios are byte-identical before
+and after this change (`requests.json`/`http.json` included): the record path is additive, and the 12 events
+that *did* move during development — `turn.started`'s `data.options.provider` — moved back once the harness
+stopped trying to be more explicit than the client. Teeth checks: removing `strict_exhaustion`'s raise fails
+`test_exhaustion_is_an_error_when_the_script_is_strict`; removing `_HEX_ID` normalisation fails
+`test_an_id_in_prose_is_relabelled_exactly_like_the_key_version`; both restored.
+
+**Deviations, with reasons.**
+1. `ReplayProvider.name` is `replay`, not the spec's `scenario`. Every scenario already pins
+   `kernel.provider: replay`; one key for both modes means a recording and its replay produce the same goldens,
+   and `record.py`'s tee inherits it. (`plugin_name="scenario"` is still what the registry records as the
+   owning plugin, which is the spec's intent for provenance.)
+2. `tools/headless_timeline.mjs` stayed at `tests/scenarios/_lib/node/headless_timeline.mjs`. It is a lane of
+   this suite, its imports (`_lib/dom.py`-adjacent conventions, jsdom resolution by walking up) are the suite's,
+   and keeping it inside means `git mv tests/scenarios …` moves the whole thing in one step.
+3. `_last_run/` is ignored by `tests/scenarios/.gitignore` rather than the root one — the rule belongs with the
+   directory that produces the actuals.
+4. The spec's §5 row `test_scenario[plain_answer-web]` and its "fail until the §8 client fix is in" narrative
+   were consumed in the original WS-01 PR; what failed first here was the record path itself (R45), which is the
+   same discipline pointed at the code that was actually missing.
+5. `provider.requests.json` is `{provider, model, requests}`, not the spec's bare request list: a replay needs
+   the recorded model id to name itself (R46), and the legacy list shape is still tolerated on read so a fixture
+   recorded before this change replays unchanged.
+

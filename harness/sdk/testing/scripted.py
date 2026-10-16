@@ -15,6 +15,16 @@ from harness.sdk.types import (
 )
 
 
+class ReplayExhausted(RuntimeError):
+    """The kernel asked for one more response than the provider holds.
+
+    Off by default: a script that runs out answers `Done(end_turn)`, which is what makes small unit tests
+    convenient. Turn it on (`strict_exhaustion=True`) wherever a runaway loop has to fail loudly instead of
+    looping politely — `harness.sdk.testing.replay.ReplayProvider` turns it on, because a recording knows
+    exactly how many requests the flow made.
+    """
+
+
 class ScriptedProvider:
     """
     Deterministic replay provider for test suites.
@@ -36,8 +46,11 @@ class ScriptedProvider:
         self,
         responses: list[list[ModelEvent] | Exception] | None = None,
         models: list[ModelInfo] | None = None,
+        *,
+        strict_exhaustion: bool = False,
     ) -> None:
         self.responses: list[list[ModelEvent] | Exception] = list(responses or [])
+        self.strict_exhaustion = strict_exhaustion
         self.requests: list[ModelRequest] = []
         self._models = list(models) if models is not None else [
             ModelInfo(
@@ -69,9 +82,18 @@ class ScriptedProvider:
     async def list_models(self) -> list[ModelInfo]:
         return list(self._models)
 
+    @property
+    def remaining(self) -> int:
+        """Responses still unreplayed — the way a test asserts the script was fully consumed."""
+        return len(self.responses) - self._index
+
     async def generate(self, req: ModelRequest) -> AsyncIterator[ModelEvent]:
         self.requests.append(req)
         if self._index >= len(self.responses):
+            if self.strict_exhaustion:
+                raise ReplayExhausted(
+                    f"model request #{self._index + 1} has no scripted response ({len(self.responses)} scripted)"
+                )
             yield Done(stop_reason="end_turn")
             return
 

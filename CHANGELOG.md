@@ -9,6 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — P11b / WS-01 the record path, and the replay machinery in the SDK
+- **`HARNESS_REPLAY=record` is wired into the scenario suite** (`tests/scenarios/_lib/record.py`): the mode
+  takes the provider named by `HARNESS_RECORD_PROVIDER` out of the registry, registers a
+  `RecordingProvider` tee under the fixture's own key (`replay`) in its place, and writes
+  `provider.jsonl` plus a `provider.requests.json` sidecar (`{"provider", "model", "requests"}`) as the run
+  proceeds. `HARNESS_RECORD_MODEL` chooses the model. The tee keeps the fixture key *and* the wrapped provider
+  steps aside deliberately: key it as anything else and `kernel.provider` never reaches it, leave the wrapped
+  one registered and a client request resolves past the tee — the run records nothing and still looks green
+  (`harness/frontends/web/static/app.js` sends the provider of the selected model, and the built-in `mock`
+  answers with plausible text).
+- **A recording replays as the model it was made from**: `_lib.replay_provider.scenario_model` reads the id out
+  of the sidecar, and the headless browser lane scopes the model chip by `data-provider` (`MODEL_PROVIDER`)
+  instead of by id, reporting the selection (`model_selected` / `model_selected_provider`). Model ids are not
+  unique across providers — `mock-v1` is listed by the built-in mock and by a fixture recorded from it — so an
+  id-only selection silently stops testing the fixture. Synthetic fixtures ship no sidecar, so every existing
+  golden still replays as `replay` / `replay-v1`: the 25 committed goldens are byte-identical.
+- **`harness/sdk/testing/replay.py`** now holds the providers and the format — `ReplayProvider`,
+  `RecordingProvider`, `encode_event` / `decode_event` / `load_streams` / `write_streams` / `request_summary`,
+  exported from `harness.sdk.testing` — so a plugin can record and replay without importing the suite;
+  `_lib/replay_provider.py` and `_lib/codec.py` are thin views of it. `ScriptedProvider` gained
+  `strict_exhaustion` (default `False`, so small unit tests stay polite) and a `remaining` property.
+- **New tests**: `tests/scenarios/test_record_replay.py` (4) records against the built-in `mock` provider and
+  asserts record and replay agree in the kernel lane *and* through the shipped client, including the goldens;
+  `tests/kernel/test_replay_provider.py` (10) pins the strictness split, the credential refusal, and the codec
+  as a fixed point of a committed `provider.jsonl`; `tests/scenarios/test_normalize.py` (6) pins the
+  stabiliser, including that an id in prose and the same id under `call_id` normalise to one token.
+- **pytest markers** `scenario` and `web` (`-m web` selects the 11 browser-lane cases); a scenario whose first
+  run created goldens no longer has to be guessed at — `tests/scenarios/_lib/scenario.py:kind_of` reads the
+  `kind` for collection without validating the file, so a half-written scenario fails its own test.
+- **`docs/testing/SCENARIOS.md`**: how to run, add, record and update a scenario, with the symptom table for
+  the failure modes above. The in-suite `tests/scenarios/README.md` gains the four scenarios that arrived with
+  WS-02…WS-04 and the recording contract.
+
 ### Added — P11 / WS-04c the client renders the log
 - **One renderer path in the shipped client.** `harness/frontends/web/static/app.js`: `reloadTranscript()`
   no longer re-derives a conversation from roles. It feeds every record `sessions.get` returns to

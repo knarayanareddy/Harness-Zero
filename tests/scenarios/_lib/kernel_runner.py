@@ -4,6 +4,7 @@ Information flow exercised:  prompt → Commands.submit_turn → TurnRunner →
 ContextAssembler → ReplayProvider (what the model saw is captured) → PolicyGate
 → tool handlers → transcript store on disk → EventBus → (fresh process) reload.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -15,8 +16,9 @@ from typing import Any
 
 from harness.kernel.bootstrap import bootstrap_kernel
 
+from . import record
 from .normalize import Normalizer, collapse_deltas
-from .replay_provider import MODEL, PROVIDER_NAME, ReplayProvider, golden_view, request_summary
+from .replay_provider import PROVIDER_NAME, golden_view, request_summary, scenario_model
 from .scenario import Scenario
 
 
@@ -53,10 +55,17 @@ def seed_workspace(ws: Path, files: dict[str, str]) -> None:
 
 def base_overrides(sc: Scenario) -> dict[str, Any]:
     ov: dict[str, Any] = {
+        # The fixture provider is always keyed `replay`; in record mode `_lib/record.py` wraps the real
+        # provider under that key. The model id follows whichever of the two is in charge, and both are
+        # applied after the scenario's own settings so a fixture cannot pin them behind the run's back.
         "kernel.provider": PROVIDER_NAME,
-        "kernel.model": MODEL.id,
+        "kernel.model": scenario_model(sc).id,
     }
     ov.update(sc.settings)
+    if record.is_recording():
+        # Only the model id follows the recording source: the tee keeps the fixture name, and a provider
+        # other than the tee is the one thing a recording boot must not resolve to.
+        ov["kernel.model"] = record.record_model_id()
     if sc.mcp_servers:
         ov["plugins.bridge-mcp-client.servers"] = _substitute(sc.mcp_servers)
     return ov
@@ -167,8 +176,7 @@ async def run_kernel_scenario(sc: Scenario, tmp: Path, *, env_conf: Path) -> Run
     rt = await bootstrap_kernel(workspace=ws, config_dir=env_conf, overrides=base_overrides(sc))
     if sc.secrets:
         rt.secrets.set_many(sc.secrets)  # the gate redacts stored secret values from tool output
-    provider = ReplayProvider.from_file(sc.provider_file, strict=sc.strict_exhaustion)
-    rt.registry.register_provider(provider, plugin_name="scenario")
+    provider = record.install_provider(sc, rt)
 
     wants_approver = bool(sc.approvals)
     collector = EventCollector(rt.bus, interactive=wants_approver)
@@ -180,7 +188,10 @@ async def run_kernel_scenario(sc: Scenario, tmp: Path, *, env_conf: Path) -> Run
     sid = session.session_id
     try:
         for turn in sc.turns:
-            options = {"provider": PROVIDER_NAME, "model": turn.model or MODEL.id}
+            # In record mode the default model is the recording source's, not the scripted fixture's; an
+            # explicit `turn.model` still wins, so a scenario can pin one model and record another.
+            fallback_model = record.record_model_id() if record.is_recording() else scenario_model(sc).id
+            options = {"provider": PROVIDER_NAME, "model": turn.model or fallback_model}
             try:
                 res = await asyncio.wait_for(
                     rt.commands.submit_turn(session_id=sid, prompt=turn.prompt, options=options),
@@ -196,6 +207,9 @@ async def run_kernel_scenario(sc: Scenario, tmp: Path, *, env_conf: Path) -> Run
             await approver.close()
         await collector.close()
         await rt.registry.unload_all()
+    # Flush before the second boot, so `HARNESS_REPLAY=record` leaves a recording that the very next run
+    # (in replay mode, in CI, on another machine) can read.
+    provider.finish()
 
     # Fresh process: what a restarted daemon would see for this session.
     rt2 = await bootstrap_kernel(workspace=ws, config_dir=env_conf, overrides=base_overrides(sc))
@@ -205,7 +219,9 @@ async def run_kernel_scenario(sc: Scenario, tmp: Path, *, env_conf: Path) -> Run
     finally:
         await rt2.registry.unload_all()
 
-    tools_called = [e["data"].get("name") or e["data"].get("tool") for e in collector.events if e["type"] == "tool.call"]
+    tools_called = [
+        e["data"].get("name") or e["data"].get("tool") for e in collector.events if e["type"] == "tool.call"
+    ]
     return RunResult(
         session_id=sid,
         workspace=ws,
@@ -217,5 +233,9 @@ async def run_kernel_scenario(sc: Scenario, tmp: Path, *, env_conf: Path) -> Run
         approvals_seen=approver.seen if approver else [],
         errors=errors,
         tools_called=[t for t in tools_called if t],
-        extra={"replay_remaining": provider.remaining, "live_vs_reloaded_equal": json.dumps(live_records, sort_keys=True) == json.dumps(reloaded_records, sort_keys=True)},
+        extra={
+            "replay_remaining": provider.remaining,
+            "live_vs_reloaded_equal": json.dumps(live_records, sort_keys=True)
+            == json.dumps(reloaded_records, sort_keys=True),
+        },
     )
