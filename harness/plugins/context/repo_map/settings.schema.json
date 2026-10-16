@@ -18,7 +18,6 @@
               "minimum": 64,
               "title": "Repo Map Budget (tokens)",
               "x-ui": {
-                "group": "Plugins & Integrations",
                 "widget": "number"
               }
             },
@@ -27,7 +26,6 @@
               "default": false,
               "title": "Always Rebuild Repo Map",
               "x-ui": {
-                "group": "Plugins & Integrations",
                 "widget": "boolean"
               }
             }

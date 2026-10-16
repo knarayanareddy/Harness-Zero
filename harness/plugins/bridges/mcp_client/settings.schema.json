@@ -9,7 +9,6 @@
       "default": {},
       "title": "MCP Servers",
       "x-ui": {
-        "group": "Plugins & Integrations",
         "widget": "json"
       },
       "description": "External MCP servers, keyed by server name. Tools appear as mcp__<server>__<tool>. `plugins.mcp-client.servers` is accepted as a legacy spelling.",

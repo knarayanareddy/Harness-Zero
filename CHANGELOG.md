@@ -9,6 +9,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — P13a / WS-05 settings surface: tabs by capability family, sections by owner
+- **A plugin's settings get a tab that means something.** `harness/kernel/settings_schema.py` now defaults a
+  property's `x-ui.group` from the plugin's **capability family** (`FAMILY_TABS`: hooks → `Hooks`, bridges →
+  `Bridges & Integrations`, policy → `Policy & Safety`, context → `Context`, stores → `Storage & Records`,
+  tools → `Tools`; providers and strategies reuse the kernel's existing `Models & Providers` /
+  `Execution & Strategies`) instead of dumping everything that did not name a group into
+  `Plugins & Integrations` — which held **22 of 44** panel properties. An explicit `x-ui.group` still wins
+  (a plugin may say where it belongs), and the four schemas that had written the catch-all by hand
+  (`bridge-mcp-client`, `bridge-mcp-server`, `bridge-shell-hooks`, `context-repo-map`) now omit it, so the tab
+  list is derived end to end. `Plugins & Integrations` survives as `PLUGIN_TAB_DEFAULT` for a family nobody
+  knows (a workspace plugin, a new directory) — tolerated, and kept from becoming a dumping ground by
+  `tests/kernel/test_settings_groups.py`.
+- **Every property now says who owns it.** `x-ui.owner` (the plugin id), `owner_title` (a heading: `hook-read-before-edit`
+  → `Read Before Edit`, `bridge-mcp-client` → `MCP Client`) and `owner_summary` (the manifest's summary) are set
+  by `with_ui_defaults` from an index shared with the catalogue (`settings_owner_index`), and `settings.js`
+  renders a **section per owner inside a tab** — heading plus one-line summary above that plugin's controls. So a
+  tab groups like *behaviour* and a heading names the integration, instead of 17 anonymous toggles under one label.
+- **Two bugs the derivation exposed.** `SettingsPanel`'s constructor seeded the open tab with the literal
+  `'Models & Providers'`, so a daemon with no provider plugin loaded opened the modal on "No settings configured
+  in this group" while 44 settings existed — the open tab now comes from `settings.schema`'s `groups`, a
+  remembered group is validated against it, and `setGroup` ignores a request for a tab that does not exist
+  (**R53**). And `docs/catalog/SETTINGS.md` rendered its sections by walking a literal tuple of group names, so
+  the rows that moved to new tabs silently disappeared from the document (**R54** — the same class as R47, one
+  layer over: a generator with its own copy of a fact the kernel owns, which a freshness gate cannot see because
+  it compares the file to itself). It now derives sections from the rows plus `ui.settings_groups`, and
+  `test_settings_doc_has_a_section_for_every_tab` fails on either direction (shown by restoring the literal list:
+  it names `Bridges & Integrations`, `Context`, `Hooks`).
+- **New tests**: `tests/kernel/test_settings_groups.py` (8) — family → tab derivation, an explicit group winning,
+  `plugin_display_name` producing headings rather than package names, owner metadata on every plugin property and
+  on no kernel property, no tab invented for a plugin with nothing to configure, `settings.js` naming no tab in
+  its logic (judged on code, not prose, per `_code_only`), the signature staying catalogue-compatible, and the
+  document-coverage rule above. `docs/catalog/UI_CONTRACT.md` / `SETTINGS.md` regenerated: 8 tabs, hooks' 17 rows
+  under `Hooks`.
+
 ### Added — P12 / WS-05b the client reads the registry, not a switch
 - **Record painting is a registry, one module per kind.** `harness/frontends/web/static/registry.js` owns
   `RendererRegistry` (register / has / gaps / render), the eleven painters now in `static/renderers/*.js` —

@@ -684,6 +684,8 @@ Plus one that only showed up under load: a timed-out `run_command` left its chil
 | R50 | `kernel/catalog.py` (the UI section) | The static parse read `data-*` attributes out of the whole file text, so a doc comment *giving an example* (`data-command="sessions.create"`) was catalogued as a real binding — and, because `sessions.create` happens to exist, nothing failed. A generated table that reports documentation as wiring trains reviewers to distrust the table. | P12b: `_code_only()` drops whole-line comments before the binding/tab/case scan (trailing comments and `//` inside strings survive), the `data-*` scan became recursive like the audit's, and a `renderers/_name.js` helper is no longer counted as a painted kind |
 | R51 | `tests/scenarios/test_scenarios.py` | When the reload DOM lane crashed (node exited, no JSON), `(result.dom or {}).get("reload") or {}` read as *an empty timeline*: `reload_timeline_contains` blamed the client, and `reload_timeline_not_contains` passed vacuously — the failure mode was a wrong diagnosis for a real bug and a silent pass for its mirror image. | P12b: `_reload_report()` fails on the lane's own `error`/`stderr` and requires `timeline_text_on_load` to be present, so a missing run is never read as an empty page |
 | R52 | `harness/frontends/web/static/app.js` (during P12b) | The new `handlePanelSelect` called `this.selectSession(...)` — a method this client has never had (`switchSession` is the real name). Nothing static caught it; jsdom threw on the session-row click, i.e. a user clicking a session in the reloaded page would have gotten a broken pane and a console error. The class of bug the registry indirection creates, and no existing test reached it because no other test clicks a session row. | P12b: `test_the_client_only_calls_methods_it_defines` checks every `app.x()` a module calls and every `this.x()` in the app against the methods and constructor members `app.js` actually defines (shown to fail by re-introducing `selectSession`, then reverted) |
+| R53 | `harness/frontends/web/static/settings.js` | The panel's constructor seeded the open tab with the literal `'Models & Providers'` — a client deciding which of the kernel's tabs to show. A daemon with no provider plugin loaded (fresh install, all providers disabled) opened the settings modal on an empty pane reading "No settings configured in this group" while 44 settings existed; and the same literal made the client's *default* depend on a tab name the catalogue had already stopped owning. | P13a: the open tab comes from `settings.schema`'s `groups` (`groups[0]`), a remembered group is validated against the list, and `setGroup` ignores a tab that does not exist; `test_settings_js_renders_the_owner_heading_and_hardcodes_no_tab_names` bans the literal form (`activeGroup = "…"`) in the client |
+| R54 | `harness/kernel/catalog.py` (`SETTINGS.md`) | The renderer walked a literal tuple of group names when deciding which sections to emit, so the moment properties moved to tabs the tuple had not heard of (`Hooks`, `Bridges & Integrations`, `Context`) their rows vanished from the document — while `harness catalog --check` stayed green, because drift checks compare the file against a fresh build of the *same* renderer. A generator with its own copy of a fact, graded by its own copy. | P13a: sections are derived from the rows plus `ui.settings_groups` (client order first, anything unexpected after), and `test_settings_doc_has_a_section_for_every_tab` checks both directions against the committed pair — proven by putting the literal list back, which fails naming the three tabs |
 | R44 | `plugins/stores/fts5_search/` | Two related bugs. The row projection read v1 field names (`type`, `source`), so every row the runner indexed from a v2 record said `UNKNOWN`/`UNKNOWN` and `search_memory`'s Source column was decoration; and the only rebuild path ran when the table was empty, so a workspace whose index had gone stale had no repair — there was no CLI entry point at all. | P11: one `record_row()` shared by the live hook and the rebuild; `rebuild_from_sessions` is unconditional; new `harness sessions reindex`; `test_the_search_index_is_rebuildable_from_the_log` |
 
 ---
@@ -1020,3 +1022,29 @@ the moment one appears that names an unregistered command.
 drift-clean (UI_CONTRACT.md regenerated: renderer modules listed, comment-derived binding gone);
 `python tests/frontends/ui_audit.py --strict` 0 findings (0 used-but-undefined, 0 defined-but-unused);
 `harness plugin doctor --all` clean.
+
+## P13a — WS-05 follow-up: settings tabs by family, sections by owner
+
+**Why this phase exists.** The user's reaction to the running Studio — "it's basic, there are no actual plugin
+integrations and settings are bare bone" — was checked against the repository rather than argued with, and it was
+right in a mechanical way: 39 plugins load, only 13 ship a `settings.schema.json`, and every property that did
+not name its own `x-ui.group` was defaulted to one catch-all tab (22 of 44 panel properties), which the client
+then rendered as a flat list with nothing saying who owned what. Three phases followed from that; this is the
+first (the other two are the Plugins pane and serving a plugin's `static/`, in P13b/P13c).
+
+**Built.** `FAMILY_TABS` + `tab_for` + `plugin_display_name` + `settings_owner_index` in
+`harness/kernel/settings_schema.py`; `with_ui_defaults(prop, namespace, *, family, owner_summary)` fills in the
+tab *and* the owner metadata, so `Commands.settings_schema` (client) and `harness catalog` (document) cannot
+disagree — both call the same index; the four schemas that had hand-written the catch-all group lost that line so
+the derivation applies end to end; `settings.js` renders one section per owner; `styles.css` gained
+`.settings-owner*`. 8 new tests; the tabs went from 6 (one of them a dumping ground) to 8 derived ones, and
+`SETTINGS.md` grew `Hooks`/`Context`/`Bridges & Integrations` sections it had been silently dropping.
+
+**Findings.** R53 (the client seeded its own open tab — a fresh daemon's settings modal looked empty) and R54 (the
+catalogue's document renderer filtered through a literal tab list, which no freshness gate can see). Both were
+produced by *this* change rather than existing separately: deriving something is exactly what exposes the places
+that kept a copy.
+
+**Gate at this point.** `pytest tests/kernel/test_settings_groups.py tests/kernel/test_catalog.py tests/frontends -q`
+→ 81 passed; `harness catalog gen && harness catalog --check` drift-free; `ui_audit --strict` 0 findings. Full
+suite run after P13c.

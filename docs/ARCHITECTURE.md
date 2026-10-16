@@ -260,7 +260,10 @@ generated JSON schema (`harness events schema`).
 * Which **pane** is visible is the same registry's answer, not a chain of branches: `PanelRegistry.activate(id)`
   shows the panel's host and runs its module (`static/panels/<id>.js`), and a declared panel with no module gets
   the generic renderer its `[ui]` block names. So `index.html` needs no edit to gain a tab, and the client
-  cannot mount a panel the kernel never declared (`test_the_panel_modules_are_the_declared_panels`). Controls
+  cannot mount a panel the kernel never declared (`test_the_panel_modules_are_the_declared_panels`).
+  The **settings tabs** are derived the same way: a property's `x-ui.group` chooses its tab, an unnamed one takes
+  the tab of its plugin's family directory, and `x-ui.owner` names the section it renders under — the client
+  holds no tab list, not even for the tab it opens on (P13a). Controls
   that merely call a command use `data-command` + `CommandBinder`; controls needing a runtime id or local side
   effects keep their handler in `app.js`, and the catalogue lists the bindings either way.
 

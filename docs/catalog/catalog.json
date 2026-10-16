@@ -2898,7 +2898,7 @@
     {
       "alias": false,
       "default": "{}",
-      "group": "Plugins & Integrations",
+      "group": "Bridges & Integrations",
       "in_ui": true,
       "key": "plugins.bridge-mcp-client.servers",
       "namespace": "plugins.bridge-mcp-client",
@@ -2910,7 +2910,7 @@
     {
       "alias": false,
       "default": "[]",
-      "group": "Plugins & Integrations",
+      "group": "Bridges & Integrations",
       "in_ui": true,
       "key": "plugins.bridge-mcp-server.expose",
       "namespace": "plugins.bridge-mcp-server",
@@ -2922,7 +2922,7 @@
     {
       "alias": false,
       "default": "{}",
-      "group": "Plugins & Integrations",
+      "group": "Bridges & Integrations",
       "in_ui": true,
       "key": "plugins.bridge-shell-hooks.hooks",
       "namespace": "plugins.bridge-shell-hooks",
@@ -2934,7 +2934,7 @@
     {
       "alias": false,
       "default": "false",
-      "group": "Plugins & Integrations",
+      "group": "Context",
       "in_ui": true,
       "key": "plugins.context-repo-map.context.repo_map.force",
       "namespace": "plugins.context-repo-map",
@@ -2946,7 +2946,7 @@
     {
       "alias": false,
       "default": "1024",
-      "group": "Plugins & Integrations",
+      "group": "Context",
       "in_ui": true,
       "key": "plugins.context-repo-map.context.repo_map.max_tokens",
       "namespace": "plugins.context-repo-map",
@@ -2958,7 +2958,7 @@
     {
       "alias": false,
       "default": "[]",
-      "group": "Plugins & Integrations",
+      "group": "Hooks",
       "in_ui": true,
       "key": "plugins.hook-read-before-edit.exempt_globs",
       "namespace": "plugins.hook-read-before-edit",
@@ -2970,7 +2970,7 @@
     {
       "alias": false,
       "default": "[\"edit_file\", \"write_to_file\"]",
-      "group": "Plugins & Integrations",
+      "group": "Hooks",
       "in_ui": true,
       "key": "plugins.hook-read-before-edit.guarded_tools",
       "namespace": "plugins.hook-read-before-edit",
@@ -2982,7 +2982,7 @@
     {
       "alias": false,
       "default": "\"block\"",
-      "group": "Plugins & Integrations",
+      "group": "Hooks",
       "in_ui": true,
       "key": "plugins.hook-read-before-edit.mode",
       "namespace": "plugins.hook-read-before-edit",
@@ -2994,7 +2994,7 @@
     {
       "alias": false,
       "default": "[\"view_file\"]",
-      "group": "Plugins & Integrations",
+      "group": "Hooks",
       "in_ui": true,
       "key": "plugins.hook-read-before-edit.read_tools",
       "namespace": "plugins.hook-read-before-edit",
@@ -3006,7 +3006,7 @@
     {
       "alias": false,
       "default": "0",
-      "group": "Plugins & Integrations",
+      "group": "Hooks",
       "in_ui": true,
       "key": "plugins.hook-repeat-call-reminder.block_after",
       "namespace": "plugins.hook-repeat-call-reminder",
@@ -3018,7 +3018,7 @@
     {
       "alias": false,
       "default": "true",
-      "group": "Plugins & Integrations",
+      "group": "Hooks",
       "in_ui": true,
       "key": "plugins.hook-repeat-call-reminder.enabled",
       "namespace": "plugins.hook-repeat-call-reminder",
@@ -3030,7 +3030,7 @@
     {
       "alias": false,
       "default": "[\"manage_task\", \"view_file\"]",
-      "group": "Plugins & Integrations",
+      "group": "Hooks",
       "in_ui": true,
       "key": "plugins.hook-repeat-call-reminder.exempt_tools",
       "namespace": "plugins.hook-repeat-call-reminder",
@@ -3042,7 +3042,7 @@
     {
       "alias": false,
       "default": "3",
-      "group": "Plugins & Integrations",
+      "group": "Hooks",
       "in_ui": true,
       "key": "plugins.hook-repeat-call-reminder.repeat_after",
       "namespace": "plugins.hook-repeat-call-reminder",
@@ -3054,7 +3054,7 @@
     {
       "alias": false,
       "default": "true",
-      "group": "Plugins & Integrations",
+      "group": "Hooks",
       "in_ui": true,
       "key": "plugins.hook-tool-result-pruner.enabled",
       "namespace": "plugins.hook-tool-result-pruner",
@@ -3066,7 +3066,7 @@
     {
       "alias": false,
       "default": "[\"view_file\"]",
-      "group": "Plugins & Integrations",
+      "group": "Hooks",
       "in_ui": true,
       "key": "plugins.hook-tool-result-pruner.exempt_tools",
       "namespace": "plugins.hook-tool-result-pruner",
@@ -3078,7 +3078,7 @@
     {
       "alias": false,
       "default": "4096",
-      "group": "Plugins & Integrations",
+      "group": "Hooks",
       "in_ui": true,
       "key": "plugins.hook-tool-result-pruner.head_chars",
       "namespace": "plugins.hook-tool-result-pruner",
@@ -3090,7 +3090,7 @@
     {
       "alias": false,
       "default": "1024",
-      "group": "Plugins & Integrations",
+      "group": "Hooks",
       "in_ui": true,
       "key": "plugins.hook-tool-result-pruner.tail_chars",
       "namespace": "plugins.hook-tool-result-pruner",
@@ -3102,7 +3102,7 @@
     {
       "alias": false,
       "default": "8192",
-      "group": "Plugins & Integrations",
+      "group": "Hooks",
       "in_ui": true,
       "key": "plugins.hook-tool-result-pruner.threshold_chars",
       "namespace": "plugins.hook-tool-result-pruner",
@@ -3114,7 +3114,7 @@
     {
       "alias": false,
       "default": "true",
-      "group": "Plugins & Integrations",
+      "group": "Hooks",
       "in_ui": true,
       "key": "plugins.hook-tool-result-spill.enabled",
       "namespace": "plugins.hook-tool-result-spill",
@@ -3126,7 +3126,7 @@
     {
       "alias": false,
       "default": "[\"view_file\"]",
-      "group": "Plugins & Integrations",
+      "group": "Hooks",
       "in_ui": true,
       "key": "plugins.hook-tool-result-spill.exempt_tools",
       "namespace": "plugins.hook-tool-result-spill",
@@ -3138,7 +3138,7 @@
     {
       "alias": false,
       "default": "200",
-      "group": "Plugins & Integrations",
+      "group": "Hooks",
       "in_ui": true,
       "key": "plugins.hook-tool-result-spill.max_files_per_session",
       "namespace": "plugins.hook-tool-result-spill",
@@ -3150,7 +3150,7 @@
     {
       "alias": false,
       "default": "8192",
-      "group": "Plugins & Integrations",
+      "group": "Hooks",
       "in_ui": true,
       "key": "plugins.hook-tool-result-spill.threshold_chars",
       "namespace": "plugins.hook-tool-result-spill",
@@ -3728,8 +3728,10 @@
       "Security & Sandboxing",
       "Execution & Strategies",
       "Economics & Spend",
-      "Plugins & Integrations",
-      "Secrets"
+      "Secrets",
+      "Bridges & Integrations",
+      "Context",
+      "Hooks"
     ],
     "unbacked_panels": [],
     "undocumented_tabs": [],

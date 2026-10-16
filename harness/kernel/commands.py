@@ -27,6 +27,7 @@ from harness.kernel.settings import SettingsStore
 from harness.kernel.settings_schema import (
     flatten_schema_properties,
     order_groups,
+    settings_owner_index,
     with_ui_defaults,
 )
 from harness.kernel.validators import validate_session_id
@@ -269,6 +270,10 @@ class Commands:
         """
         registered = self.settings.get_registered_schemas()
         alias_namespaces = getattr(self.registry, "alias_namespaces", frozenset())
+        # Which tab a plugin's settings default to, and who owns them, comes from the *registry* (its family
+        # directory and its manifest summary) — so adding a plugin needs no entry anywhere else, and the
+        # catalogue computes the same thing from the same index.
+        owners = settings_owner_index(self.registry)
 
         props: dict[str, Any] = {}
         for namespace in sorted(registered):
@@ -278,7 +283,7 @@ class Commands:
             for key, prop in flat.items():
                 if namespace == "kernel" and "x-ui" not in prop:
                     continue
-                props[f"{namespace}.{key}"] = with_ui_defaults(prop, namespace)
+                props[f"{namespace}.{key}"] = with_ui_defaults(prop, namespace, **owners.get(namespace, {}))
 
         for key, prop in registered.get("secrets", {}).get("properties", {}).items():
             props[f"secrets.{key}"] = with_ui_defaults(prop, "secrets")

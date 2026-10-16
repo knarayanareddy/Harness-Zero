@@ -9,7 +9,6 @@
       "default": [],
       "title": "Tools Exposed Over MCP",
       "x-ui": {
-        "group": "Plugins & Integrations",
         "widget": "json"
       },
       "description": "Tool names this daemon offers to external MCP hosts. Empty means nothing is exposed.",

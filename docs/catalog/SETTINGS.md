@@ -32,20 +32,9 @@ Aggregated from the schemas the loader registered — `KERNEL_SCHEMA` and every 
 
 | Key | Type | Default | Widget | Owner | Read in UI |
 |---|---|---|---|---|---|
-| `kernel.background.wait_s` | integer | `600` | number | kernel | no |
 | `kernel.context.budget_tokens` | integer | `60000` | number | kernel | yes |
-| `kernel.limits.tool_grace_s` | number | `5.0` | number | kernel | no |
-| `kernel.limits.tool_result_bytes` | integer | `65536` | number | kernel | no |
-| `kernel.limits.upload_bytes` | integer | `26214400` | number | kernel | no |
 | `kernel.max_tool_iterations` | integer | `20` | number | kernel | yes |
-| `kernel.migrated_from_legacy_config` | boolean | `false` | boolean | kernel | no |
-| `kernel.plugins.allow_inprocess_third_party` | boolean | `false` | boolean | kernel | no |
-| `kernel.plugins.capabilities` | object | `{}` | json | kernel | no |
-| `kernel.plugins.disabled` | array | `[]` | json | kernel | no |
-| `kernel.plugins.enabled` | array | `[]` | json | kernel | no |
-| `kernel.plugins.trusted_workspace_plugins` | boolean | `false` | boolean | kernel | no |
 | `kernel.request_timeout_s` | number | `60.0` | number | kernel | yes |
-| `kernel.secrets.env_precedence` | boolean | `false` | boolean | kernel | no |
 | `kernel.strategy` | string | `"single_loop"` | select | kernel | yes |
 
 ## Economics & Spend
@@ -54,15 +43,36 @@ Aggregated from the schemas the loader registered — `KERNEL_SCHEMA` and every 
 |---|---|---|---|---|---|
 | `kernel.security.spend_cap_usd` | number | `5.0` | number | kernel | yes |
 
-## Plugins & Integrations
+## Secrets
+
+| Key | Type | Default | Widget | Owner | Read in UI |
+|---|---|---|---|---|---|
+| `secrets.ANTHROPIC_API_KEY` | string | `null` | secret | kernel | yes |
+| `secrets.DEEPSEEK_API_KEY` | string | `null` | secret | kernel | yes |
+| `secrets.GEMINI_API_KEY` | string | `null` | secret | kernel | yes |
+| `secrets.GOOGLE_API_KEY` | string | `null` | secret | kernel | yes |
+| `secrets.OPENAI_API_KEY` | string | `null` | secret | kernel | yes |
+| `secrets.OPENROUTER_API_KEY` | string | `null` | secret | kernel | yes |
+
+## Bridges & Integrations
 
 | Key | Type | Default | Widget | Owner | Read in UI |
 |---|---|---|---|---|---|
 | `plugins.bridge-mcp-client.servers` | object | `{}` | json | bridge-mcp-client | yes |
 | `plugins.bridge-mcp-server.expose` | array | `[]` | json | bridge-mcp-server | yes |
 | `plugins.bridge-shell-hooks.hooks` | object | `{}` | json | bridge-shell-hooks | yes |
+
+## Context
+
+| Key | Type | Default | Widget | Owner | Read in UI |
+|---|---|---|---|---|---|
 | `plugins.context-repo-map.context.repo_map.force` | boolean | `false` | boolean | context-repo-map | yes |
 | `plugins.context-repo-map.context.repo_map.max_tokens` | integer | `1024` | number | context-repo-map | yes |
+
+## Hooks
+
+| Key | Type | Default | Widget | Owner | Read in UI |
+|---|---|---|---|---|---|
 | `plugins.hook-read-before-edit.exempt_globs` | array | `[]` | json | hook-read-before-edit | yes |
 | `plugins.hook-read-before-edit.guarded_tools` | array | `["edit_file", "write_to_file"]` | json | hook-read-before-edit | yes |
 | `plugins.hook-read-before-edit.mode` | string | `"block"` | text | hook-read-before-edit | yes |
@@ -80,17 +90,6 @@ Aggregated from the schemas the loader registered — `KERNEL_SCHEMA` and every 
 | `plugins.hook-tool-result-spill.exempt_tools` | array | `["view_file"]` | json | hook-tool-result-spill | yes |
 | `plugins.hook-tool-result-spill.max_files_per_session` | integer | `200` | number | hook-tool-result-spill | yes |
 | `plugins.hook-tool-result-spill.threshold_chars` | integer | `8192` | number | hook-tool-result-spill | yes |
-
-## Secrets
-
-| Key | Type | Default | Widget | Owner | Read in UI |
-|---|---|---|---|---|---|
-| `secrets.ANTHROPIC_API_KEY` | string | `null` | secret | kernel | yes |
-| `secrets.DEEPSEEK_API_KEY` | string | `null` | secret | kernel | yes |
-| `secrets.GEMINI_API_KEY` | string | `null` | secret | kernel | yes |
-| `secrets.GOOGLE_API_KEY` | string | `null` | secret | kernel | yes |
-| `secrets.OPENAI_API_KEY` | string | `null` | secret | kernel | yes |
-| `secrets.OPENROUTER_API_KEY` | string | `null` | secret | kernel | yes |
 
 ## Kernel internals (not in the settings panel)
 

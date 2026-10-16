@@ -64,4 +64,4 @@ No `data-command` bindings: every control the shipped client owns either needs a
 
 ## Settings tabs
 
-`Models & Providers`, `Security & Sandboxing`, `Execution & Strategies`, `Economics & Spend`, `Plugins & Integrations`, `Secrets`
+`Models & Providers`, `Security & Sandboxing`, `Execution & Strategies`, `Economics & Spend`, `Secrets`, `Bridges & Integrations`, `Context`, `Hooks`

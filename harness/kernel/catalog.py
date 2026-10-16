@@ -28,7 +28,7 @@ from typing import Any
 from harness.kernel.commands import BUILTIN_COMMANDS
 from harness.kernel.plugin_paths import plugin_dir
 from harness.kernel.settings import KERNEL_SCHEMA
-from harness.kernel.settings_schema import flatten_schema_properties, with_ui_defaults
+from harness.kernel.settings_schema import flatten_schema_properties, settings_owner_index, with_ui_defaults
 from harness.sdk.cards import CARD_FIELDS
 from harness.sdk.events import EVENT_PAYLOADS
 from harness.sdk.events import schema as events_schema
@@ -351,9 +351,12 @@ async def build_catalog(runtime: Any = None, repo_root: Path | None = None) -> d
     # ---- settings ----
     declared = declared_settings(root)
     ui_props = (await commands.settings_schema())["properties"]
+    owners = settings_owner_index(registry)
     settings_rows = []
     for key, entry in sorted(declared.items()):
-        prop = with_ui_defaults(entry.prop, entry.namespace)
+        # Same index as `Commands.settings_schema`, so the `group` column below is the tab the client offers
+        # rather than a second opinion on it.
+        prop = with_ui_defaults(entry.prop, entry.namespace, **owners.get(entry.namespace, {}))
         settings_rows.append(
             {
                 "key": key,
@@ -673,9 +676,19 @@ def render_markdown(cat: dict[str, Any], name: str) -> str:
         body.append("# Settings catalogue\n\nAggregated from the schemas the loader registered — `KERNEL_SCHEMA` and every "
                     "plugin `settings.schema.json`. The settings UI renders exactly this list; a key with no reader cannot "
                     "appear here, and a read key that is undeclared fails `harness catalog --check settings`.\n")
-        for group in [g for g in ("Models & Providers", "Security & Sandboxing", "Execution & Strategies",
-                                  "Economics & Spend", "Plugins & Integrations", "Secrets")]:
-            rows = [s for s in cat["settings"] if s["group"] == group and not s["alias"]]
+        # Sections come from the rows and the tabs the client is offered — never from a list of tab names kept
+        # here. `commands.settings_schema` derives the tabs from the schemas themselves (WS-05a removed the same
+        # hand-kept list from the kernel, R47), and a document that filters through its own copy silently drops
+        # whatever it has not heard of: when hooks moved to a `Hooks` tab, their 17 rows vanished from this file.
+        rows_by_group: dict[str, list[dict]] = {}
+        for row in cat["settings"]:
+            if row["alias"] or not row["in_ui"]:
+                continue
+            rows_by_group.setdefault(row["group"] or "", []).append(row)
+        offered = (cat.get("ui") or {}).get("settings_groups") or []
+        ordered = [g for g in offered if rows_by_group.get(g)] + sorted(set(rows_by_group) - set(offered) - {""})
+        for group in ordered:
+            rows = rows_by_group.get(group, [])
             if not rows:
                 continue
             body.append(f"\n## {group}\n")

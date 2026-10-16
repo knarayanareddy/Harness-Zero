@@ -61,7 +61,13 @@ broken pane never takes the page down.
 The parser (`harness/sdk/manifest.py`) refuses an unknown `renderer` (the built-ins are
 `table | tree | markdown | list`), a malformed or duplicate panel id, an empty `command`, an unknown `[ui]` key,
 and a `client_module` outside `static/`. Settings tabs need no declaration at all: name a group in your
-`settings.schema.json` (`x-ui.group`, optionally `x-ui.order`) and it becomes a tab — see
+`settings.schema.json` (`x-ui.group`, optionally `x-ui.order`) and it becomes a tab. Saying nothing is also
+fine — your properties land on the tab for your plugin's family directory (`hooks` → `Hooks`,
+`bridges` → `Bridges & Integrations`, `providers` → `Models & Providers`, …; see
+`harness/kernel/settings_schema.py:FAMILY_TABS`), and each property is rendered under a heading naming *your*
+plugin (`x-ui.owner`/`owner_title`/`owner_summary` are filled in for you). An unknown family falls back to
+`Plugins & Integrations`, which is deliberately kept nearly empty — see `tests/kernel/test_settings_groups.py`.
+See
 `docs/testing/SCENARIOS.md` for the tests, `docs/catalog/UI_CONTRACT.md` for what the client mounts.
 
 ### `harness_plugin.toml`

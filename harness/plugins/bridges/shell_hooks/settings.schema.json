@@ -9,7 +9,6 @@
       "default": {},
       "title": "Shell Hooks",
       "x-ui": {
-        "group": "Plugins & Integrations",
         "widget": "json"
       },
       "description": "Claude-Code-compatible hook definitions (PreToolUse / PostToolUse / Stop).",
