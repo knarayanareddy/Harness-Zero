@@ -141,7 +141,10 @@ async def test_health_and_host_guard(commands: Commands, event_bus: EventBus, wo
             assert res.status_code == 200
             data = res.json()
             assert data["status"] == "ok"
-            assert data["version"] == "2.0.0"
+            # P6: one version — /health reports harness.__version__ (which the package test pins to pyproject).
+            from harness import __version__
+
+            assert data["version"] == __version__
             assert data["sandbox_origin"] == f"http://127.0.0.1:{server.sandbox_port}"
 
             # 2. Host guard rejects invalid Host header with 421
@@ -676,7 +679,24 @@ async def test_context_assembled_and_cost_events(
         await server.stop()
 
 
+@pytest.mark.asyncio
+async def test_turn_in_progress_is_409_over_http(commands: Commands, event_bus: EventBus, workspace_dir: Path):
+    """`TurnInProgress` carries `status_code = 409`; the command endpoint must not flatten it to 400."""
+    from harness.sdk.errors import TurnInProgress
 
+    server = HarnessWebServer(commands=commands, bus=event_bus, host="127.0.0.1", port=0, sandbox_port=0, workspace=workspace_dir)
+    await server.start()
+    base_url = f"http://127.0.0.1:{server.port}"
 
+    async def busy(**_: object):
+        raise TurnInProgress("sess-1")
 
+    commands.register_command("test.busy", busy)
+    try:
+        async with httpx.AsyncClient() as client:
+            res = await client.post(f"{base_url}/commands/test.busy", json={}, headers={"Authorization": f"Bearer {server.auth_token}"})
+            assert res.status_code == 409, res.text
+            assert res.json()["status"] == "error"
+    finally:
+        await server.stop()
 

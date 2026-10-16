@@ -151,25 +151,45 @@ harness plugin doctor --all
 
 ## 4. Verification & Testing
 
-Harness-Zero uses hermetic, isolated test fixtures that never pollute `$HOME` or external environments:
+Harness-Zero uses hermetic, isolated test fixtures that never pollute `$HOME` or external environments. One
+invocation runs everything — kernel, plugins, frontends, e2e acceptance and the 21 record/replay
+flow-of-information scenarios that drive the shipped web client in jsdom against a real daemon
+(`tests/scenarios/`, needs `node` + `npm ci`):
 
 ```bash
-# Run the complete test suite (56+ test files, 340+ tests):
-export HOME=$(mktemp -d) HARNESS_CONFIG_DIR=$HOME/.harness
-pytest -q
+# The complete suite (≈5 minutes; CI runs exactly this on Linux and macOS, Python 3.11 and 3.12):
+export HOME=$(mktemp -d); export HARNESS_CONFIG_DIR=$HOME/.harness   # two statements: $HOME must be re-evaluated
+SCENARIO_DOM_WAIT_MS=6000 pytest -q
 
-# Run architectural boundary enforcement tests:
-pytest tests/kernel/test_import_boundaries.py tests/kernel/test_no_direct_subprocess.py tests/kernel/test_gate_invariants.py
+# Subsets:
+pytest tests/kernel -q                                   # kernel units, roundtrips, boundary enforcement
+pytest tests/scenarios -q                                # flow-of-information scenarios only (SCENARIO_DOM=0 without node)
+harness plugin test --all                                # plugin conformance (= pytest tests/plugins)
 
-# Verify code formatting and linting:
+# Lint, event-schema drift, compiled CSS freshness and the web UI audit (all CI gates):
 ruff check .
+harness events schema | diff -u docs/events.schema.json -
+npm run build:css && git diff --exit-code -- harness/frontends/web/static/vendor/tw.css
+python tests/frontends/ui_audit.py --strict
 ```
+
+Test counts are not repeated here on purpose — `pytest -q` prints the current number; `tests/test_docs_and_versions.py`
+keeps this README, `docs/ARCHITECTURE.md` and the CHANGELOG honest.
 
 ---
 
 ## 5. Documentation Suite
 
-- [`docs/PLUGIN_CATALOG.md`](docs/PLUGIN_CATALOG.md): Complete catalog and specification of all 35 builtin plugins.
-- [`docs/PORTING_RECIPES.md`](docs/PORTING_RECIPES.md): Step-by-step developer guide and code recipes for authoring new plugins.
-- [`docs/architecture/CONTRACTS.md`](docs/architecture/CONTRACTS.md): Detailed specification of SDK protocols, domain types, and boundary invariants.
-- [`docs/`](docs/): Complete 22-document reverse-engineered architectural blueprint archive.
+Documents that describe **this** system, in the order to read them:
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): process model, kernel modules, the command catalogue, the event catalogue with payload keys, session lifecycle, web authentication, where the tests live (checked against the code by `tests/test_docs_and_versions.py`).
+- [`docs/architecture/CONTRACTS.md`](docs/architecture/CONTRACTS.md): the SDK protocols plugins implement (`Provider`, `ToolHandler`, `Policy`, stores, strategies, hooks), domain types and boundary invariants.
+- [`docs/PLUGIN_CATALOG.md`](docs/PLUGIN_CATALOG.md): catalogue of the 35 built-in plugins.
+- [`docs/PORTING_RECIPES.md`](docs/PORTING_RECIPES.md): authoring new plugins, with conformance kits.
+- [`docs/events.schema.json`](docs/events.schema.json): generated event schema (`harness events schema`); [`CHANGELOG.md`](CHANGELOG.md) for what changed when.
+
+History and background (not required to use or extend the system):
+
+- [`docs/research/`](docs/research/00_README_AND_MANIFEST.md): the 22 reverse-engineering syntheses of other agent systems that the design was derived from.
+- [`review/`](review/README.md): the four code reviews, decisions, the DeepSeek-Harness research and integration pack, and `CONSOLIDATION_LOG.md` — the per-phase record (P1–P6) of how the tree reached its current shape.
+- [`additions/`](additions/README.md): the executed flow-of-information test's findings (F-1 … F-12) and a portable patch; its runnable parts now live in `tests/scenarios/` and `tests/frontends/ui_audit.py`.

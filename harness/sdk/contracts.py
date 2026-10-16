@@ -137,6 +137,9 @@ class ContextSource(Protocol):
 
 @runtime_checkable
 class TranscriptStore(Protocol):
+    """Append-only transcript of *one* session. Listing sessions is the kernel's job
+    (``SessionManager.list_sessions()`` scans the sessions directory), not the store's."""
+
     async def append(self, record: dict[str, Any]) -> int:
         """Appends step record and returns step_index."""
         ...
@@ -147,10 +150,6 @@ class TranscriptStore(Protocol):
 
     async def last_compaction(self) -> dict[str, Any] | None:
         """Returns last compaction record if any."""
-        ...
-
-    async def list_sessions(self) -> list[dict[str, Any]]:
-        """Lists historical sessions metadata."""
         ...
 
 

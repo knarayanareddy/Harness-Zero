@@ -31,6 +31,32 @@ from harness.sdk.types import ModelRow, TurnResult
 
 logger = logging.getLogger(__name__)
 
+#: Every built-in command a frontend can dispatch; the handler is the method ``name.replace(".", "_")``.
+#: ``docs/ARCHITECTURE.md`` lists them and ``tests/test_docs_and_versions.py`` keeps the two in sync.
+BUILTIN_COMMANDS: tuple[str, ...] = (
+    "submit_turn",
+    "cancel_turn",
+    "resolve_approval",
+    "form.submit",
+    "form_submit",  # underscore alias of form.submit, kept for external callers
+    "sessions.list",
+    "sessions.create",
+    "sessions.get",
+    "sessions.switch",
+    "settings.get",
+    "settings.set",
+    "settings.schema",
+    "models.list",
+    "files.read",
+    "files.write",
+    "plugins.list",
+    "plugins.info",
+    "plugins.enable",
+    "plugins.disable",
+    "approvals.list",
+    "economics",
+)
+
 
 class Commands:
     """
@@ -447,34 +473,10 @@ class Commands:
         return {"form_id": form_id, "status": "submitted", "data": payload}
 
     async def dispatch(self, command: str, args: dict[str, Any] | None = None) -> Any:
-        """Generic command dispatcher for JSON-based frontend interfaces."""
+        """Generic command dispatcher for JSON-based frontend interfaces (``POST /commands/<name>``)."""
         params = args or {}
-        cmd_map = {
-            "submit_turn": self.submit_turn,
-            "cancel_turn": self.cancel_turn,
-            "resolve_approval": self.resolve_approval,
-            "form.submit": self.form_submit,
-            "form_submit": self.form_submit,
-            "sessions.list": self.sessions_list,
-            "sessions.create": self.sessions_create,
-            "sessions.get": self.sessions_get,
-            "sessions.switch": self.sessions_switch,
-            "settings.get": self.settings_get,
-            "settings.set": self.settings_set,
-            "settings.schema": self.settings_schema,
-            "models.list": self.models_list,
-            "files.read": self.files_read,
-            "files.write": self.files_write,
-            "plugins.list": self.plugins_list,
-            "plugins.info": self.plugins_info,
-            "plugins.enable": self.plugins_enable,
-            "plugins.disable": self.plugins_disable,
-            "approvals.list": self.approvals_list,
-            "economics": self.economics,
-        }
-
-        if command in cmd_map:
-            handler = cmd_map[command]
+        if command in BUILTIN_COMMANDS:
+            handler = getattr(self, command.replace(".", "_"))
             return await handler(**params)
 
         if command in self._custom_commands:

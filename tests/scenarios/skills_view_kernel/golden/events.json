@@ -26,8 +26,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 13
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -119,8 +118,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 226
+      "provider": "replay"
     },
     "type": "model.started"
   },

@@ -26,8 +26,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 3
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -100,8 +99,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 15
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -174,8 +172,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 27
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -248,8 +245,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 39
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -322,8 +318,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 51
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -396,8 +391,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 63
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -470,8 +464,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 75
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -544,8 +537,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 87
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -618,8 +610,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 99
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -692,8 +683,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 111
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -766,8 +756,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 123
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -840,8 +829,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 135
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -914,8 +902,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 147
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -988,8 +975,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 159
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -1062,8 +1048,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 171
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -1136,8 +1121,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 183
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -1210,8 +1194,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 195
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -1284,8 +1267,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 207
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -1358,8 +1340,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 219
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -1432,8 +1413,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 231
+      "provider": "replay"
     },
     "type": "model.started"
   },

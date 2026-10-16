@@ -26,8 +26,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 7
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -108,8 +107,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 43
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -173,8 +171,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 49
+      "provider": "replay"
     },
     "type": "model.started"
   },
@@ -276,8 +273,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 93
+      "provider": "replay"
     },
     "type": "model.started"
   },

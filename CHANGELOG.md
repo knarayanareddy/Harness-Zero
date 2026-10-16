@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — P6 version and document hygiene
+- Released sections `[0.2.1]`, `[0.2.0]`, `[0.1.0]` below are restored byte-for-byte to their git tags; the post-tag
+  edits made in `158c836` are recorded in the "`main @ 158c836` remediation" block of this `[Unreleased]` section.
+  `tests/test_docs_and_versions.py` pins the released sections so this cannot recur unnoticed.
+- `/health` reports `harness.__version__` (was a literal `"2.0.0"`).
+- Command errors that carry a status keep it: `TurnInProgress` is HTTP 409 (was flattened to 400).
+- `harness.kernel.commands.BUILTIN_COMMANDS` is the catalogue of built-in commands; `dispatch` resolves through it.
+- `TranscriptStore.list_sessions` removed from the SDK contract, scaffold and `jsonl_transcript` (a store holds one
+  session; listing is `SessionManager.list_sessions`); the unused `sessions_index.jsonl` is no longer written.
+- New `docs/ARCHITECTURE.md` — process model, kernel modules, command and event catalogues, session lifecycle, web
+  authentication, test map — checked against the code by `tests/test_docs_and_versions.py`.
+- The 22 research syntheses moved from `docs/` to `docs/research/`; README documents reading order and marks
+  `docs/research/`, `review/` and `additions/` as history.
+- Scenario goldens no longer pin `model.started.request_tokens_estimate` (it varies with the tmp path length).
+
 ### Changed — P5 one test estate (`review/CONSOLIDATION_LOG.md`)
 - The flow-of-information suite moved from `additions/scenarios` to **`tests/scenarios`** and is part of plain `pytest -q` (kernel, plugins, frontends, e2e and the 21 record/replay scenarios in one invocation; CI runs it with the jsdom DOM lane, `SCENARIO_DOM_WAIT_MS=6000`).
 - One `package.json` at the repository root (`jsdom 24.1.3`, `tailwindcss 3.4.17`; `npm ci`); the nested `tests/scenarios/_lib/node/package.json` is gone and the headless script resolves jsdom from the root install.
@@ -43,6 +58,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `task.started` and `settings.changed` are emitted for the first time (background inbox; `settings.set`); the never-emitted `log` type is removed from the catalogue (28 → 29 types net).
 - `CostLedger.record()` takes `session_id`; `totals(session_id=…)` filters by it, so session spend ≠ lifetime spend. The runner keeps `cost_usd=None` (instead of `0.0`) when a model has no known pricing, so `unknown_pricing` and the ledger agree.
 - `reloadTranscript()` reads `TranscriptRecord` as written (`role`, `tool_calls[{id,name,arguments}]`, `tool_results[{tool_use_id,content,is_error}]`) and restores tool outputs after a page refresh.
+
+### Changed — `main @ 158c836` remediation (pre-consolidation; these bullets were written into the released `[0.2.1]` section after the tag and are restored here)
+- Web frontend unified on modular ES modules (`app.js`, `cards.js`, `api.js`, `events.js`, `settings.js`) with named `addEventListener` subscriptions for every event type in `events.schema.json`.
+- Removed legacy inline scripts, duplicate `<head>`/`<body>` tags, fake confirmation `data-notice` attributes and `data-onclick="noop"` buttons; replaced 17 static mockup settings pages with the schema-driven `SettingsPanel` (`settings.schema`); first-run onboarding banner; CSP `script-src 'self'`.
+- Removed 21 unrouted legacy REST endpoints (including `/api/sessions/{session_id}/turn` from 0.2.1) and ~650 lines of dead handlers from `server.py`; `/commands/{name}` + `/events` are the API. `sessions_switch` validates ids; command exceptions map to 400/404.
+- Added `tests/frontends/test_static_contract.py`. (The jsdom smoke test and the credential-name-based model `<optgroup>` added at the same time were superseded in P5 and P4 above.)
 
 ### Fixed
 - `tool.call.arguments` on the bus aliased the gate's mutable `current_args` dict, so SSE consumers saw hook/policy rewrites (absolute paths) depending on queue timing; payload serialisation now snapshots the data.
@@ -80,17 +101,9 @@ Release `0.2.1` addresses all architectural, security, and runtime gaps identifi
   - Implemented streaming SSE and JSON fallback for real-time turn execution and tool result previews (`render_preview` contract).
   - Resolved provider resolution edge cases for scripted and external provider configurations (`tests/frontends/test_web_turn.py`).
 - **Modular Frontend Unification & Strict CSP (Step 3)**:
-  - Fully unified web frontend on modular ES modules (`app.js`, `cards.js`, `api.js`, `events.js`, `settings.js`).
-  - Added named `addEventListener` subscriptions for all event types in `events.schema.json`, unbreaking live browser event delivery.
-  - Removed legacy inline scripts, duplicate `<head>`/`<body>` tags, fake confirmation `data-notice` attributes, and `data-onclick="noop"` buttons.
-  - Replaced 17 static mockup settings pages with schema-driven `SettingsPanel` (`settings.schema`).
-  - Added first-run onboarding banner and dynamic model grouping (`<optgroup>`) based on configured provider credentials.
-  - Enforced strict Content Security Policy (`script-src 'self'`) across static serving routes.
-  - Added automated static contract tests (`tests/frontends/test_static_contract.py`) and headless jsdom UI smoke tests (`tests/frontends/test_ui_smoke.py`).
-- **Route & Command Architecture Cleanup**:
-  - Removed 21 unrouted legacy REST endpoints and ~650 lines of dead handlers from `server.py`, establishing `/commands/{name}` as the primary interface.
-  - Hardened `sessions_switch` with `validate_session_id()` and existence verification.
-  - Refined command exception mapping with appropriate HTTP error codes (`ValueError` -> 400, `KeyError`/`FileNotFoundError` -> 404).
+  - Fully unified web frontend on modular ES modules (`app.js`, `bus.js`, `api.js`, `state.js`, `views/`).
+  - Removed legacy inline scripts, inline styles, and `alert()` / `confirm()` popups in favor of native UI notifications and modals.
+  - Enforced strict Content Security Policy (`default-src 'self'`) across static serving routes.
 - **Security Hardening (Step 4)**:
   - Enforced POSIX file permissions `0600` on credentials, secrets, and settings files (`~/.harness/settings.json`, `~/.harness/secrets.json`).
   - Implemented single-use ticket and signed cookie authentication for SSE event streams, preventing unauthorized stream interception.

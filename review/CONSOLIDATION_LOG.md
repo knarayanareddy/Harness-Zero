@@ -21,7 +21,7 @@ what the flow test showed, what moved in the goldens and why). §3 collects defe
 | **P3** ✔ | 4.2 two styling systems; 4.3 facade remnants | One styling system: `styles.css` rewritten (components only) + compiled Tailwind `vendor/tw.css` (CSP-safe, committed, CI-checked) · artifact cards into the Artifacts tab · `tool.output.delta` into the tool card · terminal drawer, slash menu and every static pill removed or made live · `.hidden` finally defined (R14) | `python additions/tools/ui_audit.py --strict` exit 0 · `grep -c 'style="' app.js` = 0 · `tests/frontends/test_ui_coherence.py` (audit + jsdom cascade) · 21 scenarios strict |
 | **P4** ✔ | 4.7 provider truth | `Provider.is_configured()` / `is_reachable()` in the SDK contract, implemented by all five providers + `ScriptedProvider`; `models.list` → `ModelRow` with `status` ready / needs_key / unreachable, concurrent probes, never raises, DEBUG only; Ollama 300 ms probe cached 30 s; `_is_provider_configured` deleted; registry rejects providers that skip the contract; picker groups by status | `tests/plugins/test_provider_readiness.py` (hermetic bootstrapped `models.list`) · `test_ollama.py` probe tests · contract tests · 21 scenarios strict |
 | **P5** ✔ | 4.5 tests in four places | `additions/scenarios` → `tests/scenarios` (in plain `pytest -q`); `ui_audit.py` → `tests/frontends/`; both `ui_smoke.mjs` + `test_ui_smoke.py` deleted, their unique checks absorbed by the DOM lane; vacuous S1 deleted; one `package.json` (jsdom + tailwindcss, `npm ci`); CI runs everything with `SCENARIO_DOM_WAIT_MS=6000` | `pytest -q` → 406 in one invocation (incl. 21 scenarios) · `find . -name package.json -not -path '*/node_modules/*' \| wc -l` = 1 · no `ui_smoke*` |
-| **P6** | 4.6 version/doc drift | CHANGELOG restructure; `/health.version` from `harness.__version__`; README counts; `docs/ARCHITECTURE.md`; research docs under `docs/research/` | `harness --version` == `/health.version` == CHANGELOG top entry |
+| **P6** ✔ | 4.6 version/doc drift | Released CHANGELOG sections restored to their tags and SHA-pinned; `/health.version` = `harness.__version__`; `BUILTIN_COMMANDS` as the one command catalogue; dead `sessions_index.jsonl` + `TranscriptStore.list_sessions` removed; `docs/ARCHITECTURE.md` written from the code and pinned by `tests/test_docs_and_versions.py`; the 22 research syntheses moved to `docs/research/`; README counts replaced by the real gate; `TurnInProgress` → 409 over HTTP; path-length-dependent `request_tokens_estimate` dropped from goldens (R31) | `tests/test_docs_and_versions.py` (version = pyproject = doc title; every command/event/card documented; released sections immutable) · `pytest -q` → 411 · 21 scenarios strict |
 
 Order is deliberate: P1 first because every later phase (UI, sessions, providers) needs a stable wire contract to
 test against; P5 after P3/P4 so the test move happens once; P6 last so the docs describe the final state.
@@ -512,7 +512,52 @@ asserting 401/415/421 against a throw-away aiohttp app it built itself.
 - `tests/experimental/` and `tests/fixtures/` were not touched.
 - CI still runs `harness plugin test --all` (= `pytest tests/plugins`) after `pytest -q` — redundant but it is
   the documented user command; drop it in P6 if the README stops advertising it.
-### P6 — Version / doc hygiene — pending
+### P6 — Version and document hygiene — **DONE**
+
+*Baseline (review §4.6 and §5)*: `158c836` rewrote the released `[0.2.1]` CHANGELOG section after the tag
+(3 lines became 11 lines of claims about work done later); `/health` reported `"version": "2.0.0"` while
+`harness --version` said `0.2.1`; the README advertised "56+ test files, 340+ tests" and a 22-document "blueprint
+archive" at `docs/` root next to the three documents that describe the product; there was no end-to-end
+description of the system as built (process model, commands, events, session lifecycle); `jsonl_transcript`
+wrote a `sessions_index.jsonl` on every append that nothing read; the command dispatcher resolved names by
+`getattr` with no catalogue to document or test against.
+
+*Changes*
+
+| Area | Change |
+| :-- | :-- |
+| `CHANGELOG.md` | `[0.2.1]`, `[0.2.0]`, `[0.1.0]` restored byte-identical to tags `v0.2.1` / `v0.2.0` / `v0.1.0`; the post-tag claims from `158c836` moved to `[Unreleased]` as a "`main @ 158c836` remediation" block; P6 block added. `tests/test_docs_and_versions.py` pins the SHA-256 of every released section — editing a released section fails CI with the instruction to write an erratum under `[Unreleased]` instead. |
+| `harness/frontends/web/server.py` | `/health` returns `harness.__version__` (was the literal `"2.0.0"`); `test_health_and_host_guard` asserts equality with the package. `_handle_command` honours `status_code` on `HarnessError`s → `TurnInProgress` is 409 over HTTP as its docstring and `test_krn_09` always claimed (was flattened to 400); new `test_turn_in_progress_is_409_over_http`. |
+| `harness/kernel/commands.py` | `BUILTIN_COMMANDS` tuple (21 names, `form_submit` is the alias of `form.submit`) is the single source for the command catalogue; `dispatch` resolves through it instead of `getattr(self, anything)`. |
+| `harness/sdk/contracts.py`, `sdk/scaffold.py`, `docs/architecture/CONTRACTS.md`, `plugins/stores/jsonl_transcript/store.py` | `TranscriptStore` is `append` / `read` / `last_compaction` — a store holds one session; listing is kernel-owned (`SessionManager.list_sessions`, P2). The store's `list_sessions`, its `index_path` and the per-append `sessions_index.jsonl` write are gone (R27, R28). Store, scaffold and contract tests updated. |
+| `docs/ARCHITECTURE.md` (new, 225 lines) | Generated from the code, then edited: §1 process model (CLI → `bootstrap_kernel` → `Commands`/`EventBus`/`PolicyGate`/`SessionManager`; `harness ui` two-origin layout), §2 kernel modules, the 35 plugins by family, gate steps 1–9 with policy orders 10/50/60/900, §3 command table = `BUILTIN_COMMANDS`, §4 event table = `EVENT_PAYLOADS` with payload keys per row + `CARD_FIELDS`, §5 session lifecycle (lazy create, resume, switch, restart), §6 web client, authentication and error mapping, §7 test map. |
+| `tests/test_docs_and_versions.py` (new, 4 tests) | `harness.__version__` == `pyproject` == doc title; every built-in command, every event type (with every dataclass field on its row) and every card kind appears in `docs/ARCHITECTURE.md`, and nothing is documented that does not exist; the 22 research documents are in `docs/research/` and none remain at `docs/` root; released CHANGELOG digests. |
+| `docs/research/` | `git mv docs/00_*.md … docs/21_*.md docs/research/` (their relative links to each other still resolve; `00_README_AND_MANIFEST.md` is their own index). The one external reference (`review/dsh-integration/WS-06`) updated. |
+| `README.md` | §4: counts removed, the real gate shown (two-statement `HOME` export, `SCENARIO_DOM_WAIT_MS`, the four CI gates); §5: documents that describe the system in reading order (`ARCHITECTURE` → `CONTRACTS` → `PLUGIN_CATALOG` → `PORTING_RECIPES` → schema/CHANGELOG), then history (`docs/research/`, `review/`, `additions/`). |
+| `tests/scenarios/_lib/normalize.py` + 22 goldens | R31: `model.started.request_tokens_estimate` (prompt chars ÷ 4) depends on the length of the tmp workspace path — the suite started failing deterministically when `/tmp/pytest-of-user/pytest-NN` reached three digits (this is the "transient failure" noted in P3). The key joins the dropped volatile fields; the golden diff is only those lines (verified with `git diff -U0 … \| grep -v request_tokens_estimate`). |
+
+*Not done, on purpose*
+
+- Version stays `0.2.1`; this PR does not cut a release — the top CHANGELOG entry is `[Unreleased]`, and the
+  acceptance "`harness --version` == `/health.version`" holds (both read `harness.__version__`).
+- CSP keeps `style-src 'self' 'unsafe-inline'`: `app.js`/`cards.js`/`settings.js` no longer set inline styles
+  (audit), but `cards.js` progress bars and `tw.css` are the only consumers checked; tightening to `'self'` is a
+  one-line change once a jsdom-with-stylesheets lane exists to prove nothing regresses.
+- `harness plugin test --all` stays in CI (redundant with `pytest -q`) because the README still documents it as the
+  user-facing conformance command.
+- `tests/experimental/` and `tests/fixtures/` untouched (as in P5).
+
+*Flow test and full gate after P6* (one `pytest -q` invocation, hermetic, node present)
+
+| Gate | Result |
+| :-- | :-- |
+| `ruff check .` | clean |
+| `harness events schema \| diff docs/events.schema.json -` | empty |
+| `npm run build:css` + `git diff --quiet vendor/tw.css` | fresh |
+| `python tests/frontends/ui_audit.py --strict` | exit 0 |
+| `harness plugin doctor --all` | clean |
+| `SCENARIO_DOM_WAIT_MS=6000 pytest -q` | **411 passed in 5:04** (406 + 4 doc/version tests + 1 HTTP 409 test) — first run showed R31 (`jail_blocks_traversal_kernel`, estimate 73 → 74), fixed, then 21/21 strict |
+| `harness plugin test --all` | 180 passed |
 
 ---
 
@@ -536,10 +581,33 @@ asserting 401/415/421 against a throw-away aiohttp app it built itself.
 | R21 | hosted providers | Missing key → `list_models()` raised `auth` → provider absent from `models.list` + WARNING per page load. | P4: catalogue returned, `status: needs_key`, DEBUG |
 | R22 | `commands.py` | `_is_provider_configured()` guessed readiness from secret names. | P4: deleted; `Provider.is_configured()` |
 | R23 | `kernel/registry.py` | No contract check at provider registration; a provider missing a method vanished from the picker silently (hit by the scenario `ReplayProvider`). | P4: `PluginLoadError` naming the missing members |
+| R24 | `CHANGELOG.md` | `158c836` rewrote the released `[0.2.1]` section after the tag (3 → 11 lines claiming later work). | P6: restored from tag `v0.2.1`; claims moved to `[Unreleased]`; released sections SHA-pinned by `tests/test_docs_and_versions.py` |
+| R25 | `frontends/web/server.py` | `/health` returned the literal `"version": "2.0.0"`; the package is `0.2.1`. | P6: `harness.__version__`; test asserts equality |
+| R26 | `frontends/web/server.py` | `TurnInProgress` (`status_code = 409`, documented as 409 in `commands.py`, `session.py` and KRN-09) was returned as HTTP 400. | P6: `HarnessError.status_code` honoured; `test_turn_in_progress_is_409_over_http` |
+| R27 | `plugins/stores/jsonl_transcript/store.py` | `sessions_index.jsonl` appended on every transcript append; nothing read it (the kernel lists sessions from `session.json`, P2). | P6: removed |
+| R28 | `sdk/contracts.py` | `TranscriptStore.list_sessions` in the Protocol, scaffold and CONTRACTS doc with no caller; contradicted the kernel-owned lifecycle. | P6: dropped from contract, scaffold, doc |
+| R29 | `kernel/commands.py` | `dispatch` resolved any `getattr(self, name)` — no catalogue existed to document or test the command surface. | P6: `BUILTIN_COMMANDS`; doc test |
+| R30 | `README.md`, `docs/` | Hard-coded "56+ test files, 340+ tests" (stale by 70); 22 research syntheses at `docs/` root beside the three product documents; no end-to-end architecture document; `review/`, `additions/`, `docs/` with no stated relationship. | P6: counts removed; `docs/research/`; `docs/ARCHITECTURE.md`; README §5 reading order + history section |
+| R31 | `tests/scenarios/_lib/normalize.py` | Goldens pinned `model.started.request_tokens_estimate` = prompt chars ÷ 4, which includes the tmp workspace path — flipped 73 → 74 when the pytest tmp counter reached three digits (the unexplained transient failure of P3). | P6: key dropped from goldens (22 files, only those lines) |
 
 ---
 
-## 4. Gate recipe (run after every phase)
+## 4. Review §7 definition of done — verified after P6
+
+| Check (review §7) | Result |
+| :-- | :-- |
+| `ruff check .` | clean |
+| `pytest -q` — kernel + frontends + scenarios, one suite | 411 passed, one invocation (`SCENARIO_DOM_WAIT_MS=6000`) |
+| `harness plugin test --all` | 180 passed |
+| `harness events schema \| diff -u docs/events.schema.json -` | empty |
+| `ui_audit.py --strict` (now `tests/frontends/ui_audit.py`) | exit 0 — 0 missing ids, 0 undefined classes, 0 inline styles |
+| one `package.json` outside `node_modules` | 1 |
+| `grep -c 'style="' app.js` | 0 |
+| three daemon restarts leave one session (manual probe) | automated: `tests/kernel/test_session_lifecycle.py` + scenario `daemon_restart_web_dom` (strict) |
+| one mock turn: Economics tab = header indicator = `POST /commands/economics` (manual probe) | automated: `tests/frontends/test_static_contract.py::test_economics_payload_keys_match_app_js` + `plain_answer_web` DOM lane (`cost.updated` → header/tab from the same `EconomicsSnapshot`) |
+| P6 acceptance: `harness --version` == `/health.version` == package | `harness-zero, version 0.2.1` · `/health` → `harness.__version__` (tested) · pyproject `0.2.1` (tested); CHANGELOG top entry is `[Unreleased]` because no release is cut in this PR |
+
+## 5. Gate recipe (run after every phase)
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate && pip install -q -e ".[dev]"

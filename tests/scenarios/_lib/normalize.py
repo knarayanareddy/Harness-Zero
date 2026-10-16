@@ -30,6 +30,7 @@ DROP_KEYS = frozenset(
         "total_usd",
         "usd",
         "estimated_tokens",
+        "request_tokens_estimate",  # chars/4 of the prompt — moves with the length of the tmp workspace path
         "input_tokens",
         "output_tokens",
         "total_tokens",

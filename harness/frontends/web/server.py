@@ -21,6 +21,7 @@ from typing import Any
 
 from aiohttp import web
 
+from harness import __version__
 from harness.kernel.bus import EventBus, Subscriber
 from harness.kernel.commands import Commands
 from harness.sdk.errors import HarnessError
@@ -318,7 +319,7 @@ class HarnessWebServer:
         spend_info = await self.commands.economics(session_id=session.session_id if session else None)
         return web.json_response({
             "status": "ok",
-            "version": "2.0.0",
+            "version": __version__,
             "workspace": str(self.workspace),
             "active_session": session.info.to_dict() if session else None,
             "sandbox_origin": f"http://{self.host}:{self.sandbox_port}",
@@ -342,7 +343,9 @@ class HarnessWebServer:
             result = await self.commands.dispatch(name, args)
             return _json_response({"result": result, "status": "ok"})
         except (HarnessError, ValueError) as e:
-            return _json_response({"error": str(e), "status": "error"}, status=400)
+            # Errors that know their HTTP status (TurnInProgress → 409) keep it; the rest are bad requests.
+            status = getattr(e, "status_code", None) or 400
+            return _json_response({"error": str(e), "status": "error"}, status=status)
         except (KeyError, FileNotFoundError) as e:
             return _json_response({"error": str(e), "status": "error"}, status=404)
         except Exception as e:

@@ -2,10 +2,12 @@
 
 Everything in this folder was produced by an end-to-end review of the repository at commit `a0afc75` (branch `arena/4bab20a8-harness-zero`), plus a follow-up review of the v0.2.0 rebuild (`7185083`). **No source files were changed.** The folder is self-contained: documents reference each other by bare filename and reference repository files by their path from the repo root.
 
-## In progress: `CONSOLIDATION_LOG.md` — executing the P1–P6 plan from the fourth review
+## `CONSOLIDATION_LOG.md` — the executed P1–P6 plan from the fourth review (complete)
 
 Plan, acceptance criteria, per-phase log (what changed, what the flow-of-information suite showed, which goldens
-moved and why), defects R8+ found on the way, and the gate recipe. P1 (typed event/card contract) is done.
+moved and why), defects R8–R31 found on the way, and the gate recipe. All six phases are done; the system as it
+now stands is described in [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md), which `tests/test_docs_and_versions.py`
+keeps in step with the code.
 
 ## Latest review: `CODE_REVIEW_158c836.md` (fourth pass — `main` after the build agent's remediation commit)
 

@@ -26,8 +26,7 @@
   {
     "data": {
       "model": "replay-v1",
-      "provider": "replay",
-      "request_tokens_estimate": 5
+      "provider": "replay"
     },
     "type": "model.started"
   },

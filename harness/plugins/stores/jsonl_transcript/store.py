@@ -29,7 +29,6 @@ class JsonlTranscriptStore:
         self.session_dir.mkdir(parents=True, exist_ok=True)
         self.compact_path = self.session_dir / "transcript.jsonl"
         self.full_path = self.session_dir / "transcript_full.jsonl"
-        self.index_path = self.session_dir.parent / "sessions_index.jsonl"
         self._lock = asyncio.Lock()
         self._step_counter = 0
         self._init_counter()
@@ -115,19 +114,6 @@ class JsonlTranscriptStore:
                     f.write(updated_compact_line)
                     f.flush()
 
-                # Update sessions index file
-                try:
-                    index_entry = {
-                        "session_id": self.session_dir.name,
-                        "session_dir": str(self.session_dir),
-                        "last_updated": time.time(),
-                        "step_count": step_idx,
-                    }
-                    with open(self.index_path, "a", encoding="utf-8") as f_idx:
-                        f_idx.write(json.dumps(index_entry) + "\n")
-                except Exception:
-                    pass
-
             await asyncio.to_thread(_write)
             return step_idx
 
@@ -163,34 +149,3 @@ class JsonlTranscriptStore:
             if r.get("metadata", {}).get("compaction_summary"):
                 return r
         return None
-
-    async def list_sessions(self) -> list[dict[str, Any]]:
-        """Returns sessions metadata from the sessions index file or directory."""
-        if not self.index_path.exists():
-            return [{
-                "session_id": self.session_dir.name,
-                "session_dir": str(self.session_dir),
-                "step_count": self._step_counter,
-            }]
-
-        def _read_index():
-            seen = {}
-            with open(self.index_path, encoding="utf-8", errors="replace") as f:
-                for line in f:
-                    if not line.strip():
-                        continue
-                    try:
-                        entry = json.loads(line)
-                        sid = entry.get("session_id")
-                        if sid:
-                            seen[sid] = entry
-                    except json.JSONDecodeError:
-                        continue
-            return list(seen.values())
-
-        sessions = await asyncio.to_thread(_read_index)
-        return sessions or [{
-            "session_id": self.session_dir.name,
-            "session_dir": str(self.session_dir),
-            "step_count": self._step_counter,
-        }]

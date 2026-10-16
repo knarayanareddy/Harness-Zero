@@ -496,9 +496,6 @@ class {class_name}TranscriptStore(TranscriptStore):
     async def last_compaction(self) -> dict[str, Any] | None:
         return None
 
-    async def list_sessions(self) -> list[dict[str, Any]]:
-        return [{{"session_id": "default", "records": len(self._records)}}]
-
 
 class {class_name}Plugin:
     \"\"\"Plugin lifecycle registration.\"\"\"
