@@ -266,13 +266,36 @@ generated JSON schema (`harness events schema`).
   a registered module or one of the four generic renderers, which `registry.js` must implement exactly:
   `test_the_client_implements_exactly_the_renderers_a_manifest_may_name`).
   The **settings tabs** are derived the same way: a property's `x-ui.group` chooses its tab, an unnamed one takes
-  the tab of its plugin's family directory, and `x-ui.owner` names the section it renders under — the client
-  holds no tab list, not even for the tab it opens on (P13a). Controls
+  the tab of its plugin's family directory — the parent of the directory a plugin was *found* under, which is a
+  capability in the built-in tree and merely a location for an installed one, so an installed plugin reports no
+  family and lands on the default tab (`harness/kernel/settings_schema.py:settings_owner_index`) — and
+  `x-ui.owner` names the section it renders under. The client holds no tab list, not even for the tab it opens
+  on (P13a). Controls
   that merely call a command use `data-command` + `CommandBinder`; controls needing a runtime id or local side
   effects keep their handler in `app.js`, and the catalogue lists the bindings either way — `harness catalog
   --check --section ui` fails on a `data-command` no dispatcher has, which is what keeps the Plugins pane's
   Enable/Disable switches honest. The binder announces success on `harness:command-done` *outside* the command's
   `try`, so a repaint that detaches the control can never be reported to the user as a failed write.
+* A generic panel is refreshed with the one argument its command is *known* to take: `ui.contributions` reports
+  each panel's `accepts` — the parameter names, from the same rows `commands.list` builds, so the catalogue carries
+  them without booting anything — and `registry.js` passes `session_id` only when that list names it. Dispatch
+  forwards arguments as keyword arguments, so a panel whose command takes no session and is handed one raises
+  instead of painting, which is how three built-in panels came to be the only working ones (R61).
+* A plugin's **own client module** is served by the kernel from an address derived in one place both ends import:
+  `harness/sdk/plugin_static.py` — in the SDK because a frontend may import `harness.sdk`, `harness.kernel.commands`
+  and `harness.kernel.bus` and nothing else (`test_frontends_allowed_imports`), with `harness/kernel/plugin_paths.py` as
+  the kernel-side façade. `static/plugins/obsidian.js` in a plugin named `obsidian` is fetched from
+  `/static/plugins/obsidian/plugins/obsidian.js`: the name is in the path so two features may ship the same
+  filename, and the prefix route is registered *before* the client's own `/static/` tree because aiohttp matches
+  resources in registration order. Every refusal answers 404 — a file the manifest did not declare, a path that
+  leaves that plugin's `static/`, a suffix outside `.js .mjs .css`, a plugin the running daemon did not load, a
+  plugin discovered from a workspace — so the route cannot be used to enumerate what a machine has installed.
+  Discovery applies the same trust rule before advertising a URL (`PluginManifest.load(path, trust=tier.value)`
+  clears an untrusted `client_module` with a warning rather than raising: a workspace plugin's typo must not turn
+  into a kernel that will not boot, because `bootstrap.discover_all` is deliberately unguarded), and
+  `_handle_plugin_static` re-checks it per request, because `plugins.disable` records intent for the *next* start
+  while the directory stays on disk. `tests/scenarios/plugin_panel_appears_when_enabled` proves the whole loop in a
+  browser — tab mounted, module fetched, switch written, panel gone after a restart.
 
 ## 7. Where the tests live
 

@@ -28,7 +28,13 @@ from pathlib import Path
 import pytest
 
 from harness.kernel.bootstrap import bootstrap_kernel
-from harness.kernel.settings_schema import PLUGIN_TAB_DEFAULT, tab_for, with_ui_defaults
+from harness.kernel.settings_schema import (
+    FAMILY_TABS,
+    PLUGIN_TAB_DEFAULT,
+    settings_owner_index,
+    tab_for,
+    with_ui_defaults,
+)
 
 REPO = Path(__file__).resolve().parents[2]
 SETTINGS_JS = REPO / "harness" / "frontends" / "web" / "static" / "settings.js"
@@ -121,6 +127,37 @@ async def test_no_tab_is_invented_for_a_plugin_with_nothing_to_configure(kernel)
 
 
 # ---------------------------------------------------------------- the client half
+
+
+def test_an_installed_plugin_reports_no_capability_family(tmp_path):
+    """A plugin *installed* into an install root has no family, so it is grouped as "Other".
+
+    The family is read from the directory a plugin was found under, which is a capability name in the built-in tree
+    (`harness/plugins/hooks/<name>`) and a *location* for an installed one (`<config>/plugins/<name>`,
+    `<workspace>/.harness/plugins/<name>` — what `harness plugin` scaffolds). Reporting `plugins` there would make
+    the Plugins pane invent a family heading called "plugins" and imply a capability nobody chose, so the parent is
+    recognised as an install root and no family is reported. `tab_for` answers `None` with the default tab, so the
+    plugin's settings are still exactly where a user expects an integration to be.
+    """
+    from types import SimpleNamespace
+
+    def found(directory):
+        # `plugin_dir()` reads the manifest's own location, which is where the family comes from.
+        manifest = SimpleNamespace(summary="a summary", dir_path=str(directory))
+        return SimpleNamespace(manifest=manifest)
+
+    index = settings_owner_index(
+        SimpleNamespace(discovered={
+            "probe-vault": found(tmp_path / "config" / "plugins" / "probe-vault"),
+            "audit_log": found(tmp_path / "harness" / "plugins" / "hooks" / "audit_log"),
+        })
+    )
+
+    assert index["plugins.probe-vault"]["family"] is None
+    assert tab_for("plugins.probe-vault", None) == PLUGIN_TAB_DEFAULT
+    # a built-in's family is untouched by the install-root rule
+    assert index["plugins.audit_log"]["family"] == "hooks"
+    assert tab_for("plugins.audit_log", "hooks") == FAMILY_TABS["hooks"]
 
 
 def test_settings_js_renders_the_owner_heading_and_hardcodes_no_tab_names():

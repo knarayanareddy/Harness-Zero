@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -46,11 +47,38 @@ class RunResult:
         }
 
 
-def seed_workspace(ws: Path, files: dict[str, str]) -> None:
+SCENARIO_ROOT = Path(__file__).resolve().parents[1]  # tests/scenarios — where `_fixtures/` lives
+
+
+def seed_tree(root: Path, files: dict[str, str]) -> None:
+    """Write `relative path -> content` under `root`, creating parents.
+
+    Two trees need it before a kernel boots: the workspace (`workspace_files`) and the config directory
+    (`config_files`, which is where an *installed* plugin lives — `<config>/plugins/<family>/<name>/` — and the
+    only way a scenario can test what a user gets from `harness plugin install` rather than what ships in the
+    repo). Seeding is a fixture's job, not a test's, so both lanes share this and neither can drift.
+    """
     for rel, content in files.items():
-        p = ws / rel
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content, encoding="utf-8")
+        dest = root / rel
+        if isinstance(content, str) and content.startswith("@"):
+            # `@<path>` copies a fixture tree instead of inlining it: a plugin an *installed* fixture has to be
+            # a directory (manifest, module, static file, schema), and pasting those four files into every
+            # scenario.yaml is how two scenarios start disagreeing about the thing they are both testing.
+            src = SCENARIO_ROOT / content[1:].lstrip("/")
+            if not src.exists():
+                raise FileNotFoundError(f"scenario fixture {content!r} resolves to {src}, which does not exist")
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if src.is_dir():
+                shutil.copytree(src, dest, dirs_exist_ok=True)
+            else:
+                shutil.copy2(src, dest)
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content, encoding="utf-8")
+
+
+def seed_workspace(ws: Path, files: dict[str, str]) -> None:
+    seed_tree(ws, files)
 
 
 def base_overrides(sc: Scenario) -> dict[str, Any]:
@@ -172,6 +200,7 @@ async def run_kernel_scenario(sc: Scenario, tmp: Path, *, env_conf: Path) -> Run
     ws = tmp / "ws"
     ws.mkdir(parents=True, exist_ok=True)
     seed_workspace(ws, sc.workspace_files)
+    seed_tree(env_conf, sc.config_files)  # an installed plugin lives under `<config>/plugins/...`
 
     rt = await bootstrap_kernel(workspace=ws, config_dir=env_conf, overrides=base_overrides(sc))
     if sc.secrets:

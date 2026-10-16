@@ -7,15 +7,18 @@ from __future__ import annotations
 
 import importlib
 import importlib.metadata
+import importlib.util
 import json
 import logging
 import re
+import sys
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
 
 from harness.kernel.bus import EventBus
+from harness.kernel.plugin_paths import client_module_url, plugin_dir
 from harness.kernel.secrets import Secrets
 from harness.kernel.settings import SettingsStore
 from harness.sdk.context import SecretsView, SettingsView
@@ -337,7 +340,10 @@ class PluginRegistry:
 
         for manifest_file in sorted(root.rglob("harness_plugin.toml")):
             try:
-                manifest = PluginManifest.load(manifest_file)
+                # The tier is what decides whether a `[ui].client_module` may run in the browser, so it has to be
+                # *this* directory's tier: `load`'s default is `builtin`, which made the check unreachable for
+                # every plugin discovered from disk (R58).
+                manifest = PluginManifest.load(manifest_file, trust=tier.value)
                 dp = DiscoveredPlugin(
                     manifest=manifest,
                     tier=tier,
@@ -470,6 +476,39 @@ class PluginRegistry:
 
         return order
 
+    @staticmethod
+    def _import_entry(dp: DiscoveredPlugin, mod_name: str):
+        """Import the module ``entry`` names, falling back to the plugin's own directory.
+
+        A built-in's entry is an ordinary dotted path inside the ``harness`` package, and that is the case
+        ``import_module`` serves. A plugin *installed* by a user — under ``<config>/plugins/<name>`` or the
+        workspace's ``.harness/plugins`` — has no importable package name: ``plugin:MyPlugin`` is exactly the
+        shape the SDK scaffold writes (`harness/sdk/scaffold.py`), and ``import_module("plugin")`` raised
+        ``ModuleNotFoundError: No module named 'plugin'``, which ``load_all`` turned into a ``plugin.error``
+        event. The plugin was discovered, declared its settings and panels, and then never loaded: silently,
+        because no test had ever installed one (R60).
+
+        So a name that does not resolve is tried as a path inside the plugin directory, loaded under a name
+        nothing else can collide with. Nothing is made more trustworthy by this — what may *run* is still
+        decided by the tier and the capability clamp, and `[ui].client_module` by `CLIENT_MODULE_TRUST`.
+        """
+        try:
+            return importlib.import_module(mod_name)
+        except ModuleNotFoundError as exc:
+            relative = Path(*[part for part in mod_name.split(".") if part not in ("", ".")])
+            root = plugin_dir(dp)
+            for candidate in (root / f"{relative}.py", root / relative / "__init__.py"):
+                if candidate.is_file():
+                    unique = f"harness_plugin__{dp.manifest.name}__{mod_name}".replace("-", "_")
+                    spec = importlib.util.spec_from_file_location(unique, candidate)
+                    if spec is None or spec.loader is None:
+                        break
+                    module = importlib.util.module_from_spec(spec)
+                    sys.modules[unique] = module  # the module's own `@dataclass`/self-references resolve via this
+                    spec.loader.exec_module(module)
+                    return module
+            raise exc
+
     def _instantiate_plugin(self, dp: DiscoveredPlugin) -> Plugin:
         """Instantiates the Plugin contract class referenced in entry."""
         entry_str = dp.manifest.entry
@@ -479,10 +518,10 @@ class PluginRegistry:
         try:
             if ":" in entry_str:
                 mod_name, cls_name = entry_str.split(":", 1)
-                mod = importlib.import_module(mod_name)
+                mod = self._import_entry(dp, mod_name)
                 cls = getattr(mod, cls_name)
             else:
-                mod = importlib.import_module(entry_str)
+                mod = self._import_entry(dp, entry_str)
                 if hasattr(mod, "Plugin"):
                     cls = mod.Plugin
                 elif hasattr(mod, "plugin"):
@@ -704,9 +743,17 @@ class PluginRegistry:
             for kind in ui.record_renderers:
                 renderers.append({"kind": kind, "plugin": source})
             if ui.client_module:
-                # Served by the web frontend's `/static/...` route from the plugin's own directory, so the URL
-                # is the declared path — the `static/` prefix in the manifest is what the route expects.
-                modules.append({"plugin": source, "path": ui.client_module, "url": f"/{ui.client_module}"})
+                # One derivation of the address, shared with the route that serves it
+                # (`harness/kernel/plugin_paths.py:client_module_url`): the URL used to be `"/" + path`, which
+                # collided with the client's own `/static/` tree and 404'd — silently, because a module that
+                # fails to import only means the panel loses its customisation.
+                modules.append(
+                    {
+                        "plugin": source,
+                        "path": ui.client_module,
+                        "url": client_module_url(source, ui.client_module),
+                    }
+                )
         seen: set[str] = set()
         dupes: set[str] = set()
         for panel in panels:

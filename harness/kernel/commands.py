@@ -537,13 +537,22 @@ class Commands:
         """
         contrib = self.registry.ui_contributions()
         schema = await self.settings_schema()
-        dispatchable = {row["name"] for row in await self.commands_list() if row["exposed"]}
+        rows = await self.commands_list()
+        dispatchable = {row["name"] for row in rows if row["exposed"]}
+        accepts = {row["name"]: list(row.get("args") or []) for row in rows}
         # A panel whose command does not exist is a tab that shows an error, so it is not handed out at all —
         # and it is reported in the same response, which is what lets the contract test fail on the cause
         # rather than on a panel that silently never renders.
         panels, broken = [], []
         for panel in contrib["panels"]:
-            (panels if panel["command"] in dispatchable else broken).append(panel)
+            # `accepts` is the argument names the panel's command takes, so a client that has to choose what to
+            # send (the generic renderer refreshes with the active session) reads the signature instead of
+            # guessing it: `dispatch` forwards args as keyword arguments, so one unexpected `session_id` is a
+            # TypeError and an empty pane. The three built-in panels all happened to accept it, which is the
+            # only reason no one met this before a plugin declared a fourth over `plugins.list` (R61).
+            (panels if panel["command"] in dispatchable else broken).append(
+                {**panel, "accepts": accepts.get(panel["command"], [])}
+            )
         return {
             **contrib,
             "panels": panels,

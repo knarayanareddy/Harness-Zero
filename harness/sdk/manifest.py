@@ -4,6 +4,7 @@ Validates harness_plugin.toml manifests against SDK contracts.
 """
 from __future__ import annotations
 
+import logging
 import re
 import tomllib
 from dataclasses import dataclass, field
@@ -12,6 +13,8 @@ from typing import Any
 
 from harness.sdk.errors import IncompatiblePlugin, PluginLoadError
 from harness.sdk.types import SDK_API_VERSION, Capability
+
+logger = logging.getLogger(__name__)
 
 NAME_PATTERN = re.compile(r"^[a-z][a-z0-9-]{1,40}$")
 PANEL_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{1,40}$")
@@ -22,7 +25,14 @@ RECORD_KIND_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]{2,63}$")
 VALID_UI_RENDERERS = frozenset({"table", "tree", "markdown", "list"})
 
 #: Trust levels allowed to ship a client module (executed by the browser with the kernel's own privileges).
-CLIENT_MODULE_TRUST = frozenset({"builtin", "config"})
+#: The values are ``TrustTier`` values from ``harness/kernel/registry.py`` — the SDK may not import the kernel,
+#: so they are spelled here and `tests/kernel/test_ui_contributions.py` pins that every one of them is a tier the
+#: registry can actually assign. It previously named ``"config"``, which is no tier at all, so *only* built-in
+#: plugins could ever ship a module: a plugin the user installed under ``<config>/plugins`` (tier ``local``) got
+#: "not trusted enough to run code in the browser" for a file the kernel itself had loaded. ``workspace`` stays
+#: excluded on purpose: those plugins are opt-in untrusted code, and the message below tells their author to
+#: declare panels and renderers instead of shipping a module.
+CLIENT_MODULE_TRUST = frozenset({"builtin", "local"})
 
 VALID_PROVIDES = frozenset({
     "provider",
@@ -127,8 +137,9 @@ class UiContribution:
         module = data.get("client_module")
         if module is not None:
             module = str(module).strip()
-            # Served at /static/<module> by the web frontend's allow-list; an absolute or escaping path would
-            # read outside the plugin dir, and `../` in the middle would read someone else's files.
+            # Served at `/static/plugins/<plugin>/<path under static/>` (see `harness.kernel.plugin_paths`), i.e.
+            # out of the plugin's own `static/` directory and nowhere else. An absolute path or an escaping `../`
+            # would read outside the plugin dir, so it is refused here, at parse time, not by the route.
             if not module.startswith("static/") or module.startswith("/") or ".." in Path(module).parts:
                 raise PluginLoadError(
                     f"Plugin '{plugin}' [ui].client_module {module!r}: must be a path under static/ inside the plugin dir"
@@ -266,9 +277,20 @@ class PluginManifest:
 
         manifest = cls.from_dict(plugin_data, dir_path=dir_path)
         if manifest.ui and manifest.ui.client_module and trust not in CLIENT_MODULE_TRUST:
-            raise PluginLoadError(
-                f"Plugin '{manifest.name}' ships [ui].client_module but is not trusted enough to run code in "
-                f"the browser (trust {trust!r}; allowed: {', '.join(sorted(CLIENT_MODULE_TRUST))}). Workspace "
-                "plugins may declare panels and renderers; they may not ship a module."
+            # The module is dropped, the plugin is kept. Refusing to *load* would turn one authoring mistake in a
+            # workspace plugin into a kernel that will not boot — and `discover_directory` re-raises every other
+            # manifest error, so that would be the behaviour. Dropping it costs the plugin the custom rendering
+            # and nothing else: its `[ui].panels` still resolve, through the generic renderer its declaration
+            # names, which is the fallback WS-05a built for exactly this. `harness plugin doctor` and the log
+            # line are where the author learns why; the web route re-checks the tier rather than trusting here.
+            logger.warning(
+                "Plugin '%s' declares [ui].client_module (%s) but its trust level %r may not run code in the "
+                "browser (allowed: %s); the module is ignored and its panels use their declared renderer. Move "
+                "the plugin under the config directory to ship a module.",
+                manifest.name,
+                manifest.ui.client_module,
+                trust,
+                ", ".join(sorted(CLIENT_MODULE_TRUST)),
             )
+            manifest.ui.client_module = None
         return manifest

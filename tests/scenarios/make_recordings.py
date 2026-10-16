@@ -61,6 +61,11 @@ RECORDINGS: dict[str, list[list]] = {
     # 1. A plain streamed answer; two deltas so chunk collapsing is exercised.
     "plain_answer_kernel": [text("The capital of the Netherlands ", "is Amsterdam.")],
     "plain_answer_web": [text("The capital of the Netherlands ", "is Amsterdam.")],
+    # The two WS-05c scenarios are about the *surfaces* a plugin owns, but a web scenario needs a session to
+    # paint, so each carries one throwaway turn. The answer is a sentence, not a claim about the system: the
+    # numbers a plugin contributes are asserted from `ui.contributions` and `plugins.list`, never from here.
+    "plugin_panel_appears_when_enabled": [text("The capital of the Netherlands ", "is Amsterdam.")],
+    "settings_tab_from_plugin_schema": [text("Hello — what should I look at?")],
     # 2. Read → edit → confirm (diff card, checkpoint hook, file on disk).
     "read_then_edit_kernel": [
         tool("c1", "view_file", {"file_path": "app.py"}, preface="Let me look at the file first."),

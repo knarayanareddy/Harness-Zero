@@ -327,6 +327,30 @@ async def test_settings_schema_groups_and_properties_agree(kernel):
 # ---------------------------------------------------------------- the boot-time contract's shape
 
 
+async def test_every_declared_panel_can_be_refreshed_with_the_args_the_client_sends(kernel):
+    """For each panel, dispatch its command with exactly what `PanelRegistry` would send.
+
+    Three shapes of failure live here and none of them are visible statically: a panel naming a command that
+    does not exist (caught elsewhere), a command that rejects `session_id` (R61 — `dispatch` forwards args as
+    keyword arguments, so one extra name is a TypeError and an empty pane), and a command that *requires* an
+    argument nobody sends. The client's rule is `(panel.accepts).includes('session_id')`, so this test and that
+    line have to agree — which is the point of checking the pair rather than each alone.
+    """
+    ui = await kernel.commands.ui_contributions()
+    for panel in ui["panels"]:
+        args = {"session_id": "does-not-exist"} if "session_id" in panel["accepts"] else {}
+        try:
+            await kernel.commands.dispatch(panel["command"], args)
+        except TypeError as err:  # a wrong signature is the bug; a missing session is not
+            pytest.fail(f"panel {panel['id']!r} → {panel['command']}({sorted(args)}) is not callable: {err}")
+        except Exception:
+            pass  # unknown session id, no provider configured, empty log — all fine for a wiring check
+    generic = [panel for panel in ui["panels"] if panel["id"] not in _registered_panel_modules()]
+    assert all("session_id" in panel["accepts"] or panel["accepts"] == [] for panel in generic), (
+        "a module-less panel is refreshed by the generic renderer; its command must take session_id or nothing"
+    )
+
+
 async def test_ui_contributions_response_is_all_the_client_needs_at_boot(kernel):
     """The response's keys are the client's contract, so they are asserted as a set (WS-02's discipline)."""
     ui = await kernel.commands.ui_contributions()
@@ -339,8 +363,11 @@ async def test_ui_contributions_response_is_all_the_client_needs_at_boot(kernel)
         "record_kinds",
     }
     for panel in ui["panels"]:
-        assert set(panel) == {"id", "title", "command", "renderer", "plugin"}
+        # `accepts` is here because the client must know what the panel's command takes: the generic renderer
+        # refreshes a pane with the active session, and `dispatch` forwards args as keyword arguments.
+        assert set(panel) == {"id", "title", "command", "renderer", "plugin", "accepts"}
         assert panel["renderer"] in {"table", "tree", "markdown", "list"}
+        assert isinstance(panel["accepts"], list) and all(isinstance(a, str) for a in panel["accepts"])
     assert ui["record_kinds"], "a client that is told nothing cannot refuse an unknown kind"
     rows = await kernel.commands.commands_list()
     assert {"name", "args", "alias_of", "exposed"} == set(rows[0])

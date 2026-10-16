@@ -189,7 +189,10 @@ export class PanelRegistry {
       host: `panel-${panel.id}`,
       async render(ctx) {
         if (!ctx.host) return;
-        const result = await ctx.api.command(panel.command, ctx.app.activeSessionId ? { session_id: ctx.app.activeSessionId } : {});
+        // Only send what the command accepts: the kernel lists the argument names per panel (`accepts`), so a
+        // panel over a session-less command works and one over a session-scoped command still scopes itself.
+        const scoped = (panel.accepts || []).includes('session_id') && ctx.app.activeSessionId;
+        const result = await ctx.api.command(panel.command, scoped ? { session_id: ctx.app.activeSessionId } : {});
         const rows = Array.isArray(result) ? result : (result?.rows ?? result?.records ?? result?.items ?? []);
         const columns = Array.isArray(result?.columns) ? result.columns : inferColumns(rows);
         render(ctx.host, rows, columns);

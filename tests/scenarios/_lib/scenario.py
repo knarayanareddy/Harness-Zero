@@ -30,6 +30,7 @@ class Scenario:
     approvals: list[str] = field(default_factory=list)  # "approve" | "deny" in order of approval.required
     expect: dict[str, Any] = field(default_factory=dict)
     workspace_files: dict[str, str] = field(default_factory=dict)  # relative path -> content, seeded before the run
+    config_files: dict[str, str] = field(default_factory=dict)  # relative path -> content, seeded into the config dir before boot
     mcp_servers: dict[str, Any] = field(default_factory=dict)
     secrets: dict[str, str] = field(default_factory=dict)  # seeded into the kernel's Secrets store (config dir) before the run
     strict_exhaustion: bool = True
@@ -57,6 +58,7 @@ def load_scenario(path: Path) -> Scenario:
         approvals=list(data.get("approvals", []) or []),
         expect=data.get("expect", {}) or {},
         workspace_files=data.get("workspace_files", {}) or {},
+        config_files=data.get("config_files", {}) or {},
         mcp_servers=data.get("mcp_servers", {}) or {},
         strict_exhaustion=bool(data.get("strict_exhaustion", True)),
         xfail=data.get("xfail"),

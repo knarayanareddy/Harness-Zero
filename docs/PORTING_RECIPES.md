@@ -30,9 +30,18 @@ panels = [
 # Record kinds this plugin's *client module* paints, so the timeline can show them after a reload too.
 record_renderers = ["ui.card"]
 # Optional, and only for a built-in or config-dir plugin (workspace plugins may not run code in the browser).
-client_module = "static/plugins/obsidian.js"   # mounted at /static/plugins/obsidian.js (WS-05c serves plugin
-# static dirs; until then the client logs the failed import and the panel keeps its generic renderer)
+client_module = "static/plugins/obsidian.js"   # served at /static/plugins/obsidian/plugins/obsidian.js
 ```
+
+The URL is the kernel's business, not yours: `harness/sdk/plugin_static.py:client_module_url` maps
+`static/<path>` to `/static/plugins/<plugin name>/<path>`, and `harness catalog` prints the result under
+`ui.client_modules[].url` (`harness catalog show --section ui`) so you never have to guess it. The plugin name is
+in the address so two features may each ship a file called `static/panel.js`; the prefix route is registered ahead
+of the client's own `/static/` tree. Refusals are uniform 404s — a file you did not declare, a path leaving your
+`static/` directory, a suffix outside `.js .mjs .css`, a plugin the running daemon did not load, a plugin from a
+*workspace* (which may not run code in a browser at all). Discovery enforces the same trust rule before it
+advertises anything: an untrusted tier's `client_module` is dropped with a `[warn]` in the boot log and the panel
+keeps its generic renderer, so a stale declaration degrades a surface instead of failing to boot the kernel.
 
 The client module exports two maps, and `app.js` reads them by name after importing the URL the kernel reported:
 
@@ -53,7 +62,7 @@ export const renderers = {
 };
 ```
 
-Two authoring rules inside a panel module, both learned the hard way:
+Three authoring rules inside a panel module, all learned the hard way:
 
 * **Write a `data-command` value literally.** `harness catalog gen` reads bindings out of the source text, so
   `data-command="${enabled ? 'plugins.disable' : 'plugins.enable'}"` is invisible to `--check` while
@@ -62,6 +71,15 @@ Two authoring rules inside a panel module, both learned the hard way:
 * **Escape what goes in an attribute.** `escape` (textContent-based) defuses text nodes only; a `"` in
   `data-args` ends the attribute. `ctx.escapeAttr` exists for values written into markup — pass
   `JSON.stringify(args)` through it.
+* **Take the arguments your command declares.** A panel with no module is refreshed by `registry.js:mountGeneric`,
+  which has exactly one piece of context to offer — the current `session_id` — and used to offer it unconditionally.
+  `Commands.dispatch` passes arguments as keyword arguments, so a panel command that does not name `session_id`
+  raised `TypeError` and painted nothing: the three built-in panels worked only because all three happen to accept
+  it. Now `ui.contributions` publishes each panel's `accepts` (the argument names of its command, taken from the
+  same rows `commands.list` reports) and the client passes `session_id` only when its list contains that name — so
+  `obsidian.search(query)` paints, and a built-in that wants the session must name it in its signature.
+  `tests/frontends/test_ui_contract.py:test_every_declared_panel_can_be_refreshed_with_the_args_the_client_sends`
+  holds every declaration to that rule, and the catalogue carries `accepts` so the check needs no live kernel.
 
 A panel key with no declaration, or a renderer for a kind the kernel does not write, is a test failure, not a
 feature: the ids must match (`test_the_panel_modules_are_the_declared_panels`), and an excuse in `NO_RENDERER`

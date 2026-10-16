@@ -27,7 +27,7 @@ from harness.frontends.web.server import HarnessWebServer
 from harness.kernel.bootstrap import bootstrap_kernel
 
 from . import record
-from .kernel_runner import ScriptedApprover, base_overrides, seed_workspace
+from .kernel_runner import ScriptedApprover, base_overrides, seed_tree, seed_workspace
 from .normalize import Normalizer, collapse_deltas
 from .replay_provider import PROVIDER_NAME, golden_view, request_summary, scenario_model
 from .scenario import Scenario
@@ -83,6 +83,7 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
     ws = tmp / "ws"
     ws.mkdir(parents=True, exist_ok=True)
     seed_workspace(ws, sc.workspace_files)
+    seed_tree(env_conf, sc.config_files)  # `<config>/plugins/...` is what an installed plugin is
 
     rt = await bootstrap_kernel(workspace=ws, config_dir=env_conf, overrides=base_overrides(sc))
     # A handle, not a bare provider: in record mode it is a tee in front of the real provider, and
@@ -337,7 +338,31 @@ async def _run_dom_lane(base: str, sc: Scenario, token: str, *, reload: bool = F
             "MODEL_PROVIDER": PROVIDER_NAME,
             # Open the settings modal after the turns and report the schema-driven group tabs
             # (absorbs the old tests/frontends/ui_smoke.mjs check).
-            "SETTINGS_PROBE": "1" if (not reload and sc.expect.get("settings_groups_include")) else "0",
+            "SETTINGS_PROBE": "1"
+            if (not reload and (sc.expect.get("settings_groups_include") or sc.expect.get("settings_groups_exclude")))
+            else "0",
+            # The Studio's tab strip, what each pane painted, and the Plugins pane's rows — all driven by
+            # `ui.contributions`, so a scenario can assert that an installed plugin's UI appeared (WS-05c). It
+            # runs on the reload pass too: that is how a scenario asserts what a *restarted* daemon shows, which
+            # is the only honest way to check a switch whose whole contract is "applies on next start".
+            "PLUGINS_PROBE": "1"
+            if (
+                any(
+                    sc.expect.get(key)
+                    for key in (
+                        "dom_tabs_include",
+                        "dom_tabs_exclude",
+                        "dom_panel_text",
+                        "dom_plugins_counts",
+                        "dom_plugin_modules_served",
+                        "dom_disable_plugin",
+                        "dom_restart_tabs_include",
+                        "dom_restart_tabs_exclude",
+                    )
+                )
+            )
+            else "0",
+            "PLUGINS_DISABLE_CARD": "" if reload else str(sc.expect.get("dom_disable_plugin") or ""),
         }
     )
     proc = await asyncio.create_subprocess_exec(

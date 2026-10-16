@@ -9,6 +9,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — P14 / WS-05c plugin client modules are served, and installed plugins load at all
+- **`[ui].client_module` now means something on disk.** The address is derived in one module both ends import —
+  `harness/sdk/plugin_static.py` (`CLIENT_MODULE_ROOT`, `CLIENT_MODULE_SUFFIXES`, `plugin_dir`, `client_module_url`,
+  `client_module_file`, `client_module_trusted`), with `harness/kernel/plugin_paths.py` as the kernel-side façade —
+  and `harness/frontends/web/server.py` registers
+  `add_get("/static/plugins/{name}/{tail:.+}", _handle_plugin_static)` *ahead* of the client's own `/static/` tree.
+  `static/plugins/obsidian.js` in the plugin `obsidian` is therefore fetched from
+  `/static/plugins/obsidian/plugins/obsidian.js`: namespaced so two features may ship the same filename, and
+  computed by the same function that answers the request, so an advertised URL cannot outlive its handler. It had
+  to live in the SDK because `test_frontends_allowed_imports` lets a frontend import `harness.sdk`,
+  `harness.kernel.commands` and `harness.kernel.bus` — widening that allow-list was the wrong fix.
+- **Refusals are 404s, enforced twice.** An undeclared sibling file, a path leaving the plugin's `static/`, a
+  suffix outside `.js .mjs .css`, a plugin the running daemon did not load, and a plugin discovered from a
+  *workspace* all answer the same way, so the route cannot enumerate what a machine has installed. The same rule
+  is applied at discovery: `PluginManifest.load(path, trust=tier.value)` clears an untrusted declaration with a
+  `[warn]` instead of raising — `bootstrap.discover_all` is unguarded on purpose, so a raising gate would turn one
+  workspace plugin's typo into a kernel that will not boot — and `_handle_plugin_static` re-checks per request,
+  because `plugins.disable` records intent for the next start while the directory stays on disk.
+- **The address is the plugin's name, three times over (R59).** The `<plugin>` segment is the registry key
+  (`manifest.name`), not the folder the plugin happens to live in — the scaffold's directory comes from the command
+  line, so the two differ routinely. Pinning that is what caught a subtler bug in the resolver itself: comparing
+  `client_module_url(name, module)` against `f"{CLIENT_MODULE_ROOT}/{name}/{tail}"` mentions `name` on both sides,
+  so it holds for *any* name and the "only the declared address is readable" guard was a tautology.
+  `client_module_file` now refuses unless the segment is the plugin's own name, which is what the docstring had
+  claimed all along — and which nothing could have caught without a test that tried to pin it.
+- **A plugin you installed could never load (R60).** `harness sdk scaffold` writes `entry = "plugin:MyPlugin"`,
+  nothing put the plugin directory on `sys.path`, `import_module` raised, and `load_all` filed it as
+  `plugin.error` — so scaffolds, `<config>/plugins/…` and `<workspace>/.harness/plugins/…` trees were discovered,
+  listed, and never instantiated: their settings, panels and modules could not appear in any UI. Reproduced first
+  (`ModuleNotFoundError: No module named 'plugin'`), fixed by `PluginRegistry._import_entry`, which loads the
+  manifest's own file under a unique `sys.modules` name. No `sys.path` mutation.
+- **A declared panel could not be refreshed (R61).** `mountGeneric` passed `session_id` to every module-less panel
+  and `Commands.dispatch` forwards arguments as keyword arguments, so any command that does not name `session_id`
+  raised `TypeError` and painted nothing — the three built-in panels worked only because all three accept it, which
+  is the kind of accident a plugin would pay for. `ui.contributions` now publishes each panel's `accepts` (the
+  parameter names, from rows `commands.list` already builds) and the client sends the id only to a panel that
+  declares it takes one; the catalogue carries `accepts`, so `--check` sees drift without booting a kernel.
+  Pinned by `test_every_declared_panel_can_be_refreshed_with_the_args_the_client_sends`, and by the panel key set
+  becoming `{id, title, command, renderer, plugin, accepts}`.
+- **An installed plugin is not a capability family.** `settings_owner_index` reads the family from the directory a
+  plugin was found under, which is `hooks` for `harness/plugins/hooks/<name>` and `plugins` — i.e. nothing — for
+  `<config>/plugins/<name>`; the install root is now recognised and no family is reported, so the Plugins pane
+  files it under "Other" instead of inventing a family heading and its settings take the default tab.
+- **The scenario lane can now install a plugin.** `Scenario.config_files` maps a path under the config dir to
+  either inline text or `@_fixtures/…`, `seed_tree()` writes it (and `seed_workspace` delegates to it), and both
+  lanes seed *before* `bootstrap_kernel` — the only way a scenario can test an installed plugin rather than a
+  built-in one. The DOM probe gained: click every declared tab and report what each pane painted
+  (`panel_texts`), the module URLs the app was handed (`client_module_urls`), a per-URL fetch status from inside
+  the page (`plugin_module_status`), and an optional click of a plugin card's switch (`plugin_disable`, with the
+  before/after badge); `PLUGINS_PROBE` runs on the restart pass too, so "off on the next start" is checkable.
+  New expectations: `dom_tabs_include`, `dom_tabs_exclude`, `dom_panel_text`, `dom_plugin_modules_served`,
+  `dom_disable_plugin`, `dom_restart_tabs_include`, `dom_restart_tabs_exclude`.
+- **Two scenarios, and what the lane refuses to claim.** `plugin_panel_appears_when_enabled` boots a web kernel
+  with a fixture plugin at `<config>/plugins/probe-vault` and asserts the tab mounts from the declaration alone,
+  both the plugin's own panel and the Plugins pane paint it, its module URL answers 200 to the browser, the pane's
+  Disable switch repaints `Disable → Enable` / `off-next`, and the panel is *gone* on the next start while the
+  Plugins tab remains. `settings_tab_from_plugin_schema` asserts the same fixture yields a `Probe Vault` settings
+  tab (its own `x-ui.group`) and that the pane reports the plugin there. The lane cannot execute the module —
+  Node's ESM loader refuses `http:` and a root-relative import from a `file://` base resolves to `file:///static/…`
+  — so the scenario asserts the two ends around it (advertised URL, bytes served, panel mounted) rather than
+  pretending to import it, and a real browser check stays the preview's job.
+- Tests: `tests/frontends/test_plugin_static.py` (10: route order, declared-file-only, traversal via `%2e%2e`,
+  uninstalled plugin, untrusted tier, the advertised URL is the URL that serves the bytes),
+  `tests/kernel/test_plugin_static_paths.py` (15: URL/file mapping both ends, trust vocabulary, discovery dropping
+  an untrusted module while keeping the panel), `test_ui_contributions.py` (21), `test_settings_groups.py` (9),
+  plus the two scenarios and their `make_recordings.py` entries (the corpus stays byte-reproducible, so a synthetic
+  recording nobody can regenerate is not allowed to exist). `harness catalog --check` all `[ok]`;
+  `python tests/frontends/ui_audit.py --strict` 0 findings; `ruff check harness tests` clean.
+  Full suite: `pytest -q` → **629 passed** (6:59), 31 tests more than P13b.
+
 ### Added — P13b / WS-05 follow-up: the Plugins & Integrations pane
 - **The Studio now lists what it actually runs.** `harness/frontends/web/ui.toml` declares a fourth panel —
   `{ id = "plugins", command = "plugins.list", renderer = "list" }` — and `harness/frontends/web/static/panels/plugins.js`

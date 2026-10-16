@@ -1,0 +1,21 @@
+name: settings_tab_from_plugin_schema
+kind: web
+summary: >-
+  An installed plugin's `settings.schema.json` becomes a tab in the shipped settings modal, owned and labelled
+  by the plugin, and the Plugins pane says the same thing about it — the two surfaces read one derivation.
+recorded_from: synthetic
+config_files:
+  plugins/probe-vault: "@_fixtures/plugins/probe-vault"
+turns:
+  - prompt: "Say hello."
+expect:
+  tools_called: []
+  dom_turns_completed: true
+  # The tab name comes from the plugin's own `x-ui.group`; the client holds no list of tabs to agree with.
+  settings_groups_include: ["Probe Vault"]
+  dom_tabs_include: [plugins]
+  # The pane reports the plugin's settings count and the tab its controls are on — the jump target the
+  # `Configure` button uses, asserted from what the browser actually painted.
+  dom_panel_text:
+    plugins: "probe-vault"
+  no_console_errors: true

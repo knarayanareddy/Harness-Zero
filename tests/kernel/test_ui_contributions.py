@@ -202,6 +202,27 @@ async def test_a_panel_with_no_command_is_reported_not_served(tmp_path: Path):
         await rt.registry.unload_all()
 
 
+def test_every_trust_level_allowed_a_client_module_is_a_real_tier():
+    """`CLIENT_MODULE_TRUST` names ``TrustTier`` values from the kernel, which the SDK may not import.
+
+    That indirection is deliberate, and it is also how the set came to hold ``"config"`` — a word no tier uses —
+    which quietly restricted client modules to built-ins and told a user-installed plugin it was untrusted for
+    shipping a file the kernel had already loaded. The comparison is the pin; the message a plugin author reads
+    depends on it.
+    """
+    from harness.kernel.registry import TrustTier
+    from harness.sdk.manifest import CLIENT_MODULE_TRUST
+
+    assert CLIENT_MODULE_TRUST <= {tier.value for tier in TrustTier}, (
+        f"CLIENT_MODULE_TRUST names {sorted(CLIENT_MODULE_TRUST - {t.value for t in TrustTier})}, "
+        f"which no plugin can ever have (tiers: {sorted(t.value for t in TrustTier)})"
+    )
+    assert TrustTier.BUILTIN.value in CLIENT_MODULE_TRUST, "built-ins must be able to ship a panel module"
+    assert TrustTier.WORKSPACE.value not in CLIENT_MODULE_TRUST, (
+        "workspace plugins are opt-in untrusted code; they may declare panels, not ship a module"
+    )
+
+
 async def test_a_plugin_can_paint_a_kind_the_client_does_not_know(tmp_path: Path):
     rt = await bootstrap_kernel(workspace=tmp_path / "ws", config_dir=tmp_path / "conf")
     try:
@@ -214,8 +235,16 @@ async def test_a_plugin_can_paint_a_kind_the_client_does_not_know(tmp_path: Path
         )
         ui = await rt.commands.ui_contributions()
         assert {"kind": "ui.card", "plugin": "obsidian"} in ui["record_renderers"]
+        # The URL is the *route's* contract, not a cosmetic string: `/static/<path>` used to collide with the
+        # client's own `/static/` tree, so a plugin module 404'd and its panel quietly fell back to the generic
+        # renderer. It is namespaced by plugin id now, and `tests/frontends/test_plugin_static.py` fetches this
+        # exact URL rather than a copy of it.
         assert ui["client_modules"] == [
-            {"plugin": "obsidian", "path": "static/plugins/obsidian.js", "url": "/static/plugins/obsidian.js"}
+            {
+                "plugin": "obsidian",
+                "path": "static/plugins/obsidian.js",
+                "url": "/static/plugins/obsidian/plugins/obsidian.js",
+            }
         ]
     finally:
         await rt.registry.unload_all()

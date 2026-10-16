@@ -139,6 +139,50 @@ def _check_expectations(sc, result) -> None:
         missing = [g for g in exp["settings_groups_include"] if g not in groups]
         assert not missing, f"settings panel lacks group tabs {missing}; has {groups}; console={result.dom.get('console_tail')}"
         assert result.dom.get("settings_modal_hidden") is False, "settings modal did not open"
+    if "dom_tabs_include" in exp or "dom_tabs_exclude" in exp or "dom_panel_text" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        tabs = result.dom.get("tab_ids") or []
+        assert tabs, f"the tab strip reported no tabs; console={result.dom.get('console_tail')}"
+        missing = [t for t in exp.get("dom_tabs_include", []) if t not in tabs]
+        assert not missing, f"declared panels the shell did not mount: {missing}; tabs={tabs}"
+        present = [t for t in exp.get("dom_tabs_exclude", []) if t in tabs]
+        assert not present, f"panels still mounted after the feature was switched off: {present}; tabs={tabs}"
+        texts = result.dom.get("panel_texts") or {}
+        for pid, needle in (exp.get("dom_panel_text") or {}).items():
+            got = texts.get(pid)
+            assert got is not None, f"panel {pid!r} painted nothing (host missing?); painted={sorted(k for k, v in texts.items() if v)}"
+            assert needle in got, f"panel {pid!r} does not show {needle!r}; it shows {got[:200]!r}"
+    if "dom_restart_tabs_include" in exp or "dom_restart_tabs_exclude" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        rep = result.dom.get("restart") or {}
+        assert rep, f"the restart pass reported nothing: {result.errors}"
+        tabs = rep.get("tab_ids") or []
+        assert tabs, f"the restarted page reported no tabs; console={rep.get('console_tail')}"
+        missing = [t for t in exp.get("dom_restart_tabs_include", []) if t not in tabs]
+        assert not missing, f"panels missing after a restart: {missing}; tabs={tabs}"
+        present = [t for t in exp.get("dom_restart_tabs_exclude", []) if t in tabs]
+        assert not present, f"panels that came back after a restart: {present}; tabs={tabs}"
+    if exp.get("dom_disable_plugin"):
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        got = result.dom.get("plugin_disable") or {}
+        assert got.get("found"), f"the Plugins pane listed no card for {exp['dom_disable_plugin']!r}"
+        assert got.get("command") in ("plugins.disable", "plugins.enable"), got
+        assert got.get("after") and got["after"] != got.get("before"), (
+            f"the switch did not repaint after its write: {got}"
+        )
+    if exp.get("dom_plugin_modules_served"):
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        status = result.dom.get("plugin_module_status") or {}
+        assert status, "no plugin advertised a client module, so the check would prove nothing"
+        bad = {url: code for url, code in status.items() if code != 200}
+        assert not bad, f"client module URLs the browser could not fetch: {bad}"
+        told = result.dom.get("client_module_urls") or []
+        assert sorted(told) == sorted(status), f"the check fetched {sorted(status)}, the app was told {sorted(told)}"
+    if "settings_groups_exclude" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        groups = result.dom.get("settings_groups") or []
+        leaked = [g for g in exp["settings_groups_exclude"] if g in groups]
+        assert not leaked, f"settings tabs a switched-off feature still owns: {leaked}; has {groups}"
     if exp.get("no_console_errors", True) and result.dom is not None and "console_errors" in result.dom:
         assert result.dom["console_errors"] == [], f"browser console errors: {result.dom['console_errors']}"
     if "timeline_not_contains" in exp and result.dom is not None:

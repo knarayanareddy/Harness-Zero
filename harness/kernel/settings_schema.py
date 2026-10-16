@@ -131,8 +131,14 @@ def settings_owner_index(registry: object) -> dict[str, dict[str, object]]:
     for name, discovered in (getattr(registry, "discovered", {}) or {}).items():
         namespace = f"plugins.{name}"
         path = plugin_dir(discovered)
+        # The parent directory is the capability family in the built-in tree (`harness/plugins/hooks/<name>` ->
+        # `hooks`). An *installed* plugin sits directly inside an install root named `plugins`
+        # (`<config>/plugins/<name>`, `<workspace>/.harness/plugins/<name>`), where the parent is a location, not
+        # a capability — so it reports no family, which is the honest answer and puts its settings on the default
+        # tab rather than on one called "plugins".
+        parent = path.parent.name
         index[namespace] = {
-            "family": path.parent.name,
+            "family": None if parent == "plugins" else parent,
             "owner_summary": (getattr(discovered.manifest, "summary", "") or "").strip() or None,
         }
     return index

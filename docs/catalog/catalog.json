@@ -606,6 +606,7 @@
         "memory_remember_web_dom",
         "plain_answer_kernel",
         "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
         "reload_equals_live_web_dom",
@@ -614,6 +615,7 @@
         "secret_redacted_from_model_kernel",
         "session_reload_web_dom",
         "session_resume_web",
+        "settings_tab_from_plugin_schema",
         "shell_exec_denied_without_approver_kernel",
         "skills_view_kernel",
         "thinking_then_answer_web",
@@ -668,6 +670,7 @@
         "memory_remember_web_dom",
         "plain_answer_kernel",
         "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
         "reload_equals_live_web_dom",
@@ -676,6 +679,7 @@
         "secret_redacted_from_model_kernel",
         "session_reload_web_dom",
         "session_resume_web",
+        "settings_tab_from_plugin_schema",
         "shell_exec_denied_without_approver_kernel",
         "skills_view_kernel",
         "thinking_then_answer_web",
@@ -729,6 +733,7 @@
         "memory_remember_web_dom",
         "plain_answer_kernel",
         "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
         "reload_equals_live_web_dom",
@@ -737,6 +742,7 @@
         "secret_redacted_from_model_kernel",
         "session_reload_web_dom",
         "session_resume_web",
+        "settings_tab_from_plugin_schema",
         "shell_exec_denied_without_approver_kernel",
         "skills_view_kernel",
         "thinking_then_answer_web",
@@ -772,6 +778,7 @@
         "memory_remember_web_dom",
         "plain_answer_kernel",
         "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
         "reload_equals_live_web_dom",
@@ -779,6 +786,7 @@
         "secret_redacted_from_model_kernel",
         "session_reload_web_dom",
         "session_resume_web",
+        "settings_tab_from_plugin_schema",
         "shell_exec_denied_without_approver_kernel",
         "skills_view_kernel",
         "thinking_then_answer_web",
@@ -912,6 +920,7 @@
         "memory_remember_web_dom",
         "plain_answer_kernel",
         "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
         "reload_equals_live_web_dom",
@@ -920,6 +929,7 @@
         "secret_redacted_from_model_kernel",
         "session_reload_web_dom",
         "session_resume_web",
+        "settings_tab_from_plugin_schema",
         "shell_exec_denied_without_approver_kernel",
         "skills_view_kernel",
         "thinking_then_answer_web",
@@ -1229,6 +1239,7 @@
         "memory_remember_web_dom",
         "plain_answer_kernel",
         "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
         "reload_equals_live_web_dom",
@@ -1237,6 +1248,7 @@
         "secret_redacted_from_model_kernel",
         "session_reload_web_dom",
         "session_resume_web",
+        "settings_tab_from_plugin_schema",
         "shell_exec_denied_without_approver_kernel",
         "skills_view_kernel",
         "thinking_then_answer_web",
@@ -1291,6 +1303,7 @@
         "memory_remember_web_dom",
         "plain_answer_kernel",
         "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
         "reload_equals_live_web_dom",
@@ -1299,6 +1312,7 @@
         "secret_redacted_from_model_kernel",
         "session_reload_web_dom",
         "session_resume_web",
+        "settings_tab_from_plugin_schema",
         "shell_exec_denied_without_approver_kernel",
         "skills_view_kernel",
         "thinking_then_answer_web",
@@ -2170,6 +2184,7 @@
         "memory_remember_web_dom",
         "plain_answer_kernel",
         "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
         "reload_equals_live_web_dom",
@@ -2178,6 +2193,7 @@
         "secret_redacted_from_model_kernel",
         "session_reload_web_dom",
         "session_resume_web",
+        "settings_tab_from_plugin_schema",
         "shell_exec_denied_without_approver_kernel",
         "skills_view_kernel",
         "thinking_then_answer_web",
@@ -2220,6 +2236,7 @@
         "memory_remember_web_dom",
         "plain_answer_kernel",
         "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
         "reload_equals_live_web_dom",
@@ -2228,6 +2245,7 @@
         "secret_redacted_from_model_kernel",
         "session_reload_web_dom",
         "session_resume_web",
+        "settings_tab_from_plugin_schema",
         "shell_exec_denied_without_approver_kernel",
         "skills_view_kernel",
         "thinking_then_answer_web",
@@ -2254,6 +2272,7 @@
         "memory_remember_web_dom",
         "plain_answer_kernel",
         "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
         "reload_equals_live_web_dom",
@@ -2262,6 +2281,7 @@
         "secret_redacted_from_model_kernel",
         "session_reload_web_dom",
         "session_resume_web",
+        "settings_tab_from_plugin_schema",
         "shell_exec_denied_without_approver_kernel",
         "skills_view_kernel",
         "thinking_then_answer_web",
@@ -2530,6 +2550,13 @@
       "turns": 1
     },
     {
+      "kind": "web",
+      "name": "plugin_panel_appears_when_enabled",
+      "summary": ">-.",
+      "tools_called": [],
+      "turns": 1
+    },
+    {
       "kind": "kernel",
       "name": "read_then_edit_kernel",
       "summary": "view_file then edit_file (SEARCH/REPLACE); the file changes on disk, the model sees the tool results, a diff card is emitted.",
@@ -2597,6 +2624,13 @@
       "summary": "Two turns over HTTP with the browser's payload shape, then sessions.get \u2014 the history a page refresh would render must contain both turns.",
       "tools_called": [],
       "turns": 2
+    },
+    {
+      "kind": "web",
+      "name": "settings_tab_from_plugin_schema",
+      "summary": ">-.",
+      "tools_called": [],
+      "turns": 1
     },
     {
       "kind": "kernel",
@@ -3689,6 +3723,9 @@
     ],
     "panels": [
       {
+        "accepts": [
+          "session_id"
+        ],
         "command": "sessions.get",
         "id": "artifact",
         "in_client_markup": true,
@@ -3697,6 +3734,9 @@
         "title": "Artifacts"
       },
       {
+        "accepts": [
+          "session_id"
+        ],
         "command": "economics",
         "id": "economics",
         "in_client_markup": true,
@@ -3705,6 +3745,7 @@
         "title": "Spend"
       },
       {
+        "accepts": [],
         "command": "plugins.list",
         "id": "plugins",
         "in_client_markup": false,
@@ -3713,6 +3754,7 @@
         "title": "Plugins"
       },
       {
+        "accepts": [],
         "command": "sessions.list",
         "id": "sessions",
         "in_client_markup": true,

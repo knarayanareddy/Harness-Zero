@@ -9,11 +9,11 @@ The vocabulary the transcript log accepts, from `harness.sdk.types.RECORD_KINDS`
 | Kind | Model-visible | Durable event(s) carrying it | Scenario transcripts holding it |
 |---|---|---|---|
 | `turn.started` | no | — | 0 scenario(s) |
-| `turn.completed` | no | `turn.completed` | 25 scenario(s) |
+| `turn.completed` | no | `turn.completed` | 27 scenario(s) |
 | `turn.error` | no | `turn.error` | 0 scenario(s) |
 | `turn.cancelled` | no | `turn.cancelled` | 0 scenario(s) |
-| `user.message` | yes | `turn.started` | 25 scenario(s) |
-| `assistant.message` | yes | `model.completed` | 25 scenario(s) |
+| `user.message` | yes | `turn.started` | 27 scenario(s) |
+| `assistant.message` | yes | `model.completed` | 27 scenario(s) |
 | `tool.call` | no | — | 0 scenario(s) |
 | `tool.decision` | no | `tool.decision` | 19 scenario(s) |
 | `approval.requested` | no | `approval.required` | 3 scenario(s) |

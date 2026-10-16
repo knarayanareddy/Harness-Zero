@@ -24,7 +24,8 @@ const MODEL = process.env.MODEL || '';
 const MODEL_PROVIDER = process.env.MODEL_PROVIDER || '';
 const SETTINGS_PROBE = process.env.SETTINGS_PROBE === '1';
 const PLUGINS_PROBE = process.env.PLUGINS_PROBE === '1';
-const PLUGINS_TOGGLE = process.env.PLUGINS_TOGGLE === '1'; // opt-in: click a real switch, then click it back
+const PLUGINS_TOGGLE = process.env.PLUGINS_TOGGLE === '1';
+const PLUGINS_DISABLE_CARD = process.env.PLUGINS_DISABLE_CARD || ''; // click one card's switch, then restart on it // opt-in: click a real switch, then click it back
 
 const consoleLog = [];
 const vc = new VirtualConsole();
@@ -224,9 +225,21 @@ if (PLUGINS_PROBE && window.HarnessApp) {
     el.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
     await sleep(ms);
   };
-  await click(doc.querySelector('.studio-tabs [data-tab="plugins"]'), 1500);
-  const host = doc.getElementById('panel-plugins');
   report.tab_ids = [...doc.querySelectorAll('.studio-tabs [data-tab]')].map((el) => el.getAttribute('data-tab'));
+  // Visit every tab the kernel declared and keep the text each one painted. A panel that mounts but renders
+  // nothing (a module that failed to import, a command that 404s) is otherwise indistinguishable from a
+  // working one in this report — and `dom_panel_text` is how a scenario proves a *plugin's* module ran.
+  report.panel_texts = {};
+  for (const id of report.tab_ids) {
+    await click(doc.querySelector(`.studio-tabs [data-tab="${id}"]`), 500);
+    const pane = doc.getElementById(`panel-${id}`);
+    // Generous cap: these strings exist for a scenario's `dom_panel_text` check, not for a golden (the dom
+    // report is never written into `golden/`), and the Plugins pane legitimately holds tens of cards — a short
+    // slice made a real pane look like it was missing its own row.
+    report.panel_texts[id] = pane ? pane.textContent.replace(/\s+/g, ' ').trim().slice(0, 20000) : null;
+  }
+  await click(doc.querySelector('.studio-tabs [data-tab="plugins"]'), 1200);
+  const host = doc.getElementById('panel-plugins');
   report.plugins_host = !!host;
   report.plugin_cards = host ? host.querySelectorAll('.plugin-card').length : 0;
   report.plugin_families = host
@@ -267,6 +280,37 @@ if (PLUGINS_PROBE && window.HarnessApp) {
       clicked.push({ before, after: stateOf() });
     }
     report.plugin_toggle = { name, clicked };
+  }
+
+  if (PLUGINS_DISABLE_CARD) {
+    // The pane's switch is a `data-command` binding (no handler of its own): clicking it must reach the kernel,
+    // repaint the card, and persist — `dom_restart_tabs_exclude` is then the proof that the restart applied it.
+    const card = doc.querySelector(`.plugin-card[data-plugin="${PLUGINS_DISABLE_CARD}"]`);
+    const button = card?.querySelector('[data-command]');
+    const seen = { found: !!card, command: button?.getAttribute('data-command') || null, before: button?.textContent?.trim() || null };
+    await click(button, 1400);
+    const after = doc.querySelector(`.plugin-card[data-plugin="${PLUGINS_DISABLE_CARD}"]`);
+    report.plugin_disable = {
+      ...seen,
+      after: after?.querySelector('[data-command]')?.textContent?.trim() || null,
+      state: after?.getAttribute('data-state') || null,
+    };
+  }
+
+  // Every URL `ui.contributions` advertises is fetched from inside the page. This lane cannot *execute* a
+  // plugin's module (Node's ESM loader will not import over http, and the client's own modules are read from
+  // disk), but it can prove the address the kernel handed the browser is served — which is the half that
+  // broke silently in WS-05b, where the URL pointed into the client's own `/static/` tree and 404'd.
+  const modules = (window.HarnessApp?.ui?.client_modules) || [];
+  report.client_module_urls = modules.map((entry) => entry.url);
+  report.plugin_module_status = {};
+  for (const entry of modules) {
+    try {
+      const res = await fetch(entry.url);
+      report.plugin_module_status[entry.url] = res.status;
+    } catch (err) {
+      report.plugin_module_status[entry.url] = String(err?.message || err);
+    }
   }
 }
 report.console_errors = consoleLog.filter((c) => c.startsWith('[error]') || c.startsWith('[jsdomError]')).slice(0, 10);
