@@ -757,3 +757,60 @@ gen` + `--check` (drift/settings/ui) green; `python tests/frontends/ui_audit.py 
 line: the only changes are `"kind"` and `"v": 2` (plus one dropped empty `metadata`). Scenario coverage stays
 warning-only per P7 (`harness catalog --check --section scenarios`: 5 tools / 11 commands uncovered) — note
 there is no `harness doctor` command in this repo.
+
+---
+
+## P10 — WS-04b: durable events, recorded policy facts, on-disk repair
+
+Split into two commits so the schema contract and the write-path changes can be reviewed apart.
+
+**P10a — the vocabulary and the turn path** (`daf15fa`). `EventPayload.record_kind` / `.transient` /
+`carries_record`, `Event.record`, the generated `events` table in `docs/events.schema.json` and the "In the
+log" column in `EVENTS.md`; log-before-emit for turn events (prompt recorded → `turn.started`; marker
+appended → `turn.completed` / `turn.error` / `turn.cancelled`); `model.completed` deferred to the record it
+names with a flush in `finally`; `TranscriptLog.repair_dangling_tool_calls()`; `MESSAGE_KINDS` for the
+listing counter.
+
+**P10b — the writers** (this commit). The gate records `tool.decision` (deny / ask / allow) and `ui.card`
+through `PolicyGate.execute(..., log=...)`; the approval broker gained `log_for` + `resolve_recorded` and
+writes `approval.requested` / `approval.resolved`; `approval.resolved` now carries the `session_id` it used
+to omit (**R42**). Durable kinds therefore now cover every fact §6.7 asks a reloaded session to show.
+
+**Design decision worth keeping.** The spec says "every durable event's payload gets `record`". Two events
+cannot honestly do that here, and pretending otherwise would have made the schema a lie:
+`tool.result` (a strategy batches a step's results into *one* record, which is the shape a provider
+requires, while the gate publishes one preview per call) and `compaction.completed` (the summary record is
+written by the loop). They keep `record_kind` — the claim about *what the log holds* — and are marked
+`carries_record: false`, with the pairing key stated in the payload docstring and pinned by
+`test_tool_result_events_pair_with_the_log`. Deliberately not done: moving the tool-result write into the
+gate (it would either split the batch or make the plugin-owned strategy contract wrong about who writes
+conversation records).
+
+**What bit me.**
+- `upgrade_record_v1` synthesised a `tool_results` bag from `metadata.call_id` on *any* record, so every new
+  decision record grew a fake tool result on disk while the live cache kept none — caught by the 04a
+  "reload equals live" test, not by anything that cared about decisions. Scoped to untyped v1 lines, and it
+  also fixed v1 tool-result lines being typed as `user.message`. The store promotes those keys on write, so
+  the promotion is mirrored in the upgrade rather than duplicated as a second writer.
+- `test_log_is_source` derived request *k* as `records[: 1 + 2*k]`. It survived because the flow had two
+  records per step; one new kind per step broke it. Replaced with "everything before the assistant record
+  that request produced", which is the actual invariant and no longer depends on step size.
+- The marker text `Turn completed (end_turn) in 9ms` made transcripts nondeterministic: the golden
+  normaliser drops `duration_ms` *keys*, not a number baked into prose. Duration moved to metadata.
+- `rt.settings.set("kernel.security.permission_mode", ...)` cannot override bootstrap `overrides`, so the
+  plan-mode test boots in plan mode instead of switching (a test-side trap worth remembering).
+
+**Verification.** 13 new tests (`tests/kernel/test_durable_events.py`, incl. the spec's
+`test_every_durable_event_has_record_kind` verbatim, "a recorded fact never reaches the prompt", the
+approval-record and denial tests). Full `pytest -q` with the DOM lane → **521 passed**; `ruff check .` clean;
+`harness catalog gen` + `--check` (drift/settings/ui) green; `ui_audit.py --strict` exit 0; `harness plugin
+doctor --all` ok, `harness plugin test --all` 220 passed. Goldens: 18 × `transcript.json` + 18 ×
+`events.json` changed (46 `tool.decision`, 6 `ui.card`, 2+2 `approval.*` records; `turn.started`,
+`model.completed`, `turn.completed`, `tool.decision`, `approval.*`, `ui.card` carry records on the wire);
+`requests.json`, `http.json`, `timeline.txt` untouched across all 24 — the strongest available evidence that
+recording more did not change what the model reads or what the client paints.
+
+**Remaining in WS-04 (04c):** `docs/architecture/SESSION_LOG.md` (record-kinds table generated from the
+catalogue, invariants, upgrade policy), the client's single renderer path over `records` (`app.js`
+`loadHistory` still switches on event types), the `reload_equals_live` DOM scenario, and
+`harness sessions reindex` for the derived FTS index.

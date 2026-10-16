@@ -160,7 +160,9 @@ class Commands:
             raise HarnessError("Missing 'approval_id' or 'request_id'")
         is_approved = approved if approved is not None else (decision == "approved")
         res_reason = reason or feedback
-        ok = self.gate.approvals.resolve(
+        # Log-before-emit (WS-04): the resolution is a record, and the event carries it, so a reloaded
+        # session shows who decided what instead of an approval card stuck on "pending".
+        ok = await self.gate.approvals.resolve_recorded(
             approval_id=target_id,
             approved=is_approved,
             by=by,

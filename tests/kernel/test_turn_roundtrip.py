@@ -189,12 +189,15 @@ async def test_agent_loop_turn_roundtrip_and_persistence(tmp_path: Path):
     assert kinds == [
         "user.message",
         "assistant.message",  # the model asks for a tool
-        "tool.result",
+        "tool.decision",  # ... the gate records what it decided ...
+        "tool.result",  # ... and what came back
         "assistant.message",  # ... and answers with its output
         "turn.completed",
         "user.message",
         "assistant.message",
         "turn.completed",
     ], kinds
-    assert [k for k in kinds if k in MESSAGE_KINDS] == kinds[:4] + kinds[5:7]
+    assert [k for k in kinds if k in MESSAGE_KINDS] == [
+        kinds[0], kinds[1], kinds[3], kinds[4], kinds[6], kinds[7]
+    ]
     assert kinds.count("turn.completed") == 2, f"one marker per finished turn: {kinds}"

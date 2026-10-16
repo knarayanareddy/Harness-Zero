@@ -119,6 +119,21 @@
       "reason": "edit_file blocked: app.py has not been read in this session. Read it first.",
       "risk": "write"
     },
+    "record": {
+      "call_id": "call#1",
+      "content": "Tool `edit_file` denied by hook `read_before_edit`: edit_file blocked: app.py has not been read in this session. Read it first.",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "deny",
+        "call_id": "call#1",
+        "policy": "hook:read_before_edit",
+        "reason": "edit_file blocked: app.py has not been read in this session. Read it first.",
+        "risk": "write"
+      },
+      "role": "system",
+      "step_index": 3,
+      "v": 2
+    },
     "type": "tool.decision"
   },
   {
@@ -184,7 +199,7 @@
         }
       },
       "role": "assistant",
-      "step_index": 4,
+      "step_index": 5,
       "tool_calls": [
         {
           "arguments": {
@@ -217,6 +232,21 @@
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
+    },
+    "record": {
+      "call_id": "call#2",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#2",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 6,
+      "v": 2
     },
     "type": "tool.decision"
   },
@@ -290,7 +320,7 @@
         }
       },
       "role": "assistant",
-      "step_index": 6,
+      "step_index": 8,
       "tool_calls": [
         {
           "arguments": {
@@ -326,6 +356,21 @@
       "reason": "OK",
       "risk": "write"
     },
+    "record": {
+      "call_id": "call#3",
+      "content": "Tool `edit_file` allowed (write).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#3",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "write"
+      },
+      "role": "system",
+      "step_index": 9,
+      "v": 2
+    },
     "type": "tool.decision"
   },
   {
@@ -339,10 +384,34 @@
           },
           "unified": "<<<<<<< SEARCH\ndef greet():\n    return 'hi'\n=======\ndef hello():\n    return 'hi'\n>>>>>>> REPLACE\n"
         },
-        "id": "evt#26",
+        "id": "evt#4",
         "kind": "diff",
         "title": null
       }
+    },
+    "record": {
+      "call_id": "call#3",
+      "content": "diff",
+      "kind": "ui.card",
+      "metadata": {
+        "call_id": "call#3",
+        "card": {
+          "data": {
+            "path": "<ws>/app.py",
+            "stats": {
+              "added": 2,
+              "removed": 2
+            },
+            "unified": "<<<<<<< SEARCH\ndef greet():\n    return 'hi'\n=======\ndef hello():\n    return 'hi'\n>>>>>>> REPLACE\n"
+          },
+          "id": "evt#4",
+          "kind": "diff",
+          "title": null
+        }
+      },
+      "role": "system",
+      "step_index": 10,
+      "v": 2
     },
     "type": "ui.card"
   },
@@ -409,7 +478,7 @@
         }
       },
       "role": "assistant",
-      "step_index": 8,
+      "step_index": 12,
       "v": 2
     },
     "type": "model.completed"
@@ -436,7 +505,7 @@
         }
       },
       "role": "system",
-      "step_index": 9,
+      "step_index": 13,
       "v": 2
     },
     "type": "turn.completed"

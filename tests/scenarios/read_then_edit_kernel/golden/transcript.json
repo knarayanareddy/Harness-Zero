@@ -31,13 +31,28 @@
     "v": 2
   },
   {
+    "call_id": "call#1",
+    "content": "Tool `view_file` allowed (read).",
+    "kind": "tool.decision",
+    "metadata": {
+      "action": "allow",
+      "call_id": "call#1",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "role": "system",
+    "step_index": 3,
+    "v": 2
+  },
+  {
     "content": "",
     "kind": "tool.result",
     "metadata": {
       "tool_results": true
     },
     "role": "user",
-    "step_index": 3,
+    "step_index": 4,
     "tool_results": [
       {
         "content": [
@@ -64,7 +79,7 @@
       }
     },
     "role": "assistant",
-    "step_index": 4,
+    "step_index": 5,
     "tool_calls": [
       {
         "arguments": {
@@ -78,13 +93,52 @@
     "v": 2
   },
   {
+    "call_id": "call#2",
+    "content": "Tool `edit_file` allowed (write).",
+    "kind": "tool.decision",
+    "metadata": {
+      "action": "allow",
+      "call_id": "call#2",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "write"
+    },
+    "role": "system",
+    "step_index": 6,
+    "v": 2
+  },
+  {
+    "call_id": "call#2",
+    "content": "diff",
+    "kind": "ui.card",
+    "metadata": {
+      "call_id": "call#2",
+      "card": {
+        "data": {
+          "path": "<ws>/app.py",
+          "stats": {
+            "added": 2,
+            "removed": 2
+          },
+          "unified": "<<<<<<< SEARCH\ndef greet(name):\n    return f\"Hello, {name}!\"\n=======\ndef hello(name):\n    return f\"Hello, {name}!\"\n>>>>>>> REPLACE\n"
+        },
+        "id": "evt#3",
+        "kind": "diff",
+        "title": null
+      }
+    },
+    "role": "system",
+    "step_index": 7,
+    "v": 2
+  },
+  {
     "content": "",
     "kind": "tool.result",
     "metadata": {
       "tool_results": true
     },
     "role": "user",
-    "step_index": 5,
+    "step_index": 8,
     "tool_results": [
       {
         "content": [
@@ -111,7 +165,7 @@
       }
     },
     "role": "assistant",
-    "step_index": 6,
+    "step_index": 9,
     "v": 2
   },
   {
@@ -126,7 +180,7 @@
       }
     },
     "role": "system",
-    "step_index": 7,
+    "step_index": 10,
     "v": 2
   }
 ]

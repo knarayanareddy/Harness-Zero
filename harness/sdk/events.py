@@ -57,6 +57,12 @@ class EventPayload:
     EVENT_TYPE: ClassVar[str] = ""
     record_kind: ClassVar[str | None] = None
     transient: ClassVar[bool] = False
+    #: Whether a publisher attaches the stored record to the envelope (`Event.record`). `False` together
+    #: with a `record_kind` means: the fact *is* in the log, but someone else writes it or in another
+    #: shape, so event and record pair by a stable id instead. `tool.result` is the case that matters — a
+    #: strategy batches a step's results into one record (the shape a provider requires) while the gate
+    #: publishes one preview event per call, and those pair by `call_id` / `tool_use_id`.
+    carries_record: ClassVar[bool] = True
 
     @classmethod
     def durable(cls) -> bool:
@@ -210,6 +216,7 @@ class ModelThinkingDelta(EventPayload):
 @dataclass(slots=True)
 class ModelToolCall(EventPayload):
     EVENT_TYPE: ClassVar[str] = "model.tool_call"
+    transient: ClassVar[bool] = True
     call_id: str
     name: str
     arguments: dict[str, Any]
@@ -237,6 +244,7 @@ class ToolCallStarted(EventPayload):
     """A tool call entered the policy gate (``tool.call``)."""
 
     EVENT_TYPE: ClassVar[str] = "tool.call"
+    transient: ClassVar[bool] = True
     call_id: str
     name: str
     arguments: dict[str, Any]
@@ -248,6 +256,7 @@ class ToolCallStarted(EventPayload):
 @dataclass(slots=True)
 class ToolDecision(EventPayload):
     EVENT_TYPE: ClassVar[str] = "tool.decision"
+    record_kind: ClassVar[str | None] = "tool.decision"
     call_id: str
     action: Literal["allow", "deny", "ask"]
     policy: str
@@ -259,6 +268,7 @@ class ToolDecision(EventPayload):
 @dataclass(slots=True)
 class ApprovalRequired(EventPayload):
     EVENT_TYPE: ClassVar[str] = "approval.required"
+    record_kind: ClassVar[str | None] = "approval.requested"
     approval_id: str
     call_id: str | None  # None when a strategy asks for approval outside a tool call
     kind: str
@@ -272,6 +282,7 @@ class ApprovalRequired(EventPayload):
 @dataclass(slots=True)
 class ApprovalResolved(EventPayload):
     EVENT_TYPE: ClassVar[str] = "approval.resolved"
+    record_kind: ClassVar[str | None] = "approval.resolved"
     approval_id: str
     approved: bool
     by: str
@@ -292,6 +303,8 @@ class ToolOutputDelta(EventPayload):
 @dataclass(slots=True)
 class ToolCallResult(EventPayload):
     EVENT_TYPE: ClassVar[str] = "tool.result"
+    record_kind: ClassVar[str | None] = "tool.result"
+    carries_record: ClassVar[bool] = False
     call_id: str
     name: str
     is_error: bool
@@ -361,6 +374,8 @@ class CompactionStarted(EventPayload):
 @dataclass(slots=True)
 class CompactionCompleted(EventPayload):
     EVENT_TYPE: ClassVar[str] = "compaction.completed"
+    record_kind: ClassVar[str | None] = "compaction.summary"
+    carries_record: ClassVar[bool] = False
     summary_tokens: int
     duration_ms: float
 
@@ -384,6 +399,7 @@ class UiCard(EventPayload):
     """A card for the frontends; ``card`` is ``harness.sdk.cards.Card.to_dict()``."""
 
     EVENT_TYPE: ClassVar[str] = "ui.card"
+    record_kind: ClassVar[str | None] = "ui.card"
     card: dict[str, Any]
 
 
@@ -553,6 +569,7 @@ def schema() -> dict[str, Any]:
                 "payload": EVENT_PAYLOADS[t].__name__,
                 "durable": EVENT_PAYLOADS[t].record_kind is not None,
                 "record_kind": EVENT_PAYLOADS[t].record_kind,
+                "carries_record": bool(EVENT_PAYLOADS[t].carries_record),
                 "transient": bool(EVENT_PAYLOADS[t].transient),
             }
             for t in sorted(EVENT_PAYLOADS)

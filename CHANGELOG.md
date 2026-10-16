@@ -9,6 +9,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — P10 / WS-04b durable events, recorded policy facts, on-disk repair
+- **Durability is now a declared property of an event.** `harness/sdk/events.py`:
+  `EventPayload.record_kind` (the transcript kind the event mirrors), `EventPayload.transient` (the streamed
+  set: `*.delta`, `cost.updated`, `context.assembled`, `model.started`, `compaction.started`, and the two
+  WS-03 hygiene events whose docstrings already said they were live-only) and `carries_record` (whether the
+  envelope embeds the record). `durable` is derived from `record_kind`, so a payload cannot advertise
+  durability it does not implement. `docs/events.schema.json` gains the `events` table; `docs/catalog/EVENTS.md`
+  gains the **In the log** column; both are generated and drift-checked.
+- **`Event.record`.** A durable event carries the stored record it describes, emitted only when a record was
+  actually written. Durable now: `turn.started` (the prompt), `turn.completed` / `turn.error` /
+  `turn.cancelled` (the turn markers), `model.completed` (the assistant message), `tool.decision`,
+  `approval.required` / `approval.resolved`, `ui.card`. `tool.result` and `compaction.completed` name a kind
+  but pair by id — recorded in the schema as `carries_record: false` rather than quietly skipped.
+- **Log-before-emit for turn events.** The prompt is recorded and only then is `turn.started` published (so a
+  client is never told about a turn the log does not have); the turn's end appends its marker record first.
+  `model.completed` is held by services until the assistant message it names exists, and flushed if a turn
+  ends without one, so no event is lost and none points at nothing. Cancellation no longer writes a second
+  "Turn cancelled by user." notification beside the marker.
+- **The gate and the approval broker write records.** `tool.decision` per deny/ask/allow and `ui.card` per
+  card, from the gate, with the session log passed into `PolicyGate.execute` — decisions and cards used to
+  exist only as live events, which is why a reloaded session could not explain itself. The broker gained
+  `log_for` (a session resolver, set by the bootstrap) and `resolve_recorded`, and `approval.resolved` now
+  carries the `session_id` it previously omitted (R42: a client filtering events by session left the card
+  pending until reload).
+- **Unanswered tool calls are closed in the log.** `TranscriptLog.repair_dangling_tool_calls()` appends an
+  explicit synthetic error result at the start of the next turn, labelled `metadata.synthetic` /
+  `metadata.repair`, instead of every reader inventing its own repair in memory.
+- `sessions.list`'s `message_count` counts messages (`MESSAGE_KINDS`), not records — turn markers and
+  decisions live in the same file now — and a test pins that the counter's set and `MODEL_VISIBLE_KINDS`
+  cannot drift.
+- Fixed while landing this: `upgrade_record_v1` synthesised a `tool_results` bag for **any** record carrying
+  `metadata.call_id`, which rewrote decision records into fake tool results on reload; the synthesis is now
+  scoped to untyped v1 lines, and the store's metadata promotions are mirrored so a cached record and the
+  line on disk are the same dict (also giving v1 tool-result lines their correct `tool.result` kind).
+- Tests: `tests/kernel/test_durable_events.py` (13), including the spec's
+  `test_every_durable_event_has_record_kind` and "a recorded fact never reaches the prompt".
+  `tests/scenarios` goldens re-baselined: 18 `transcript.json` + 18 `events.json` changed, and `requests.json`,
+  `http.json` and the DOM `timeline.txt` did not — the proof that adding history changed what is *recorded*,
+  not what is *sent* or *painted*.
+
 ### Added — P9 / WS-04a the session log is the source of truth (typed records, derive_messages, fail-closed append)
 - New `harness/kernel/transcript.py`: `TranscriptLog` owns the write path — one instance per session
   directory per process, shared by the runner, `Session.log` and `sessions.get`. Before this, the runner

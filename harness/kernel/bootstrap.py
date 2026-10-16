@@ -116,6 +116,17 @@ async def bootstrap_kernel(
         settings=settings,
         bus=bus,
     )
+
+    def _session_log(session_id: str):
+        """The transcript log for one session, or None (WS-04b).
+
+        Resolved per call rather than held: the approval broker is kernel-wide while logs are per session,
+        and `get_session` is what loads a session from disk if it is not resident.
+        """
+        sess = session_manager.get_session(session_id) if session_id else None
+        return sess.log if sess is not None else None
+
+    approvals.log_for = _session_log
     if resume_session:
         await session_manager.resume_last()
     assembler = ContextAssembler(registry=registry, settings=settings)

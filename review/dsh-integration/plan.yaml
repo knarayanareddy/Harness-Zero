@@ -130,7 +130,7 @@ workstreams:
   - id: WS-04
     title: Session log as single source of truth
     doc: WS-04_session_log_single_source.md
-    status: in_progress  # WS-04a done in P9; WS-04b (event record_kind + client grouping + truncate/fork) and WS-04c (SESSION_LOG.md + reload scenario) pending
+    status: in_progress  # WS-04a (P9) + WS-04b (P10) done; WS-04c pending: SESSION_LOG.md, client single renderer over records, reload_equals_live scenario, sessions.reindex
     effort_days: 3
     depends_on: [WS-01]
     soft_depends_on: [WS-03]

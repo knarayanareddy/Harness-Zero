@@ -69,22 +69,38 @@ def _legacy_role(data: dict[str, Any]) -> str:
 
 
 def upgrade_record_v1(data: dict[str, Any]) -> dict[str, Any]:
-    """Returns ``data`` as a v2 record: additive, and lossless.
+    """Returns ``data`` as a v2 record: additive, lossless, and idempotent.
 
     Deliberately *not* a round-trip through `TranscriptRecord`: the store stamps extra keys onto a line
     (`call_id`, `tool_name`, `is_error`, `full_offset`, `truncated_fields`) that the dataclass does not
-    model, and re-formatting would throw them away — turning an upgrade into a downgrade of exactly the
-    fields the UI reads. Two conventions keep live and on-disk records identical: empty bags are not
-    carried (the store's `setdefault("metadata", {})` is not conversation), and a legacy single result
-    hanging off the record is normalised into `tool_results`.
+    model, and re-formatting would throw them away — an upgrade would be a downgrade of exactly the
+    fields the UI reads.
+
+    Three conventions make "upgrade" invisible, which is what lets one cache serve both a live session and
+    a reloaded one:
+      * empty bags are not carried (the store `setdefault`s `metadata: {}`, and a decision has no results);
+      * a v1 line's single result (`tool_use_id` + `content`) becomes a `tool_results` bag — for untyped
+        lines only, so a v2 record that merely mentions a `call_id` is not invented into a tool result;
+      * the store's metadata promotions are applied here too, so a record is the same dict in memory and
+        on disk whichever of the two wrote it.
     """
     out = dict(data)
     role = str(out.get("role") or "") or _legacy_role(out)
     out["role"] = role
 
+    declared = str(out.get("kind") or "")
+    raw_meta = out.get("metadata")
+    metadata = raw_meta if isinstance(raw_meta, dict) else {}
+    if str(out.get("type", "")).upper() == "COMPACTION_SUMMARY":
+        metadata = {**metadata, "compaction_summary": True}
+
+    for key in ("call_id", "tool_name", "is_error"):
+        if out.get(key) in (None, "") and key in metadata:
+            out[key] = metadata[key]
+
     raw_results = out.get("tool_results")
     tool_results = raw_results if isinstance(raw_results, list) else []
-    if not tool_results and (out.get("tool_use_id") or out.get("call_id")):
+    if declared not in RECORD_KINDS and not tool_results and (out.get("tool_use_id") or out.get("call_id")):
         tool_results = [
             {
                 "tool_use_id": out.get("tool_use_id") or out.get("call_id") or "",
@@ -95,25 +111,19 @@ def upgrade_record_v1(data: dict[str, Any]) -> dict[str, Any]:
 
     raw_calls = out.get("tool_calls")
     tool_calls = raw_calls if isinstance(raw_calls, list) else []
-    raw_meta = out.get("metadata")
-    metadata = raw_meta if isinstance(raw_meta, dict) else {}
-    if str(out.get("type", "")).upper() == "COMPACTION_SUMMARY":
-        metadata = {**metadata, "compaction_summary": True}
 
     for key, value in (("tool_calls", tool_calls), ("tool_results", tool_results), ("metadata", metadata)):
         current = out.get(key)
         if current is not None and not isinstance(current, (list, dict)):
-            continue  # a store placeholder (e.g. "[3 items] ... [TRUNCATED]") is not a bag to normalise
+            continue  # a store placeholder ("[3 items] … [TRUNCATED]") is not a bag to normalise
         if value:
             out[key] = value
         else:
             out.pop(key, None)
 
-    kind = str(out.get("kind") or "")
-    if kind not in RECORD_KINDS:
-        kind = infer_record_kind(
-            role=role, tool_calls=tool_calls, tool_results=tool_results, metadata=metadata
-        )
+    kind = declared if declared in RECORD_KINDS else infer_record_kind(
+        role=role, tool_calls=tool_calls, tool_results=tool_results, metadata=metadata
+    )
     out["kind"] = kind
     out.setdefault("timestamp", time.time())
     out["v"] = RECORD_VERSION

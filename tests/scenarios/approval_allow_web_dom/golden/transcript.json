@@ -32,13 +32,66 @@
     "v": 2
   },
   {
+    "call_id": "call#1",
+    "content": "Tool `write_to_file` needs approval: Approval required for 'write_to_file' (write).; Action 'write_to_file' (risk: write) requires user approval in 'ask' mode",
+    "kind": "tool.decision",
+    "metadata": {
+      "action": "ask",
+      "call_id": "call#1",
+      "policy": "permission_modes",
+      "reason": "Approval required for 'write_to_file' (write).; Action 'write_to_file' (risk: write) requires user approval in 'ask' mode",
+      "risk": "write"
+    },
+    "role": "system",
+    "step_index": 3,
+    "v": 2
+  },
+  {
+    "call_id": "call#1",
+    "content": "Tool 'write_to_file' execution requires approval",
+    "kind": "approval.requested",
+    "metadata": {
+      "approval_id": "appr#1",
+      "approval_kind": "tool_execution",
+      "call_id": "call#1",
+      "details": {
+        "arguments": {
+          "content": "approved from the browser\n",
+          "file_path": "<ws>/notes.txt"
+        },
+        "call_id": "call#1",
+        "name": "write_to_file",
+        "risk": "write"
+      }
+    },
+    "role": "system",
+    "step_index": 4,
+    "v": 2
+  },
+  {
+    "call_id": "call#1",
+    "content": "Approved: Tool 'write_to_file' execution requires approval",
+    "kind": "approval.resolved",
+    "metadata": {
+      "approval_id": "appr#1",
+      "approval_kind": "tool_execution",
+      "approved": true,
+      "by": "user",
+      "call_id": "call#1",
+      "reason": ""
+    },
+    "role": "system",
+    "step_index": 5,
+    "v": 2
+  },
+  {
     "content": "",
     "kind": "tool.result",
     "metadata": {
       "tool_results": true
     },
     "role": "user",
-    "step_index": 3,
+    "step_index": 6,
     "tool_results": [
       {
         "content": [
@@ -65,7 +118,7 @@
       }
     },
     "role": "assistant",
-    "step_index": 4,
+    "step_index": 7,
     "v": 2
   },
   {
@@ -80,7 +133,7 @@
       }
     },
     "role": "system",
-    "step_index": 5,
+    "step_index": 8,
     "v": 2
   }
 ]

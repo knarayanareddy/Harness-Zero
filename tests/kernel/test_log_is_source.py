@@ -87,7 +87,7 @@ async def test_every_model_request_is_derivable_from_the_log(tmp_path: Path):
             session=session.info, prompt="read then write", options={"provider": "scripted", "model": MODEL.id}
         )
         session_id = session.info.session_id
-        assert len(provider.requests) == 3, "the scripted flow changed; this test's prefix maths depends on it"
+        assert len(provider.requests) == 3, "the scripted flow changed"
     finally:
         await rt.registry.unload_all()
 
@@ -100,8 +100,11 @@ async def test_every_model_request_is_derivable_from_the_log(tmp_path: Path):
         assert [r["kind"] for r in records] == [
             "user.message",
             "assistant.message",
+            # A decision is a record too (WS-04b): the log says *why* the call ran, not only that it did.
+            "tool.decision",
             "tool.result",
             "assistant.message",
+            "tool.decision",
             "tool.result",
             "assistant.message",
             # The turn ends with a marker record (WS-04 §3.3), so the log alone says how it finished —
@@ -109,10 +112,14 @@ async def test_every_model_request_is_derivable_from_the_log(tmp_path: Path):
             "turn.completed",
         ], records
 
-        # request k saw the history as of that moment: 1 record for the prompt, then 2 per tool iteration.
+        # Request k saw the history as of that moment, which is *every record before the assistant record
+        # that request produced*. Naming the boundary in the record stream rather than as arithmetic over
+        # records-per-iteration is what let this test keep its meaning when decisions, cards and turn
+        # markers joined the log — and it no longer depends on the scripted flow's step size.
+        assistant_at = [i for i, r in enumerate(records) if r["kind"] == "assistant.message"]
+        assert len(assistant_at) == len(provider.requests), "one assistant record per model request"
         for k, request in enumerate(provider.requests):
-            upto = 1 + 2 * k
-            derived = _norm(derive_messages(records[:upto]))
+            derived = _norm(derive_messages(records[: assistant_at[k]]))
             assert derived == _norm(request.messages), f"request {k} is not derivable from the log:\n{derived}\n{request.messages}"
     finally:
         await rt2.registry.unload_all()

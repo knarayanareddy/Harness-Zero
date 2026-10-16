@@ -31,13 +31,28 @@
     "v": 2
   },
   {
+    "call_id": "call#1",
+    "content": "Tool `view_file` denied by `workspace_jail`: Path outside workspace: Access blocked: path '../../../../etc/hostname' (<tmp>/etc/hostname) is outside workspace root '<ws>'",
+    "kind": "tool.decision",
+    "metadata": {
+      "action": "deny",
+      "call_id": "call#1",
+      "policy": "workspace_jail",
+      "reason": "Path outside workspace: Access blocked: path '../../../../etc/hostname' (<tmp>/etc/hostname) is outside workspace root '<ws>'",
+      "risk": "destructive"
+    },
+    "role": "system",
+    "step_index": 3,
+    "v": 2
+  },
+  {
     "content": "",
     "kind": "tool.result",
     "metadata": {
       "tool_results": true
     },
     "role": "user",
-    "step_index": 3,
+    "step_index": 4,
     "tool_results": [
       {
         "content": [
@@ -64,7 +79,7 @@
       }
     },
     "role": "assistant",
-    "step_index": 4,
+    "step_index": 5,
     "tool_calls": [
       {
         "arguments": {
@@ -78,13 +93,28 @@
     "v": 2
   },
   {
+    "call_id": "call#2",
+    "content": "Tool `write_to_file` denied by `workspace_jail`: Path outside workspace: Access blocked: path '../escape.txt' (<ws-parent>/escape.txt) is outside workspace root '<ws>'",
+    "kind": "tool.decision",
+    "metadata": {
+      "action": "deny",
+      "call_id": "call#2",
+      "policy": "workspace_jail",
+      "reason": "Path outside workspace: Access blocked: path '../escape.txt' (<ws-parent>/escape.txt) is outside workspace root '<ws>'",
+      "risk": "destructive"
+    },
+    "role": "system",
+    "step_index": 6,
+    "v": 2
+  },
+  {
     "content": "",
     "kind": "tool.result",
     "metadata": {
       "tool_results": true
     },
     "role": "user",
-    "step_index": 5,
+    "step_index": 7,
     "tool_results": [
       {
         "content": [
@@ -111,7 +141,7 @@
       }
     },
     "role": "assistant",
-    "step_index": 6,
+    "step_index": 8,
     "v": 2
   },
   {
@@ -126,7 +156,7 @@
       }
     },
     "role": "system",
-    "step_index": 7,
+    "step_index": 9,
     "v": 2
   }
 ]

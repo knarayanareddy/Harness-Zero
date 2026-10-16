@@ -119,6 +119,21 @@
       "reason": "Approval required for 'write_to_file' (write).; Action 'write_to_file' (risk: write) requires user approval in 'ask' mode",
       "risk": "write"
     },
+    "record": {
+      "call_id": "call#1",
+      "content": "Tool `write_to_file` needs approval: Approval required for 'write_to_file' (write).; Action 'write_to_file' (risk: write) requires user approval in 'ask' mode",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "ask",
+        "call_id": "call#1",
+        "policy": "permission_modes",
+        "reason": "Approval required for 'write_to_file' (write).; Action 'write_to_file' (risk: write) requires user approval in 'ask' mode",
+        "risk": "write"
+      },
+      "role": "system",
+      "step_index": 3,
+      "v": 2
+    },
     "type": "tool.decision"
   },
   {
@@ -180,7 +195,7 @@
         }
       },
       "role": "assistant",
-      "step_index": 4,
+      "step_index": 5,
       "v": 2
     },
     "type": "model.completed"
@@ -207,7 +222,7 @@
         }
       },
       "role": "system",
-      "step_index": 5,
+      "step_index": 6,
       "v": 2
     },
     "type": "turn.completed"

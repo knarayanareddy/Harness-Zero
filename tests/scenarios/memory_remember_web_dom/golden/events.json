@@ -125,6 +125,21 @@
       "reason": "OK",
       "risk": "read"
     },
+    "record": {
+      "call_id": "call#1",
+      "content": "Tool `remember` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#1",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 3,
+      "v": 2
+    },
     "type": "tool.decision"
   },
   {
@@ -184,7 +199,7 @@
         }
       },
       "role": "assistant",
-      "step_index": 4,
+      "step_index": 5,
       "v": 2
     },
     "type": "model.completed"
@@ -211,7 +226,7 @@
         }
       },
       "role": "system",
-      "step_index": 5,
+      "step_index": 6,
       "v": 2
     },
     "type": "turn.completed"
@@ -234,7 +249,7 @@
       "content": "What is the codename?",
       "kind": "user.message",
       "role": "user",
-      "step_index": 6,
+      "step_index": 7,
       "v": 2
     },
     "type": "turn.started"
@@ -290,7 +305,7 @@
         }
       },
       "role": "assistant",
-      "step_index": 7,
+      "step_index": 8,
       "tool_calls": [
         {
           "arguments": {
@@ -324,6 +339,21 @@
       "reason": "OK",
       "risk": "read"
     },
+    "record": {
+      "call_id": "call#2",
+      "content": "Tool `search_memory` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#2",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 9,
+      "v": 2
+    },
     "type": "tool.decision"
   },
   {
@@ -348,10 +378,45 @@
             ]
           ]
         },
-        "id": "evt#25",
+        "id": "evt#3",
         "kind": "table",
         "title": "Memory Search: Falcon"
       }
+    },
+    "record": {
+      "call_id": "call#2",
+      "content": "Memory Search: Falcon",
+      "kind": "ui.card",
+      "metadata": {
+        "call_id": "call#2",
+        "card": {
+          "data": {
+            "columns": [
+              "Step",
+              "Source",
+              "Snippet"
+            ],
+            "rows": [
+              [
+                "fact #1",
+                "remember",
+                "codename: Project codename is Falcon"
+              ],
+              [
+                "1",
+                "UNKNOWN",
+                "Remember the codename is [Falcon]"
+              ]
+            ]
+          },
+          "id": "evt#3",
+          "kind": "table",
+          "title": "Memory Search: Falcon"
+        }
+      },
+      "role": "system",
+      "step_index": 10,
+      "v": 2
     },
     "type": "ui.card"
   },
@@ -412,7 +477,7 @@
         }
       },
       "role": "assistant",
-      "step_index": 9,
+      "step_index": 12,
       "v": 2
     },
     "type": "model.completed"
@@ -439,7 +504,7 @@
         }
       },
       "role": "system",
-      "step_index": 10,
+      "step_index": 13,
       "v": 2
     },
     "type": "turn.completed"

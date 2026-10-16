@@ -31,13 +31,28 @@
     "v": 2
   },
   {
+    "call_id": "call#1",
+    "content": "Tool `view_file` allowed (read).",
+    "kind": "tool.decision",
+    "metadata": {
+      "action": "allow",
+      "call_id": "call#1",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "role": "system",
+    "step_index": 3,
+    "v": 2
+  },
+  {
     "content": "",
     "kind": "tool.result",
     "metadata": {
       "tool_results": true
     },
     "role": "user",
-    "step_index": 3,
+    "step_index": 4,
     "tool_results": [
       {
         "content": [
@@ -64,7 +79,7 @@
       }
     },
     "role": "assistant",
-    "step_index": 4,
+    "step_index": 5,
     "v": 2
   },
   {
@@ -79,7 +94,7 @@
       }
     },
     "role": "system",
-    "step_index": 5,
+    "step_index": 6,
     "v": 2
   }
 ]

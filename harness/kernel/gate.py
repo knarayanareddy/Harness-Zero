@@ -34,6 +34,7 @@ from harness.sdk.types import (
     ToolCall,
     ToolResult,
     ToolSpec,
+    TranscriptRecord,
 )
 
 logger = logging.getLogger(__name__)
@@ -329,6 +330,24 @@ class PolicyGate:
         """Helper to register a tool with the underlying registry."""
         self.registry._register_tool(spec, handler, plugin_name)
 
+    async def _record(
+        self, log: Any, kind: str, content: str, metadata: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Appends a policy fact to the session log and returns it for the event to carry.
+
+        Best-effort by design: the decision has usually already been taken (a denial, an approval the user
+        answered), and losing a summary line must not turn a safe call into an unsafe one or vice versa.
+        The warning is the signal — and the client's fallback for a missing `record` is to read the log.
+        """
+        if log is None or not kind:
+            return None
+        try:
+            await log.append(TranscriptRecord(kind=kind, role="system", content=content, metadata=metadata))
+            return log.records[-1]
+        except Exception as e:
+            logger.warning(f"Could not record {kind} in the session log: {e}")
+            return None
+
     async def execute(
         self,
         call: ToolCall,
@@ -336,8 +355,15 @@ class PolicyGate:
         session_id: str = "",
         principal_capabilities: frozenset[Capability] = frozenset(),
         turn_state: dict[str, Any] | None = None,
+        log: Any = None,
     ) -> ToolResult:
         """Executes a single tool call through the complete 9-step PolicyGate pipeline.
+
+        `log` is the session's `TranscriptLog` (WS-04b). The gate owns the *policy* facts about a call —
+        that it was denied, that it needed an approval, which card it produced — and until now those only
+        existed as live events, so a reloaded session could not explain itself. Passing the log makes the
+        gate append each such record and then publish the event that carries it; without one (unit tests,
+        direct gate use) the pipeline behaves exactly as before, minus the history.
 
         `turn_state` is the per-turn scratch dict the runner owns (WS-03): hooks share it through
         `hook_ctx` instead of module globals, so two concurrent sessions cannot see each other's
@@ -440,6 +466,18 @@ class PolicyGate:
                         reason = outcome.reason or "Blocked by hook"
                         err_msg = f"blocked by hook {hook.name}: {reason}"
                         dur_ms = (time.time() - start_time) * 1000
+                        decision_rec = await self._record(
+                            log,
+                            "tool.decision",
+                            f"Tool `{call.name}` denied by hook `{hook.name}`: {reason}",
+                            {
+                                "call_id": call_id,
+                                "action": "deny",
+                                "policy": f"hook:{hook.name}",
+                                "risk": risk_val,
+                                "reason": reason,
+                            },
+                        )
                         if self.bus:
                             self.bus.publish(
                                 Event(
@@ -452,6 +490,7 @@ class PolicyGate:
                                         risk=risk_val,
                                         reason=reason,
                                     ),
+                                    record=decision_rec,
                                 )
                             )
                             self.bus.publish(
@@ -528,6 +567,18 @@ class PolicyGate:
             first_deny = denials[0]
             err_msg = f"Action denied: {first_deny.reason}"
             dur_ms = (time.time() - start_time) * 1000
+            decision_rec = await self._record(
+                log,
+                "tool.decision",
+                f"Tool `{call.name}` denied by `{first_deny.policy or 'policy'}`: {first_deny.reason}",
+                {
+                    "call_id": call_id,
+                    "action": "deny",
+                    "policy": first_deny.policy or "policy",
+                    "risk": effective_risk_val,
+                    "reason": first_deny.reason,
+                },
+            )
             if self.bus:
                 self.bus.publish(
                     Event(
@@ -540,6 +591,7 @@ class PolicyGate:
                             risk=effective_risk_val,
                             reason=first_deny.reason,
                         ),
+                        record=decision_rec,
                     )
                 )
                 self.bus.publish(
@@ -563,6 +615,18 @@ class PolicyGate:
         # ---------------------------------------------------------
         if asks:
             reasons = "; ".join(a.reason for a in asks if a.reason)
+            decision_rec = await self._record(
+                log,
+                "tool.decision",
+                f"Tool `{call.name}` needs approval: {reasons or 'policy requires it'}",
+                {
+                    "call_id": call_id,
+                    "action": "ask",
+                    "policy": asks[0].policy or "policy",
+                    "risk": effective_risk_val,
+                    "reason": reasons,
+                },
+            )
             if self.bus:
                 self.bus.publish(
                     Event(
@@ -575,6 +639,7 @@ class PolicyGate:
                             risk=effective_risk_val,
                             reason=reasons,
                         ),
+                        record=decision_rec,
                     )
                 )
 
@@ -615,21 +680,36 @@ class PolicyGate:
                     )
                 return ToolResult.error(err_msg)
 
-        # Action is allowed
-        if self.bus and not asks:
-            self.bus.publish(
-                Event(
-                    type="tool.decision",
-                    session_id=session_id,
-                    data=ToolDecision(
-                        call_id=call_id,
-                        action="allow",
-                        policy="policy_gate",
-                        risk=effective_risk_val,
-                        reason="OK",
-                    ),
-                )
+        # Action is allowed. The record is written whether or not a subscriber is attached — the log is
+        # not the bus's copy of itself.
+        if not asks:
+            allow_rec = await self._record(
+                log,
+                "tool.decision",
+                f"Tool `{call.name}` allowed ({effective_risk_val}).",
+                {
+                    "call_id": call_id,
+                    "action": "allow",
+                    "policy": "policy_gate",
+                    "risk": effective_risk_val,
+                    "reason": "OK",
+                },
             )
+            if self.bus:
+                self.bus.publish(
+                    Event(
+                        type="tool.decision",
+                        session_id=session_id,
+                        data=ToolDecision(
+                            call_id=call_id,
+                            action="allow",
+                            policy="policy_gate",
+                            risk=effective_risk_val,
+                            reason="OK",
+                        ),
+                        record=allow_rec,
+                    )
+                )
 
         # ---------------------------------------------------------
         # Step 6: Build capability-gated ToolContext
@@ -835,16 +915,33 @@ class PolicyGate:
         if len(preview_text) > 2048:
             preview_text = preview_text[:2048] + "..."
 
+        # A card is a fact, not a frame. Record every card the tool produced first — a subscriber sees it
+        # live, the log is what it said — then publish the live view carrying the stored record.
+        card_rows: list[tuple[dict[str, Any], dict[str, Any] | None]] = []
+        for card in (result.cards or []):
+            card_dict = card.to_dict() if hasattr(card, "to_dict") else card
+            card_rows.append(
+                (
+                    card_dict,
+                    await self._record(
+                        log,
+                        "ui.card",
+                        str(card_dict.get("title") or card_dict.get("kind") or "card"),
+                        {"card": card_dict, "call_id": call_id},
+                    ),
+                )
+            )
+
         if self.bus:
-            if result.cards:
-                for card in result.cards:
-                    self.bus.publish(
-                        Event(
-                            type="ui.card",
-                            session_id=session_id,
-                            data=UiCard(card=card.to_dict() if hasattr(card, "to_dict") else card),
-                        )
+            for card_dict, card_rec in card_rows:
+                self.bus.publish(
+                    Event(
+                        type="ui.card",
+                        session_id=session_id,
+                        data=UiCard(card=card_dict),
+                        record=card_rec,
                     )
+                )
             self.bus.publish(
                 Event(
                     type="tool.result",

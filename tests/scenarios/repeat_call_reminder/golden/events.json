@@ -116,6 +116,21 @@
       "reason": "OK",
       "risk": "exec"
     },
+    "record": {
+      "call_id": "call#1",
+      "content": "Tool `run_command` allowed (exec).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#1",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "exec"
+      },
+      "role": "system",
+      "step_index": 3,
+      "v": 2
+    },
     "type": "tool.decision"
   },
   {
@@ -189,7 +204,7 @@
         }
       },
       "role": "assistant",
-      "step_index": 4,
+      "step_index": 5,
       "tool_calls": [
         {
           "arguments": {
@@ -223,6 +238,21 @@
       "reason": "OK",
       "risk": "exec"
     },
+    "record": {
+      "call_id": "call#2",
+      "content": "Tool `run_command` allowed (exec).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#2",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "exec"
+      },
+      "role": "system",
+      "step_index": 6,
+      "v": 2
+    },
     "type": "tool.decision"
   },
   {
@@ -296,7 +326,7 @@
         }
       },
       "role": "assistant",
-      "step_index": 6,
+      "step_index": 8,
       "tool_calls": [
         {
           "arguments": {
@@ -329,6 +359,21 @@
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "exec"
+    },
+    "record": {
+      "call_id": "call#3",
+      "content": "Tool `run_command` allowed (exec).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#3",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "exec"
+      },
+      "role": "system",
+      "step_index": 9,
+      "v": 2
     },
     "type": "tool.decision"
   },
@@ -408,7 +453,7 @@
         }
       },
       "role": "assistant",
-      "step_index": 8,
+      "step_index": 11,
       "v": 2
     },
     "type": "model.completed"
@@ -435,7 +480,7 @@
         }
       },
       "role": "system",
-      "step_index": 9,
+      "step_index": 12,
       "v": 2
     },
     "type": "turn.completed"

@@ -12,6 +12,7 @@ See ``review/dsh-integration/WS-04_session_log_single_source.md`` §3.4 and §6.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -21,7 +22,16 @@ import pytest
 from harness.kernel.bootstrap import bootstrap_kernel
 from harness.kernel.transcript import TranscriptLog
 from harness.sdk.testing.scripted import ScriptedProvider
-from harness.sdk.types import RECORD_KINDS, Done, ModelInfo, TextDelta, ToolCallEnd
+from harness.sdk.types import (
+    RECORD_KINDS,
+    Done,
+    ModelInfo,
+    TextDelta,
+    ToolAnnotations,
+    ToolCallEnd,
+    ToolResult,
+    ToolSpec,
+)
 
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "docs" / "events.schema.json"
 
@@ -46,7 +56,7 @@ def _drain(sub) -> list[dict[str, Any]]:
     return out
 
 
-async def _boot(tmp_path: Path, responses: list[list[Any]]):
+async def _boot(tmp_path: Path, responses: list[list[Any]], *, mode: str = "allow"):
     """A booted kernel plus a scripted provider, with the bus tapped before anything runs."""
     ws = tmp_path / "ws"
     ws.mkdir()
@@ -57,7 +67,7 @@ async def _boot(tmp_path: Path, responses: list[list[Any]]):
         workspace=ws,
         config_dir=conf,
         overrides={
-            "kernel.security.permission_mode": "allow",
+            "kernel.security.permission_mode": mode,
             "kernel.provider": "scripted",
             "kernel.model": MODEL.id,
         },
@@ -96,12 +106,27 @@ def test_transient_events_name_no_record() -> None:
         "model.started",
         "model.text.delta",
         "model.thinking.delta",
+        "model.tool_call",
+        "tool.call",
         "tool.output.delta",
         "tool.repeat_detected",
         "tool.result.pruned",
     ]
     for t in transient:
         assert not table[t]["durable"] and table[t]["record_kind"] is None, t
+
+
+def test_events_that_carry_a_record_are_the_durable_ones(tmp_path: Path) -> None:
+    """`carries_record` is not decoration: exactly the events that write a record attach one.
+
+    The two exceptions named in the schema (`tool.result`, `compaction.completed`) pair by id instead —
+    `tool.result` because a strategy batches a step's results into one record, which is the shape a
+    provider requires. That pairing is asserted in `test_tool_result_events_pair_with_the_log`.
+    """
+    table = _durability()
+    carrying = {t for t, s in table.items() if s["durable"] and s["carries_record"]}
+    assert "turn.started" in carrying and "turn.completed" in carrying
+    assert {t for t, s in table.items() if not s["durable"]} >= {"plugin.loaded", "session.started", "settings.changed"}
 
 
 def test_durable_kinds_are_a_subset_of_the_record_vocabulary() -> None:
@@ -256,5 +281,166 @@ async def test_a_clean_log_is_left_alone(tmp_path: Path) -> None:
         before = len(session.log.records)
         assert await session.log.repair_dangling_tool_calls() == []
         assert len(session.log.records) == before, "repair must not fabricate records"
+    finally:
+        await rt.registry.unload_all()
+
+
+# --------------------------------------------------------------------------- the pairings and the new facts
+
+
+@pytest.mark.asyncio
+async def test_tool_result_events_pair_with_the_log(tmp_path: Path) -> None:
+    """`tool.result` names a record kind but carries no record — so the ids have to join up.
+
+    The schema says `carries_record: false` for this event because a strategy writes one batched record per
+    step (the shape a provider requires) while the gate publishes one preview per call. Pairing by
+    `call_id` / `tool_use_id` is therefore the contract, and this is where it is checked: a client that
+    re-renders a reloaded session must be able to attach every preview to its record.
+    """
+    rt, _provider, sub, _ws = await _boot(
+        tmp_path,
+        [
+            [ToolCallEnd(id="c1", name="view_file", arguments={"file_path": "app.py"}), Done(stop_reason="tool_use")],
+            [TextDelta(text="done"), Done(stop_reason="end_turn")],
+        ],
+    )
+    try:
+        session = await rt.session_manager.create_session()
+        await rt.runner.execute_turn(
+            session=session.info, prompt="read it", options={"provider": "scripted", "model": MODEL.id}
+        )
+        events = _drain(sub)
+        results = [e for e in events if e["type"] == "tool.result"]
+        assert results, "the scripted flow should have produced a tool result"
+        recorded_ids = {
+            r["tool_results"][0]["tool_use_id"]
+            for r in session.log.records
+            if r["kind"] == "tool.result" and r.get("tool_results")
+        }
+        for e in results:
+            assert e["data"]["call_id"] in recorded_ids, e["data"]
+            assert "record" not in e or e.get("record") is None, "this event pairs by id, not by pointer"
+    finally:
+        if sub is not None:
+            rt.bus.unsubscribe(sub)
+        await rt.registry.unload_all()
+
+
+@pytest.mark.asyncio
+async def test_the_gate_records_what_it_decided_and_what_it_rendered(tmp_path: Path) -> None:
+    """Decisions and cards used to be events only — the two facts a reloaded session could not show.
+
+    A tool that returns a card, driven through the real gate with the session log attached: the log gains a
+    `tool.decision` and a `ui.card` record, the live events carry those stored records, and neither reaches
+    a model request (so adding history did not change what the model reads — `requests.json` in the
+    scenario goldens is unchanged for exactly this reason).
+    """
+    rt, provider, sub, ws = await _boot(
+        tmp_path,
+        [
+            [ToolCallEnd(id="c9", name="make_card", arguments={}), Done(stop_reason="tool_use")],
+            [TextDelta(text="shown"), Done(stop_reason="end_turn")],
+        ],
+    )
+
+    async def handler(args: Any, ctx: Any) -> ToolResult:
+        from harness.sdk.types import TextBlock
+
+        return ToolResult(
+            content=[TextBlock(text="card made")],
+            cards=[{"kind": "checklist", "title": "Two items", "fields": [{"label": "a", "value": "1"}]}],
+        )
+
+    rt.registry._register_tool(
+        ToolSpec(name="make_card", description="Emits a card", input_schema={"type": "object"},
+                 annotations=ToolAnnotations()),
+        handler,
+        "test_cards",
+    )
+    try:
+        session = await rt.session_manager.create_session()
+        await rt.runner.execute_turn(
+            session=session.info, prompt="make a card", options={"provider": "scripted", "model": MODEL.id}
+        )
+        kinds = [r["kind"] for r in session.log.records]
+        assert "tool.decision" in kinds, kinds
+        assert "ui.card" in kinds, kinds
+        card = [r for r in session.log.records if r["kind"] == "ui.card"][0]
+        assert card["metadata"]["card"]["title"] == "Two items"
+        assert card["metadata"]["call_id"] == "c9"
+
+        events = _drain(sub)
+        card_events = [e for e in events if e["type"] == "ui.card"]
+        assert card_events and card_events[0].get("record") == card
+        decision = [e for e in events if e["type"] == "tool.decision"]
+        assert decision and decision[0]["record"]["kind"] == "tool.decision"
+
+        sent = json.dumps([[getattr(b, "text", str(b)) for b in m.content] for req in provider.requests for m in req.messages])
+        assert "Two items" not in sent and "allowed" not in sent, "a recorded fact leaked into the prompt"
+
+        # ... and a reload through the public command sees the same records, not a thinner copy.
+        fetched = await rt.commands.dispatch("sessions.get", {"session_id": session.info.session_id})
+        assert [r["kind"] for r in fetched["records"]] == kinds
+    finally:
+        if sub is not None:
+            rt.bus.unsubscribe(sub)
+        await rt.registry.unload_all()
+
+
+@pytest.mark.asyncio
+async def test_approval_facts_are_written_to_the_session_log(tmp_path: Path) -> None:
+    """`approval.required` / `approval.resolved` become records, including the timeout path.
+
+    The broker is kernel-wide and logs are per session, so it resolves the log per call — this test drives
+    it directly, with a real `TranscriptLog` behind it, to pin both halves of the record.
+    """
+    from harness.kernel.approvals import ApprovalBroker
+    from harness.kernel.bus import EventBus
+    from harness.kernel.transcript import TranscriptLog
+
+    log = TranscriptLog(None, session_id="s1")  # no store: the in-memory log is enough for this claim
+    bus = EventBus()
+    bus.subscribe(interactive=True)  # an interactive subscriber, or `ask` denies without waiting
+    broker = ApprovalBroker(bus=bus, timeout_s=5.0, log_for=lambda sid: log if sid == "s1" else None)
+
+    async def approve() -> None:
+        while not broker.pending():
+            await asyncio.sleep(0.01)
+        await broker.resolve_recorded(broker.pending()[0]["approval_id"], True, by="tester", session_id="s1")
+
+    task = asyncio.create_task(broker.ask("tool_execution", "Run `rm -rf build`?", {"risk": "destructive"}, call_id="c1", session_id="s1"))
+    answer = asyncio.create_task(approve())
+    approved, reason = await task
+    await answer
+
+    assert approved, reason
+    kinds = [r["kind"] for r in log.records]
+    assert kinds == ["approval.requested", "approval.resolved"], kinds
+    assert log.records[0]["metadata"]["call_id"] == "c1"
+    assert log.records[1]["metadata"]["approved"] is True and log.records[1]["metadata"]["by"] == "tester"
+    assert "rm -rf build" in log.records[0]["content"]
+
+
+@pytest.mark.asyncio
+async def test_a_denied_call_is_recorded_even_without_an_approver(tmp_path: Path) -> None:
+    """The denial a user never saw is still a fact: `permission_mode: plan` writes the decision record."""
+    # The mode has to be in the boot overrides: `settings.set` afterwards cannot win against them, which
+    # is exactly why this test boots in plan mode rather than switching into it.
+    rt, provider, _sub, _ws = await _boot(
+        tmp_path,
+        [
+            [ToolCallEnd(id="c1", name="write_to_file", arguments={"file_path": "x.txt", "content": "x"}), Done(stop_reason="tool_use")],
+            [TextDelta(text="ok then"), Done(stop_reason="end_turn")],
+        ],
+        mode="plan",
+    )
+    try:
+        session = await rt.session_manager.create_session()
+        await rt.runner.execute_turn(
+            session=session.info, prompt="write it", options={"provider": "scripted", "model": MODEL.id}
+        )
+        decisions = [r for r in session.log.records if r["kind"] == "tool.decision"]
+        assert decisions and decisions[0]["metadata"]["action"] == "deny", decisions
+        assert "denied" in decisions[0]["content"].lower()
     finally:
         await rt.registry.unload_all()

@@ -453,7 +453,7 @@
   "events": [
     {
       "client_renderer": "app.js",
-      "durable": false,
+      "durable": true,
       "fields": [
         "EVENT_TYPE",
         "approval_id",
@@ -461,6 +461,7 @@
         "details",
         "kind",
         "options",
+        "record_kind",
         "summary",
         "timeout_s"
       ],
@@ -468,7 +469,7 @@
       "producers": [
         "harness/kernel/approvals.py"
       ],
-      "record_kind": null,
+      "record_kind": "approval.requested",
       "scenarios": [
         "approval_allow_kernel",
         "approval_allow_web_dom"
@@ -478,19 +479,20 @@
     },
     {
       "client_renderer": "app.js",
-      "durable": false,
+      "durable": true,
       "fields": [
         "EVENT_TYPE",
         "approval_id",
         "approved",
         "by",
-        "reason"
+        "reason",
+        "record_kind"
       ],
       "payload": "ApprovalResolved",
       "producers": [
         "harness/kernel/approvals.py"
       ],
-      "record_kind": null,
+      "record_kind": "approval.resolved",
       "scenarios": [
         "approval_allow_kernel",
         "approval_allow_web_dom"
@@ -500,17 +502,19 @@
     },
     {
       "client_renderer": "app.js",
-      "durable": false,
+      "durable": true,
       "fields": [
         "EVENT_TYPE",
+        "carries_record",
         "duration_ms",
+        "record_kind",
         "summary_tokens"
       ],
       "payload": "CompactionCompleted",
       "producers": [
         "harness/kernel/compaction.py"
       ],
-      "record_kind": null,
+      "record_kind": "compaction.summary",
       "scenarios": [],
       "transient": false,
       "type": "compaction.completed"
@@ -786,7 +790,8 @@
         "EVENT_TYPE",
         "arguments",
         "call_id",
-        "name"
+        "name",
+        "transient"
       ],
       "payload": "ModelToolCall",
       "producers": [
@@ -813,7 +818,7 @@
         "tirith_blocks_ssrf_kernel",
         "tirith_blocks_ssrf_web_dom"
       ],
-      "transient": false,
+      "transient": true,
       "type": "model.tool_call"
     },
     {
@@ -976,7 +981,8 @@
         "call_id",
         "name",
         "plugin",
-        "risk"
+        "risk",
+        "transient"
       ],
       "payload": "ToolCallStarted",
       "producers": [
@@ -1003,25 +1009,26 @@
         "tirith_blocks_ssrf_kernel",
         "tirith_blocks_ssrf_web_dom"
       ],
-      "transient": false,
+      "transient": true,
       "type": "tool.call"
     },
     {
       "client_renderer": "app.js",
-      "durable": false,
+      "durable": true,
       "fields": [
         "EVENT_TYPE",
         "action",
         "call_id",
         "policy",
         "reason",
+        "record_kind",
         "risk"
       ],
       "payload": "ToolDecision",
       "producers": [
         "harness/kernel/gate.py"
       ],
-      "record_kind": null,
+      "record_kind": "tool.decision",
       "scenarios": [
         "approval_allow_kernel",
         "approval_allow_web_dom",
@@ -1089,21 +1096,23 @@
     },
     {
       "client_renderer": "app.js",
-      "durable": false,
+      "durable": true,
       "fields": [
         "EVENT_TYPE",
         "call_id",
+        "carries_record",
         "duration_ms",
         "is_error",
         "metadata",
         "name",
-        "preview"
+        "preview",
+        "record_kind"
       ],
       "payload": "ToolCallResult",
       "producers": [
         "harness/kernel/gate.py"
       ],
-      "record_kind": null,
+      "record_kind": "tool.result",
       "scenarios": [
         "approval_allow_kernel",
         "approval_allow_web_dom",
@@ -1269,10 +1278,11 @@
     },
     {
       "client_renderer": "app.js",
-      "durable": false,
+      "durable": true,
       "fields": [
         "EVENT_TYPE",
-        "card"
+        "card",
+        "record_kind"
       ],
       "payload": "UiCard",
       "producers": [
@@ -1280,7 +1290,7 @@
         "harness/kernel/gate.py",
         "harness/plugins/bridges/shell_hooks/hook.py"
       ],
-      "record_kind": null,
+      "record_kind": "ui.card",
       "scenarios": [
         "edit_without_read_blocked",
         "memory_remember_search_kernel",

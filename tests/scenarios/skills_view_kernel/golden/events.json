@@ -122,6 +122,21 @@
       "reason": "OK",
       "risk": "read"
     },
+    "record": {
+      "call_id": "call#1",
+      "content": "Tool `view_skill` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#1",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 3,
+      "v": 2
+    },
     "type": "tool.decision"
   },
   {
@@ -130,10 +145,29 @@
         "data": {
           "body": "---\nname: code-architect\ndescription: Architectural planning, multi-file codebase design, and dependency structure analysis before applying changes.\nversion: 1.0.0\n---\n\n# Code Architect Playbook\n\n## Purpose\nUse this skill when tasked with designing or modifying complex multi-file features, refactoring subsystem boundaries, or planning architectural migrations.\n\n## Methodology\n1. **Analyze Topology**: Inspect repo structure, imports, and interface contracts.\n2. **Draft Component Spec**: Break down proposed changes into isolated units with clear interface boundaries.\n3. **Draft Plan Artifact**: Create a structured plan artifact describing target files, classes, methods, and test contracts.\n4. **Delegate to Editor**: Once architecture is validated, proceed with targeted file edits.\n"
         },
-        "id": "evt#11",
+        "id": "evt#2",
         "kind": "markdown",
         "title": "Skill Playbook: code-architect"
       }
+    },
+    "record": {
+      "call_id": "call#1",
+      "content": "Skill Playbook: code-architect",
+      "kind": "ui.card",
+      "metadata": {
+        "call_id": "call#1",
+        "card": {
+          "data": {
+            "body": "---\nname: code-architect\ndescription: Architectural planning, multi-file codebase design, and dependency structure analysis before applying changes.\nversion: 1.0.0\n---\n\n# Code Architect Playbook\n\n## Purpose\nUse this skill when tasked with designing or modifying complex multi-file features, refactoring subsystem boundaries, or planning architectural migrations.\n\n## Methodology\n1. **Analyze Topology**: Inspect repo structure, imports, and interface contracts.\n2. **Draft Component Spec**: Break down proposed changes into isolated units with clear interface boundaries.\n3. **Draft Plan Artifact**: Create a structured plan artifact describing target files, classes, methods, and test contracts.\n4. **Delegate to Editor**: Once architecture is validated, proceed with targeted file edits.\n"
+          },
+          "id": "evt#2",
+          "kind": "markdown",
+          "title": "Skill Playbook: code-architect"
+        }
+      },
+      "role": "system",
+      "step_index": 4,
+      "v": 2
     },
     "type": "ui.card"
   },
@@ -194,7 +228,7 @@
         }
       },
       "role": "assistant",
-      "step_index": 4,
+      "step_index": 6,
       "v": 2
     },
     "type": "model.completed"
@@ -221,7 +255,7 @@
         }
       },
       "role": "system",
-      "step_index": 5,
+      "step_index": 7,
       "v": 2
     },
     "type": "turn.completed"

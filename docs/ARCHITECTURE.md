@@ -193,6 +193,25 @@ generated JSON schema (`harness events schema`).
   `sessions.get`, so there is no in-memory mirror of the conversation to drift from the file. Records are
   typed and versioned (`kind` ∈ `RECORD_KINDS`, `v: 2`); v1 lines are upgraded *on read* and never
   rewritten, because an appended line is the audit trail of what was recorded when.
+* Policy facts are records too (WS-04b). The gate writes a `tool.decision` record for every deny / ask /
+  allow and a `ui.card` record for every card a tool produced — before publishing the matching event, and
+  whether or not anyone is subscribed, because the log is not the bus's copy of itself. The approval broker
+  writes `approval.requested` and `approval.resolved` (resolved via `resolve_recorded`, which async callers
+  use; the sync `resolve` is what a CLI keypress calls and cannot await). None of these kinds is
+  model-visible, so a session that logs twice as much history sends the same prompt: re-baselining the 24
+  scenarios changed `transcript.json` and `events.json` and left `requests.json`, `http.json` and the DOM
+  `timeline.txt` byte-identical.
+* Durability is declared, not remembered: `EventPayload.record_kind` names the record kind an event
+  mirrors and `EventPayload.transient` marks the streamed set; `harness catalog gen` renders both (plus
+  `carries_record`) into `docs/events.schema.json` and the "In the log" column of `docs/catalog/EVENTS.md`.
+  A durable event carries the stored record on `Event.record`, so a client can render that fact without a
+  second fetch. Two events name a kind but carry no pointer — `tool.result` (a strategy batches a step's
+  results into one record, the shape a provider requires) and `compaction.completed` (the summary record is
+  written by the loop) — and pair with the log by `call_id` / step boundary instead.
+* An unanswered `tool_use` (a crash between recording a call and its result) is closed **in the log** at
+  the start of the next turn: `TranscriptLog.repair_dangling_tool_calls()` appends a synthetic error
+  result labelled `metadata.synthetic`. `derive_messages` still repairs its view in memory, because it
+  must stay pure, but the transcript now says what happened.
 * `derive_messages` (`harness/kernel/context.py`) is the only producer of a model request's message
   list: `user.message`, `assistant.message`, `tool.result`, `compaction.summary` and a
   `system.notice` marked `model_visible` reach the model; decisions, approvals, cards and turn markers

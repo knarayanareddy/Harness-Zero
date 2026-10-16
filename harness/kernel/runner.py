@@ -550,12 +550,17 @@ class KernelServicesImpl:
         )
 
     async def execute_tool(self, call: ToolCall) -> ToolResult:
-        """Executes a single tool call via the PolicyGate."""
+        """Executes a single tool call via the PolicyGate.
+
+        `log` is passed so the gate can record the policy facts it owns (decision, approval, card) before
+        announcing them; the conversation records stay here, in the loop that knows their shape.
+        """
         return await self.gate.execute(
             call,
             options=self.options,
             session_id=self.session.session_id,
             turn_state=self.turn_state,
+            log=self.log,
         )
 
     async def execute_tools(self, calls: list[ToolCall]) -> list[ToolResult]:
