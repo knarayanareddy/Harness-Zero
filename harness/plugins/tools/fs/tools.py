@@ -3,6 +3,7 @@ Filesystem tools: view_file, write_to_file, edit_file (§4, PLG-03).
 """
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -118,7 +119,19 @@ async def handle_view_file(args: dict[str, Any], ctx: ToolContext) -> ToolResult
     numbered = [f"{start_idx + idx + 1:5d} | {line}" for idx, line in enumerate(selected_lines)]
     output_text = "".join(numbered) if selected_lines else "[Empty file or range]"
 
-    return ToolResult.text(output_text)
+    # Read ledger (WS-03 read-before-edit): the hash is of the *whole file*, not the visible range,
+    # so a partial read still proves the model saw this exact content. Recorded on the result, so it
+    # lands in the transcript and survives a restart — no private store to drift from.
+    digest = hashlib.sha256(target.read_bytes()).hexdigest()
+    return ToolResult(
+        content=[TextBlock(text=output_text)],
+        metadata={
+            "path": str(target),
+            "read_sha256": digest,
+            "lines_total": len(lines),
+            "lines_shown": [start_idx + 1, end_idx],
+        },
+    )
 
 
 async def handle_write_to_file(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
@@ -131,7 +144,13 @@ async def handle_write_to_file(args: dict[str, Any], ctx: ToolContext) -> ToolRe
         target.write_text(content, encoding="utf-8")
         return ToolResult(
             content=[TextBlock(text=f"Successfully wrote {len(content)} characters to {args['file_path']}")],
-            metadata={"changed_files": [str(target)]},
+            # The write itself counts as the freshest read of the file: the model knows exactly what
+            # is now on disk, so the next edit of the same path must not be blocked as "unread".
+            metadata={
+                "changed_files": [str(target)],
+                "path": str(target),
+                "read_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            },
         )
     except Exception as err:
         return ToolResult.error(f"Failed to write file: {err}")
@@ -156,5 +175,11 @@ async def handle_edit_file(args: dict[str, Any], ctx: ToolContext) -> ToolResult
     return ToolResult(
         content=[TextBlock(text=msg)],
         cards=[diff_card],
-        metadata={"changed_files": [str(target)]},
+        # After our own edit the model has an accurate view of the file, so the ledger records the
+        # new hash instead of leaving the pre-edit read "stale" (WS-03 read-before-edit).
+        metadata={
+            "changed_files": [str(target)],
+            "path": str(target),
+            "read_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+        },
     )

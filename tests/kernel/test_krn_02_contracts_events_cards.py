@@ -104,7 +104,7 @@ def test_cards_validation_failures():
     # Invalid notice level
     with pytest.raises(ValueError) as exc:
         validate_card(Card(kind="notice", data={"body": "msg", "level": "critical"}))
-    assert "level must be 'info', 'warn', or 'error'" in str(exc.value)
+    assert "level must be one of ('info', 'success', 'warn', 'error')" in str(exc.value)
 
     # Progress value out of range
     with pytest.raises(ValueError) as exc:

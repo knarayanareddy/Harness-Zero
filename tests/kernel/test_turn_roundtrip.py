@@ -179,10 +179,25 @@ async def test_agent_loop_turn_roundtrip_and_persistence(tmp_path: Path):
     reopened_session = runtime.session_manager.get_session(session_id)
     history = await reopened_session.get_history()
     assert len(history) >= 5
-    # Verify the roles in history
-    roles = [r["role"] for r in history]
-    assert roles[0] == "user"
-    assert roles[1] == "assistant"
-    assert roles[2] == "user"
-    assert roles[3] == "assistant"
-    assert roles[4] == "user"
+    # Verify what the log holds. Since WS-04 this is asserted by record *kind*, not role: a turn marker
+    # and a system notice are both `system`-role, and a tool result is `user`-role with empty content, so
+    # roles could not tell the shapes apart. The conversation projection is what a client renders; the
+    # markers are what makes a reload able to say how each turn ended.
+    from harness.kernel.transcript import MESSAGE_KINDS
+
+    kinds = [r["kind"] for r in history]
+    assert kinds == [
+        "user.message",
+        "assistant.message",  # the model asks for a tool
+        "tool.decision",  # ... the gate records what it decided ...
+        "tool.result",  # ... and what came back
+        "assistant.message",  # ... and answers with its output
+        "turn.completed",
+        "user.message",
+        "assistant.message",
+        "turn.completed",
+    ], kinds
+    assert [k for k in kinds if k in MESSAGE_KINDS] == [
+        kinds[0], kinds[1], kinds[3], kinds[4], kinds[6], kinds[7]
+    ]
+    assert kinds.count("turn.completed") == 2, f"one marker per finished turn: {kinds}"

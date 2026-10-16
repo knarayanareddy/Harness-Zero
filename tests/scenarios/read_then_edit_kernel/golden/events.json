@@ -1,0 +1,406 @@
+[
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay",
+      "session_id": "<session>",
+      "strategy": "single_loop"
+    },
+    "type": "session.started"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "options": {
+        "max_iterations": 20,
+        "media": [],
+        "model": "replay-v1",
+        "prompt": "Rename greet() to hello() in app.py",
+        "provider": "replay"
+      },
+      "prompt_preview": "Rename greet() to hello() in app.py",
+      "provider": "replay",
+      "strategy": "single_loop"
+    },
+    "record": {
+      "content": "Rename greet() to hello() in app.py",
+      "kind": "user.message",
+      "role": "user",
+      "step_index": 1,
+      "v": 2
+    },
+    "type": "turn.started"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "text": "Let me look at the file first."
+    },
+    "type": "model.text.delta"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#1",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "Let me look at the file first.",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 2,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#1",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#1",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#1",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#1",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#1",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 3,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#1",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          5
+        ],
+        "lines_total": 5,
+        "path": "<ws>/app.py",
+        "read_sha256": "4f3081b1b745848253201abfdba640f49307e65b5fd9470fae5ed11193e5be49"
+      },
+      "name": "view_file",
+      "preview": "    1 | def greet(name):\n    2 |     return f\"Hello, {name}!\"\n    3 | \n    4 | if __name__ == \"__main__\":\n    5 |     print(greet(\"world\"))\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "diff": "<<<<<<< SEARCH\ndef greet(name):\n    return f\"Hello, {name}!\"\n=======\ndef hello(name):\n    return f\"Hello, {name}!\"\n>>>>>>> REPLACE\n",
+        "file_path": "app.py"
+      },
+      "call_id": "call#2",
+      "name": "edit_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 5,
+      "tool_calls": [
+        {
+          "arguments": {
+            "diff": "<<<<<<< SEARCH\ndef greet(name):\n    return f\"Hello, {name}!\"\n=======\ndef hello(name):\n    return f\"Hello, {name}!\"\n>>>>>>> REPLACE\n",
+            "file_path": "app.py"
+          },
+          "id": "evt#2",
+          "name": "edit_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "diff": "<<<<<<< SEARCH\ndef greet(name):\n    return f\"Hello, {name}!\"\n=======\ndef hello(name):\n    return f\"Hello, {name}!\"\n>>>>>>> REPLACE\n",
+        "file_path": "app.py"
+      },
+      "call_id": "call#2",
+      "name": "edit_file",
+      "plugin": "fs-tools",
+      "risk": "write"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#2",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "write"
+    },
+    "record": {
+      "call_id": "call#2",
+      "content": "Tool `edit_file` allowed (write).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#2",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "write"
+      },
+      "role": "system",
+      "step_index": 6,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "card": {
+        "data": {
+          "path": "<ws>/app.py",
+          "stats": {
+            "added": 2,
+            "removed": 2
+          },
+          "unified": "<<<<<<< SEARCH\ndef greet(name):\n    return f\"Hello, {name}!\"\n=======\ndef hello(name):\n    return f\"Hello, {name}!\"\n>>>>>>> REPLACE\n"
+        },
+        "id": "evt#3",
+        "kind": "diff",
+        "title": null
+      }
+    },
+    "record": {
+      "call_id": "call#2",
+      "content": "diff",
+      "kind": "ui.card",
+      "metadata": {
+        "call_id": "call#2",
+        "card": {
+          "data": {
+            "path": "<ws>/app.py",
+            "stats": {
+              "added": 2,
+              "removed": 2
+            },
+            "unified": "<<<<<<< SEARCH\ndef greet(name):\n    return f\"Hello, {name}!\"\n=======\ndef hello(name):\n    return f\"Hello, {name}!\"\n>>>>>>> REPLACE\n"
+          },
+          "id": "evt#3",
+          "kind": "diff",
+          "title": null
+        }
+      },
+      "role": "system",
+      "step_index": 7,
+      "v": 2
+    },
+    "type": "ui.card"
+  },
+  {
+    "data": {
+      "call_id": "call#2",
+      "is_error": false,
+      "metadata": {
+        "changed_files": [
+          "<ws>/app.py"
+        ],
+        "path": "<ws>/app.py",
+        "read_sha256": "ba04f6e2d789bfc75131a6e180ec9dfa4bd8d59b128d3bfdd1d6330116753735"
+      },
+      "name": "edit_file",
+      "preview": "Successfully applied 1 search/replace block(s) to app.py"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "text": "Renamed greet() to hello() in app.py."
+    },
+    "type": "model.text.delta"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "end_turn",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "Renamed greet() to hello() in app.py.",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "end_turn",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 9,
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "stop_reason": "end_turn",
+      "tool_calls": 2,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "Turn completed (end_turn) with 2 tool call(s).",
+      "kind": "turn.completed",
+      "metadata": {
+        "stop_reason": "end_turn",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "system",
+      "step_index": 10,
+      "v": 2
+    },
+    "type": "turn.completed"
+  }
+]

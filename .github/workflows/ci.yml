@@ -34,9 +34,9 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install Node dependencies
+      - name: Install Node dependencies (jsdom for the scenario DOM lane, tailwindcss)
         run: |
-          npm install
+          npm ci
 
       - name: Lint with ruff
         run: |
@@ -46,7 +46,9 @@ jobs:
         run: |
           pytest -q tests/kernel/test_import_boundaries.py
 
-      - name: Run hermetic test suite
+      - name: Run hermetic test suite (kernel, plugins, frontends, e2e, scenarios)
+        env:
+          SCENARIO_DOM_WAIT_MS: "6000"
         run: |
           export HOME=$(mktemp -d)
           export HARNESS_CONFIG_DIR=$HOME/.harness
@@ -60,9 +62,18 @@ jobs:
         run: |
           harness plugin test --all
 
-      - name: Verify events schema drift
+      - name: Verify generated catalogues and freshness gates (WS-02)
         run: |
-          harness events schema | diff -u docs/events.schema.json -
+          harness catalog --check --section drift --section settings --section ui
+
+      - name: Verify compiled Tailwind is fresh (vendor/tw.css)
+        run: |
+          npm run build:css
+          git diff --exit-code -- harness/frontends/web/static/vendor/tw.css
+
+      - name: Web UI static audit
+        run: |
+          python tests/frontends/ui_audit.py --strict
 
       - name: Verify clean working tree
         run: |

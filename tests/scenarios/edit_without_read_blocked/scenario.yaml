@@ -1,0 +1,23 @@
+name: edit_without_read_blocked
+kind: kernel
+summary: >-
+  The model tries a surgical edit of a file it never read. The guard blocks it and tells it to read
+  first; after `view_file` the same edit is allowed. The read ledger is derived from the transcript, so
+  the blocked attempt does not count as a read.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: allow
+workspace_files:
+  app.py: "def greet():\n    return 'hi'\n"
+turns:
+  - prompt: "Rename greet() to hello() in app.py"
+expect:
+  tools_called: [edit_file, view_file, edit_file]
+  files:
+    app.py: {contains: "def hello()", not_contains: "def greet()"}
+  model_saw:
+    - "edit_file blocked: app.py has not been read in this session. Read it first."
+  events_match:
+    - {type: tool.result, data: {is_error: true, metadata: {blocked_by: read_before_edit}}}
+  event_types_include: [tool.decision, tool.result]
+  reload_equals_live: true

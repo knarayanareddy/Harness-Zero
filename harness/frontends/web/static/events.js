@@ -3,6 +3,8 @@
  * Handles auto-reconnect, Last-Event-ID tracking, and typed event dispatching (§11).
  */
 
+// Mirrors harness/sdk/events.py KNOWN_EVENT_TYPES (checked by tests/frontends/test_static_contract.py)
+// plus the server's `heartbeat` keep-alive frame.
 export const KNOWN_EVENT_TYPES = [
   'approval.required',
   'approval.resolved',
@@ -11,7 +13,6 @@ export const KNOWN_EVENT_TYPES = [
   'context.assembled',
   'cost.updated',
   'hook.fired',
-  'log',
   'model.completed',
   'model.notice',
   'model.started',
@@ -28,7 +29,9 @@ export const KNOWN_EVENT_TYPES = [
   'tool.call',
   'tool.decision',
   'tool.output.delta',
+  'tool.repeat_detected',
   'tool.result',
+  'tool.result.pruned',
   'turn.cancelled',
   'turn.completed',
   'turn.error',

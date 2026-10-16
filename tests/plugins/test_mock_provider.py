@@ -38,6 +38,7 @@ def mock_provider() -> MockProvider:
 async def test_mock_conformance_provider_kit(mock_provider: MockProvider):
     """Verifies mock provider passes ProviderKit tests."""
     kit = ProviderKit()
+    await kit.test_readiness(mock_provider)
     await kit.test_list_models(mock_provider)
     await kit.test_plain_prompt(mock_provider)
     await kit.test_aclose_idempotent(mock_provider)

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Shell hook bridge settings",
+  "x-namespace": "plugins.bridge-shell-hooks",
+  "properties": {
+    "hooks": {
+      "type": "object",
+      "default": {},
+      "title": "Shell Hooks",
+      "x-ui": {
+        "widget": "json"
+      },
+      "description": "Claude-Code-compatible hook definitions (PreToolUse / PostToolUse / Stop).",
+      "additionalProperties": {
+        "type": "array"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "x-alias-namespaces": {
+    "plugins.shell-hooks": {
+      "hooks": "hooks"
+    }
+  }
+}

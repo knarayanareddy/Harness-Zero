@@ -1,0 +1,2501 @@
+[
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay",
+      "session_id": "<session>",
+      "strategy": "single_loop"
+    },
+    "type": "session.started"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "options": {
+        "max_iterations": 20,
+        "media": [],
+        "model": "replay-v1",
+        "prompt": "Loop forever",
+        "provider": "replay"
+      },
+      "prompt_preview": "Loop forever",
+      "provider": "replay",
+      "strategy": "single_loop"
+    },
+    "record": {
+      "content": "Loop forever",
+      "kind": "user.message",
+      "role": "user",
+      "step_index": 1,
+      "v": 2
+    },
+    "type": "turn.started"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#1",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 2,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#1",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#1",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#1",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#1",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#1",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 3,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#1",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#2",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 5,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#2",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#2",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#2",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#2",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#2",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 6,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#2",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#3",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 8,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#3",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#3",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#3",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#3",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#3",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 9,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#3",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#4",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 11,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#4",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#4",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#4",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#4",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#4",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 12,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#4",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#5",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 14,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#5",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#5",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#5",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#5",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#5",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 15,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#5",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#6",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 17,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#6",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#6",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#6",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#6",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#6",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 18,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#6",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#7",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 20,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#7",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#7",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#7",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#7",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#7",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 21,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#7",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#8",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 23,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#8",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#8",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#8",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#8",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#8",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 24,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#8",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#9",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 26,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#9",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#9",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#9",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#9",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#9",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 27,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#9",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#10",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 29,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#10",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#10",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#10",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#10",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#10",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 30,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#10",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#11",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 32,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#11",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#11",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#11",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#11",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#11",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 33,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#11",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#12",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 35,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#12",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#12",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#12",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#12",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#12",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 36,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#12",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#13",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 38,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#13",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#13",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#13",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#13",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#13",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 39,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#13",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#14",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.001,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 41,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#14",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#14",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#14",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#14",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#14",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 42,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#14",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#15",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.001,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 44,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#15",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#15",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#15",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#15",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#15",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 45,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#15",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#16",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.001,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 47,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#16",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#16",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#16",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#16",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#16",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 48,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#16",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#17",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.001,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 50,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#17",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#17",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#17",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#17",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#17",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 51,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#17",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#18",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.001,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 53,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#18",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#18",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#18",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#18",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#18",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 54,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#18",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#19",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.001,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 56,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#19",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#19",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#19",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#19",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#19",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 57,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#19",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#20",
+      "name": "view_file"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.001,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 59,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#20",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "file_path": "app.py"
+      },
+      "call_id": "call#20",
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "risk": "read"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "allow",
+      "call_id": "call#20",
+      "plugin": "fs-tools",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "record": {
+      "call_id": "call#20",
+      "content": "Tool `view_file` allowed (read).",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "allow",
+        "call_id": "call#20",
+        "plugin": "fs-tools",
+        "policy": "policy_gate",
+        "reason": "OK",
+        "risk": "read"
+      },
+      "role": "system",
+      "step_index": 60,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#20",
+      "is_error": false,
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
+      "name": "view_file",
+      "preview": "    1 | print('x')\n"
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "stop_reason": "max_iterations",
+      "tool_calls": 20,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "Turn completed (max_iterations) with 20 tool call(s).",
+      "kind": "turn.completed",
+      "metadata": {
+        "stop_reason": "max_iterations",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "system",
+      "step_index": 62,
+      "v": 2
+    },
+    "type": "turn.completed"
+  }
+]

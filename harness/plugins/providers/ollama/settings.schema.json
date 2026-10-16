@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Ollama provider settings",
+  "properties": {
+    "base_url": {
+      "type": "string",
+      "default": "http://localhost:11434",
+      "title": "Ollama Base URL",
+      "x-ui": {
+        "group": "Models & Providers",
+        "widget": "text"
+      },
+      "description": "Also the target of the reachability probe behind models.list."
+    }
+  },
+  "additionalProperties": false
+}

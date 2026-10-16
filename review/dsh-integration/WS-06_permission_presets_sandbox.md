@@ -7,7 +7,7 @@
 | Effort | 1 day presets + 3–4 days sandbox |
 | Principles | P3 (primary), P6 |
 | dsh reference (@86a40220) | `packages/core/permission/` (`PermissionPreset` = sandbox mode × approval policy; presets `strict / standard / permissive / unrestricted`-style names, "deny when unanswerable"), `packages/core/sandbox/` (service definition: `SandboxProvider.wrap(command, policy) → command`, `enforcement: "full" | "partial"`, `SANDBOX_UNAVAILABLE`), `packages/platform/sandbox-landlock/` (Linux, own Node addon), `packages/platform/sandbox-seatbelt/` (macOS `sandbox-exec` profile), `packages/platform/sandbox-windows/` (restricted token). `docs/security.md` ("enforcement is a reported fact") |
-| Harness-Zero touchpoints | `harness/plugins/policy/permission_modes/policy.py:25-90` (modes `allow | ask | plan | bypass`, order 900; `kernel.security.permission_mode`, `kernel.security.destructive_blocking`), `harness/kernel/settings.py:41-44`, `harness/kernel/approvals.py:65-67` (no interactive subscriber ⇒ deny — fail-closed already for the broker), `harness/kernel/gate.py:592-597` (executor selection: `registry.executors["default"]` else `["local"]`), `harness/sdk/contracts.py:101-107` (`Executor.start(ExecRequest) -> Process`, `isolation` literal `none|worktree|container|vm`), `harness/sdk/types.py:764-771` (`ExecRequest`: command, cwd, env_overlay, timeout_s, interactive, shell), `harness/plugins/executors/local/executor.py:177-200` (`create_subprocess_shell/exec`), `harness/plugins/executors/worktree/`, `harness/plugins/policy/workspace_jail/` (path jail — *policy*, not OS-level), `docs/05_EXECUTION_SANDBOX_AND_GIT_WORKTREES.md`, `docs/12_TOOL_SAFETY_GUARDRAILS_AND_PERMISSIONS.md` (design intent, not implemented) |
+| Harness-Zero touchpoints | `harness/plugins/policy/permission_modes/policy.py:25-90` (modes `allow | ask | plan | bypass`, order 900; `kernel.security.permission_mode`, `kernel.security.destructive_blocking`), `harness/kernel/settings.py:41-44`, `harness/kernel/approvals.py:65-67` (no interactive subscriber ⇒ deny — fail-closed already for the broker), `harness/kernel/gate.py:592-597` (executor selection: `registry.executors["default"]` else `["local"]`), `harness/sdk/contracts.py:101-107` (`Executor.start(ExecRequest) -> Process`, `isolation` literal `none|worktree|container|vm`), `harness/sdk/types.py:764-771` (`ExecRequest`: command, cwd, env_overlay, timeout_s, interactive, shell), `harness/plugins/executors/local/executor.py:177-200` (`create_subprocess_shell/exec`), `harness/plugins/executors/worktree/`, `harness/plugins/policy/workspace_jail/` (path jail — *policy*, not OS-level), `docs/05_EXECUTION_SANDBOX_AND_GIT_WORKTREES.md`, `docs/research/12_TOOL_SAFETY_GUARDRAILS_AND_PERMISSIONS.md` (design intent, not implemented) |
 
 ## 1. Outcome
 
@@ -108,7 +108,7 @@ harness/kernel/commands.py                     # status.security
 harness/plugins/executors/local/executor.py    # wrap via sandbox backend; metadata.sandbox
 harness/plugins/policy/permission_modes/policy.py   # sandbox dimension; exec_in_sandbox
 harness/plugins/policy/permission_modes/settings.schema.json
-docs/12_TOOL_SAFETY_GUARDRAILS_AND_PERMISSIONS.md    # mark what is implemented vs design
+docs/research/12_TOOL_SAFETY_GUARDRAILS_AND_PERMISSIONS.md    # mark what is implemented vs design
 ```
 
 ### Skeleton: `backend.py` (bwrap)

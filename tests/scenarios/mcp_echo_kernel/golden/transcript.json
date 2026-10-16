@@ -1,0 +1,101 @@
+[
+  {
+    "content": "Echo 'through the kernel' via MCP",
+    "kind": "user.message",
+    "role": "user",
+    "step_index": 1,
+    "v": 2
+  },
+  {
+    "content": "",
+    "kind": "assistant.message",
+    "metadata": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "role": "assistant",
+    "step_index": 2,
+    "tool_calls": [
+      {
+        "arguments": {
+          "message": "through the kernel"
+        },
+        "id": "evt#1",
+        "name": "mcp__echo__echo"
+      }
+    ],
+    "v": 2
+  },
+  {
+    "call_id": "call#1",
+    "content": "Tool `mcp__echo__echo` allowed (read).",
+    "kind": "tool.decision",
+    "metadata": {
+      "action": "allow",
+      "call_id": "call#1",
+      "plugin": "bridge-mcp-client",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "role": "system",
+    "step_index": 3,
+    "v": 2
+  },
+  {
+    "content": "",
+    "kind": "tool.result",
+    "metadata": {
+      "tool_results": true
+    },
+    "role": "user",
+    "step_index": 4,
+    "tool_results": [
+      {
+        "content": [
+          {
+            "text": "echo: through the kernel",
+            "type": "text"
+          }
+        ],
+        "is_error": false,
+        "tool_use_id": "call#1"
+      }
+    ],
+    "v": 2
+  },
+  {
+    "content": "The MCP server echoed the message.",
+    "kind": "assistant.message",
+    "metadata": {
+      "stop_reason": "end_turn",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "role": "assistant",
+    "step_index": 5,
+    "v": 2
+  },
+  {
+    "content": "Turn completed (end_turn) with 1 tool call(s).",
+    "kind": "turn.completed",
+    "metadata": {
+      "stop_reason": "end_turn",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "role": "system",
+    "step_index": 6,
+    "v": 2
+  }
+]

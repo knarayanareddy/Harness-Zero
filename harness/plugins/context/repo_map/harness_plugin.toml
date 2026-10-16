@@ -6,3 +6,6 @@ summary = "Whole-codebase AST symbol mapping and dense architectural context"
 provides = ["context"]
 capabilities = ["fs:read"]
 entry = "harness.plugins.context.repo_map.plugin:RepoMapContextPlugin"
+
+[settings]
+schema = "settings.schema.json"

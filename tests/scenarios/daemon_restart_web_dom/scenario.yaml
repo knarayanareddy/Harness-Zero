@@ -1,0 +1,15 @@
+name: daemon_restart_web_dom
+kind: web
+summary: Two turns through the real client, then the daemon is stopped and started again on the same workspace — the client must land on the same conversation without any click, and no empty session may be created by the restart or the page load.
+recorded_from: synthetic
+turns:
+  - prompt: "Question one"
+  - prompt: "Question two"
+expect:
+  dom_turns_completed: true
+  dom_new_session: false   # no "New session" click: the first prompt must create the session (kernel-side, lazily)
+  dom_restart: true
+  timeline_contains: ["Answer one: Amsterdam.", "Answer two: Rotterdam."]
+  restart_timeline_contains: ["Question one", "Answer one: Amsterdam.", "Question two", "Answer two: Rotterdam."]
+  sessions_after_restart: 1
+  event_types_exclude: [turn.error, turn.cancelled]

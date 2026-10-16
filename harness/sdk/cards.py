@@ -9,20 +9,26 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-BUILTIN_CARD_KINDS = frozenset({
-    "markdown",
-    "code",
-    "diff",
-    "table",
-    "notice",
-    "progress",
-    "tree",
-    "approval",
-    "artifact",
-    "form",
-})
+# The card wire contract: ``kind`` -> the keys a card of that kind may carry in ``data``.
+# Frontends render exactly these keys (see ``static/cards.js``); ``validate_card`` enforces the
+# required subset. Custom plugin kinds (``x-...``) are not listed and pass through unconstrained.
+CARD_FIELDS: dict[str, frozenset[str]] = {
+    "markdown": frozenset({"body"}),
+    "code": frozenset({"language", "body", "path"}),
+    "diff": frozenset({"path", "unified", "stats"}),
+    "table": frozenset({"columns", "rows"}),
+    "notice": frozenset({"level", "body"}),
+    "progress": frozenset({"label", "value"}),
+    "tree": frozenset({"nodes"}),
+    "approval": frozenset({"approval_id", "summary", "details", "options"}),
+    "artifact": frozenset({"name", "media_type", "url", "request_feedback"}),
+    "form": frozenset({"form_id", "schema", "submit_label"}),
+}
 
-NoticeLevel = Literal["info", "warn", "error"]
+BUILTIN_CARD_KINDS = frozenset(CARD_FIELDS)
+
+NOTICE_LEVELS: tuple[str, ...] = ("info", "success", "warn", "error")
+NoticeLevel = Literal["info", "success", "warn", "error"]
 
 
 @dataclass(slots=True)
@@ -140,6 +146,12 @@ def validate_card(card: Card) -> Card:
 
     data = card.data
     k = card.kind
+    if not isinstance(data, dict):
+        raise ValueError(f"Card '{k}' data must be an object")
+    if k in CARD_FIELDS:
+        unknown = sorted(set(data) - CARD_FIELDS[k])
+        if unknown:
+            raise ValueError(f"Card '{k}' has undeclared data fields {unknown}; allowed: {sorted(CARD_FIELDS[k])}")
 
     if k == "markdown":
         if "body" not in data or not isinstance(data["body"], str):
@@ -172,8 +184,8 @@ def validate_card(card: Card) -> Card:
         if "body" not in data or not isinstance(data["body"], str):
             raise ValueError("Card 'notice' missing required string field 'body'")
         level = data.get("level", "info")
-        if level not in ("info", "warn", "error"):
-            raise ValueError(f"Card 'notice' level must be 'info', 'warn', or 'error', got '{level}'")
+        if level not in NOTICE_LEVELS:
+            raise ValueError(f"Card 'notice' level must be one of {NOTICE_LEVELS}, got '{level}'")
 
     elif k == "progress":
         if "label" not in data or not isinstance(data["label"], str):

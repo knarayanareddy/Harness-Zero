@@ -44,6 +44,8 @@ def main(ctx: click.Context):
 @click.option("--kernel", is_flag=True, default=True, help="Use modular kernel runtime (default: True)")
 @click.option("--verbose", "-v", is_flag=True, default=False, help="Verbose logging")
 @click.option("--log-file", default=None, help="Log file path")
+@click.option("--continue", "-c", "continue_", is_flag=True, default=False,
+              help="Continue the workspace's last conversation instead of starting a new session")
 def run(
     prompt: str,
     workspace: str,
@@ -53,9 +55,10 @@ def run(
     kernel: bool,
     verbose: bool,
     log_file: str | None,
+    continue_: bool,
 ):
     """Execute a single autonomous turn via modular kernel."""
-    asyncio.run(_run_kernel_turn(prompt, Path(workspace), provider, model, mock_script, verbose, log_file))
+    asyncio.run(_run_kernel_turn(prompt, Path(workspace), provider, model, mock_script, verbose, log_file, resume=continue_))
 
 
 async def _run_kernel_turn(
@@ -66,6 +69,7 @@ async def _run_kernel_turn(
     mock_script: str | None,
     verbose: bool,
     log_file: str | None,
+    resume: bool = False,
 ):
     try:
         overrides: dict[str, Any] = {}
@@ -80,6 +84,7 @@ async def _run_kernel_turn(
             log_file=Path(log_file) if log_file else None,
             verbose=verbose,
             overrides=overrides,
+            resume_session=resume,  # one-shot runs start fresh unless --continue
         )
 
         app = CliApp(commands=runtime.commands, bus=runtime.bus, interactive=False)
@@ -112,6 +117,8 @@ async def _run_kernel_turn(
 @click.option("--kernel", is_flag=True, default=True, help="Use modular kernel runtime (default: True)")
 @click.option("--verbose", "-v", is_flag=True, default=False, help="Verbose logging")
 @click.option("--log-file", default=None, help="Log file path")
+@click.option("--new", "-n", "new_session", is_flag=True, default=False,
+              help="Start a new session instead of resuming the workspace's last conversation")
 def interactive(
     workspace: str,
     provider: str | None,
@@ -120,9 +127,10 @@ def interactive(
     kernel: bool,
     verbose: bool,
     log_file: str | None,
+    new_session: bool,
 ):
     """Start an interactive pair-programming session with slash commands."""
-    asyncio.run(_run_kernel_interactive(Path(workspace), provider, model, mock_script, verbose, log_file))
+    asyncio.run(_run_kernel_interactive(Path(workspace), provider, model, mock_script, verbose, log_file, resume=not new_session))
 
 
 async def _run_kernel_interactive(
@@ -132,15 +140,17 @@ async def _run_kernel_interactive(
     mock_script: str | None,
     verbose: bool,
     log_file: str | None,
+    resume: bool = True,
 ):
     try:
         runtime = await bootstrap_kernel(
             workspace=workspace,
             log_file=Path(log_file) if log_file else None,
             verbose=verbose,
+            resume_session=resume,
         )
         if mock_script:
-            runtime.settings.set("providers.mock.script_file", mock_script)
+            runtime.settings.set("plugins.provider-mock.script_file", mock_script)
             if not provider:
                 provider = "mock"
 
@@ -274,6 +284,44 @@ def events_schema():
     """Output JSON schema for Harness-Zero event envelopes."""
     from harness.sdk.events import schema
     click.echo(json.dumps(schema(), indent=2))
+
+
+@main.group()
+def sessions():
+    """Session log maintenance (the log is the source; everything else is derived)."""
+    pass
+
+
+@sessions.command(name="reindex")
+@click.option("--workspace", "-w", default=".", help="Workspace path")
+@click.option("--dry-run", is_flag=True, default=False, help="Count what a rebuild would index; write nothing")
+def sessions_reindex(workspace: str, dry_run: bool):
+    """Rebuild the FTS5 search index from the session log.
+
+    Safe at any time: `sessions/<id>/transcript.jsonl` is the source of truth and the search index is
+    derived from it, so a rebuild is a repair, not a rewrite of history. Run it after a crash, a partial
+    write, or a record-format upgrade; `harness sessions reindex --dry-run` first to see the size.
+    """
+    from harness.plugins.stores.fts5_search.index import FTS5SearchIndex
+    from harness.sdk.paths import memory_db_path, sessions_dir
+
+    ws = Path(workspace).resolve()
+    src = sessions_dir(ws)
+    index = FTS5SearchIndex(memory_db_path(ws))
+    try:
+        found, rows = index.rebuild_from_sessions(src, dry_run=dry_run)
+    finally:
+        index.close()
+    verb = "would re-index" if dry_run else "re-indexed"
+    console.print(
+        f"[bold]{verb}[/bold] {rows} record(s) from {found} session(s) in {src}"
+        + ("  (nothing written)" if dry_run else "")
+    )
+
+
+from harness.cli_catalog import catalog as _catalog_group  # noqa: E402  (WS-02)
+
+main.add_command(_catalog_group)
 
 
 @main.group()

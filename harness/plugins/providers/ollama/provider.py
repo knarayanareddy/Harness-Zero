@@ -75,6 +75,11 @@ class OllamaProvider:
         max_context_tokens=131072,
     )
 
+    #: How long one ``/api/tags`` verdict (up or down, and the installed models) is trusted.
+    PROBE_TTL_S: float = 30.0
+    #: Budget for the liveness probe — a local daemon answers in milliseconds or not at all.
+    PROBE_TIMEOUT_S: float = 0.3
+
     def __init__(
         self,
         name: str = "ollama",
@@ -94,29 +99,34 @@ class OllamaProvider:
                 pool=10.0,
             )
         )
-        self._cached_models: list[ModelInfo] | None = None
-        self._cached_models_ts: float = 0.0
+        # One probe feeds both is_reachable() and list_models(): (timestamp, up?, installed models)
+        self._probe_ts: float = 0.0
+        self._probe_up: bool | None = None
+        self._installed: list[ModelInfo] = []
 
     async def aclose(self) -> None:
         if not self._external_client and not self._client.is_closed:
             await self._client.aclose()
 
-    async def list_models(self) -> list[ModelInfo]:
-        """Queries /api/tags for installed models with fallback to defaults."""
-        now = time.time()
-        if self._cached_models and (now - self._cached_models_ts) < 60:
-            return self._cached_models
+    def is_configured(self) -> bool:
+        """Ollama needs no credentials; whether it is *running* is `is_reachable()`'s answer."""
+        return True
 
+    async def _probe(self) -> bool:
+        """``GET /api/tags`` with a short timeout, cached for ``PROBE_TTL_S``. Never raises."""
+        now = time.time()
+        if self._probe_up is not None and (now - self._probe_ts) < self.PROBE_TTL_S:
+            return self._probe_up
+        up = False
+        installed: list[ModelInfo] = []
         try:
-            resp = await self._client.get(f"{self.base_url}/api/tags")
+            resp = await self._client.get(f"{self.base_url}/api/tags", timeout=self.PROBE_TIMEOUT_S)
             if resp.status_code == 200:
-                data = resp.json()
-                raw_models = data.get("models", [])
-                models: list[ModelInfo] = []
-                for m in raw_models:
+                up = True
+                for m in resp.json().get("models", []):
                     m_name = m.get("name", "")
                     if m_name:
-                        models.append(
+                        installed.append(
                             ModelInfo(
                                 id=m_name,
                                 display_name=f"{m_name} (Local)",
@@ -125,16 +135,19 @@ class OllamaProvider:
                                 output_usd_per_mtok=0.0,
                             )
                         )
-                if models:
-                    self._cached_models = models
-                    self._cached_models_ts = now
-                    return models
-        except Exception as e:
-            logger.debug("Ollama /api/tags unavailable: %s", e)
+        except Exception as e:  # noqa: BLE001 — "down" is an answer, not an error
+            logger.debug("Ollama %s unreachable: %s", self.base_url, e)
+        self._probe_ts, self._probe_up, self._installed = now, up, installed
+        return up
 
-        self._cached_models = DEFAULT_OLLAMA_MODELS
-        self._cached_models_ts = now
-        return DEFAULT_OLLAMA_MODELS
+    async def is_reachable(self) -> bool:
+        return await self._probe()
+
+    async def list_models(self) -> list[ModelInfo]:
+        """Installed models when Ollama is up; the built-in catalogue (flagged unreachable upstream) when not."""
+        if await self._probe() and self._installed:
+            return list(self._installed)
+        return list(DEFAULT_OLLAMA_MODELS)
 
     def _prepare_payload(self, req: ModelRequest, use_xml_tools: bool = False) -> dict[str, Any]:
         """Prepares OpenAI-compatible payload, either with native tools or XML prompt fallback."""

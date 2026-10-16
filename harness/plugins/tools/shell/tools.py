@@ -5,6 +5,7 @@ Absorbs TOOL-03 and LOOP-01.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from typing import Any
 
@@ -127,6 +128,11 @@ async def handle_run_command(args: dict[str, Any], ctx: ToolContext) -> ToolResu
         interactive=True,
     )
     proc = await ctx.executor.start(req)
+    # WS-03: register with the gate's context so a timed-out call stops this child instead of
+    # leaving it running with the pipe open.
+    track = getattr(ctx, "track_process", None)
+    if track is not None:
+        track(proc)
 
     wait_s = max(0.0, wait_ms / 1000.0)
     if wait_s == 0.0:
@@ -155,11 +161,37 @@ async def handle_run_command(args: dict[str, Any], ctx: ToolContext) -> ToolResu
     drain_task = asyncio.create_task(_drain())
     wait_proc_task = asyncio.create_task(proc.wait())
 
+    # WS-03: listen for the gate's stop signal while waiting, so a command that outlives its
+    # deadline returns the output it already produced instead of being cancelled mid-await.
+    cancel_wait: asyncio.Task | None = None
+    waiters = [wait_proc_task]
+    if isinstance(getattr(ctx, "cancel_event", None), asyncio.Event):
+        cancel_wait = asyncio.create_task(ctx.cancel_event.wait())
+        waiters.append(cancel_wait)
+
     done, _ = await asyncio.wait(
-        [wait_proc_task],
+        waiters,
         timeout=wait_s,
-        return_when=asyncio.ALL_COMPLETED,
+        return_when=asyncio.FIRST_COMPLETED,
     )
+
+    if cancel_wait is not None and cancel_wait in done:
+        with contextlib.suppress(Exception):
+            await proc.kill(grace_s=0.5)
+            await proc.wait()
+        drain_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await drain_task
+        out = "".join(stdout_acc)
+        err = "".join(stderr_acc)
+        body = out + (f"\n[stderr]\n{err}" if err else "")
+        return ToolResult.text(
+            (body or "(no output)") + "\n[stopped: the tool call exceeded its deadline]",
+            is_error=True,
+            cancelled=True,
+        )
+    if cancel_wait is not None:
+        cancel_wait.cancel()
 
     if wait_proc_task in done:
         await drain_task

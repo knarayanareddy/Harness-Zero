@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import inspect
 import logging
 import os
 import tempfile
@@ -15,18 +16,60 @@ from pathlib import Path
 from typing import Any
 
 from harness.kernel.bus import EventBus
+from harness.kernel.economics import economics_snapshot
 from harness.kernel.gate import PolicyGate
+from harness.kernel.plugin_paths import plugin_dir
 from harness.kernel.registry import PluginRegistry
 from harness.kernel.runner import TurnRunner
 from harness.kernel.secrets import Secrets
 from harness.kernel.session import SessionManager
 from harness.kernel.settings import SettingsStore
+from harness.kernel.settings_schema import (
+    flatten_schema_properties,
+    order_groups,
+    settings_owner_index,
+    with_ui_defaults,
+)
 from harness.kernel.validators import validate_session_id
+from harness.sdk.cards import Card
+from harness.sdk.contracts import Provider
 from harness.sdk.errors import HarnessError
-from harness.sdk.events import Event
-from harness.sdk.types import TurnResult
+from harness.sdk.events import Event, SettingsChanged, UiCard
+from harness.sdk.types import RECORD_KINDS, ModelRow, TurnResult
 
 logger = logging.getLogger(__name__)
+
+#: Every built-in command a frontend can dispatch; the handler is the method ``name.replace(".", "_")``.
+#: ``docs/ARCHITECTURE.md`` lists them and ``tests/test_docs_and_versions.py`` keeps the two in sync.
+BUILTIN_COMMANDS: tuple[str, ...] = (
+    "submit_turn",
+    "cancel_turn",
+    "resolve_approval",
+    "form.submit",
+    "form_submit",  # underscore alias of form.submit, kept for external callers
+    "sessions.list",
+    "sessions.create",
+    "sessions.get",
+    "sessions.switch",
+    "settings.get",
+    "settings.set",
+    "settings.schema",
+    "models.list",
+    "files.read",
+    "files.write",
+    "plugins.list",
+    "plugins.info",
+    "plugins.enable",
+    "plugins.disable",
+    "approvals.list",
+    "economics",
+    # The client's boot-time vocabulary (WS-05): what may be dispatched, and what to mount. Both exist so the
+    # shipped client stops hard-coding the answer — a button wired to a command that no longer exists, or a
+    # panel a disabled plugin still contributes, is a bug the contract test can only catch if the client asks
+    # the kernel instead of remembering.
+    "commands.list",
+    "ui.contributions",
+)
 
 
 class Commands:
@@ -125,7 +168,9 @@ class Commands:
             raise HarnessError("Missing 'approval_id' or 'request_id'")
         is_approved = approved if approved is not None else (decision == "approved")
         res_reason = reason or feedback
-        ok = self.gate.approvals.resolve(
+        # Log-before-emit (WS-04): the resolution is a record, and the event carries it, so a reloaded
+        # session shows who decided what instead of an approval card stuck on "pending".
+        ok = await self.gate.approvals.resolve_recorded(
             approval_id=target_id,
             approved=is_approved,
             by=by,
@@ -159,7 +204,11 @@ class Commands:
         if not session:
             raise HarnessError(f"Session '{session_id}' not found")
 
-        records = await session.transcript.read(compact=False)
+        # Read through the session log, not the raw store: v1 lines get upgraded and gain a `kind`, so
+        # the client renders a reloaded session with exactly the records the live session produced
+        # (WS-04). `records` is the one history shape the UI consumes — there is no second `history` key
+        # to keep in step with it.
+        records = await session.get_history()
         return {
             "session_id": session_id,
             "workspace": str(session.workspace),
@@ -195,120 +244,86 @@ class Commands:
         if path.startswith("secrets."):
             secret_key = path.split(".", 1)[1]
             self.secrets.set(secret_key, str(value))
+            self._publish_settings_changed([path])
             return {"path": path, "status": "ok", "has": True}
         self.settings.set(path, value)
+        self._publish_settings_changed([path])
         return {"path": path, "value": value, "status": "ok"}
 
-    async def settings_schema(self) -> dict[str, Any]:
-        """Returns consolidated schema with x-ui groups and widgets (§11, WEB-05)."""
-        registered = self.settings.get_registered_schemas()
-        kernel_props = registered.get("kernel", {}).get("properties", {})
-        return {
-            "groups": [
-                "Models & Providers",
-                "Security & Sandboxing",
-                "Execution & Strategies",
-                "Economics & Spend",
-                "Secrets",
-            ],
-            "properties": {
-                "kernel.provider": {
-                    "title": "Default Provider",
-                    "type": "string",
-                    "enum": ["openai_compat", "anthropic", "gemini", "ollama", "mock"],
-                    "default": kernel_props.get("provider", {}).get("default", "openai_compat"),
-                    "x-ui": {"group": "Models & Providers", "widget": "select"},
-                },
-                "kernel.model": {
-                    "title": "Default Model",
-                    "type": "string",
-                    "default": kernel_props.get("model", {}).get("default", "gpt-4o"),
-                    "x-ui": {"group": "Models & Providers", "widget": "text"},
-                },
-                "kernel.strategy": {
-                    "title": "Turn Strategy",
-                    "type": "string",
-                    "enum": ["single_loop", "architect_editor"],
-                    "default": kernel_props.get("strategy", {}).get("default", "single_loop"),
-                    "x-ui": {"group": "Execution & Strategies", "widget": "select"},
-                },
-                "kernel.max_tool_iterations": {
-                    "title": "Max Tool Iterations",
-                    "type": "integer",
-                    "default": kernel_props.get("max_tool_iterations", {}).get("default", 20),
-                    "x-ui": {"group": "Execution & Strategies", "widget": "number"},
-                },
-                "kernel.security.spend_cap_usd": {
-                    "title": "Spend Cap (USD)",
-                    "type": "number",
-                    "default": 5.0,
-                    "minimum": 0.0,
-                    "x-ui": {"group": "Economics & Spend", "widget": "number"},
-                },
-                "kernel.security.jail_enabled": {
-                    "title": "Workspace Jail Enforcement",
-                    "type": "boolean",
-                    "default": True,
-                    "x-ui": {"group": "Security & Sandboxing", "widget": "boolean"},
-                },
-                "secrets.OPENAI_API_KEY": {
-                    "title": "OpenAI API Key",
-                    "type": "string",
-                    "x-ui": {"group": "Secrets", "widget": "secret"},
-                },
-                "secrets.ANTHROPIC_API_KEY": {
-                    "title": "Anthropic API Key",
-                    "type": "string",
-                    "x-ui": {"group": "Secrets", "widget": "secret"},
-                },
-                "secrets.GEMINI_API_KEY": {
-                    "title": "Gemini API Key",
-                    "type": "string",
-                    "x-ui": {"group": "Secrets", "widget": "secret"},
-                },
-                "secrets.TIRITH_API_KEY": {
-                    "title": "Tirith Security Key",
-                    "type": "string",
-                    "x-ui": {"group": "Secrets", "widget": "secret"},
-                },
-            },
-        }
+    def _publish_settings_changed(self, paths: list[str]) -> None:
+        """Tells every frontend which setting paths changed (values are never put on the bus)."""
+        if self.bus:
+            self.bus.publish(Event(type="settings.changed", data=SettingsChanged(paths=paths)))
 
-    def _is_provider_configured(self, provider_name: str, provider_instance: Any = None) -> bool:
-        """Determines whether a model provider has the necessary secrets or local runtime."""
-        if provider_name in ("mock", "ollama"):
-            return True
-        if provider_instance and getattr(provider_instance, "api_key", ""):
-            return True
-        keys_to_check = [
-            f"{provider_name}_api_key",
-            f"{provider_name.upper()}_API_KEY",
-        ]
-        if provider_name == "openai_compat":
-            keys_to_check.extend([
-                "openai_api_key",
-                "openrouter_api_key",
-                "deepseek_api_key",
-                "OPENAI_API_KEY",
-                "OPENROUTER_API_KEY",
-                "DEEPSEEK_API_KEY",
-            ])
-        return any(self.secrets.has(k) for k in keys_to_check)
+    async def settings_schema(self) -> dict[str, Any]:
+        """``settings.schema`` → the settings surface aggregated from the *registered* schemas.
+
+        Every property here comes from a JSON Schema the loader actually registered: the kernel's
+        ``KERNEL_SCHEMA`` (only properties carrying ``x-ui``, so internal flags such as
+        ``kernel.plugins.disabled`` stay out of the panel), each plugin's ``settings.schema.json``
+        (WS-02), and the union of secret keys the plugins declared they read. Nothing is a
+        hand-kept list, so a setting cannot appear in the UI without a reader — and the provider
+        and strategy enums are the components that actually loaded, not a literal.
+
+        Response shape (the client's contract): ``{"groups": [...], "properties": {key: schema}}``
+        with ``x-ui.group`` choosing the tab and ``x-ui.widget`` the control.
+        """
+        registered = self.settings.get_registered_schemas()
+        alias_namespaces = getattr(self.registry, "alias_namespaces", frozenset())
+        # Which tab a plugin's settings default to, and who owns them, comes from the *registry* (its family
+        # directory and its manifest summary) — so adding a plugin needs no entry anywhere else, and the
+        # catalogue computes the same thing from the same index.
+        owners = settings_owner_index(self.registry)
+
+        props: dict[str, Any] = {}
+        for namespace in sorted(registered):
+            if namespace in alias_namespaces or namespace == "secrets":
+                continue  # aliases duplicate a shown key; secrets are appended as one group
+            flat = flatten_schema_properties(registered[namespace].get("properties", {}))
+            for key, prop in flat.items():
+                if namespace == "kernel" and "x-ui" not in prop:
+                    continue
+                props[f"{namespace}.{key}"] = with_ui_defaults(prop, namespace, **owners.get(namespace, {}))
+
+        for key, prop in registered.get("secrets", {}).get("properties", {}).items():
+            props[f"secrets.{key}"] = with_ui_defaults(prop, "secrets")
+
+        providers = sorted({prov.name for prov in self.registry.get_all_providers()})
+        if providers and "kernel.provider" in props:
+            props["kernel.provider"] = {**props["kernel.provider"], "enum": providers}
+        strategies = self.registry.strategy_names()
+        if strategies and "kernel.strategy" in props:
+            props["kernel.strategy"] = {**props["kernel.strategy"], "enum": strategies}
+
+        present = {prop.get("x-ui", {}).get("group") for prop in props.values()}
+        if "secrets" in registered:
+            present.add("Secrets")
+        # Ordered by the schemas themselves, not by a list of tab names kept in the kernel: a plugin's group
+        # is a tab whether or not anyone here has heard of it (WS-05).
+        groups = order_groups(sorted(g for g in present if g), props)
+        return {"groups": groups, "properties": props}
 
     async def models_list(self) -> list[dict[str, Any]]:
-        """Aggregates models supported across all registered providers, flagging configured status."""
-        results: list[dict[str, Any]] = []
-        for p in self.registry.get_all_providers():
+        """``models.list`` → ``ModelRow`` dicts for every model every provider knows about.
+
+        Readiness comes from the provider itself (``is_configured()`` / ``is_reachable()``), never from
+        name heuristics here. Probes run concurrently and are short by contract; a provider that fails is
+        logged at DEBUG and contributes no rows — this command never raises.
+        """
+
+        async def rows_for(p: Provider) -> list[dict[str, Any]]:
             try:
+                configured = bool(p.is_configured())
+                reachable = await p.is_reachable()
                 models = await p.list_models()
-                configured = self._is_provider_configured(p.name, p)
-                for m in models:
-                    d = m.to_dict()
-                    d["provider"] = p.name
-                    d["configured"] = configured
-                    results.append(d)
-            except Exception as e:
-                logger.warning(f"Error querying models from provider '{p.name}': {e}")
+            except Exception as e:  # noqa: BLE001 — one broken provider must not hide the others
+                logger.debug("models.list: provider %r unavailable: %s", p.name, e)
+                return []
+            return [ModelRow.from_info(m, p.name, configured=configured, reachable=reachable).to_dict() for m in models]
+
+        results: list[dict[str, Any]] = []
+        for rows in await asyncio.gather(*(rows_for(p) for p in self.registry.get_all_providers())):
+            results.extend(rows)
         return results
 
     async def files_read(self, path: str) -> dict[str, Any]:
@@ -363,9 +378,35 @@ class Commands:
         }
 
     async def plugins_list(self) -> list[dict[str, Any]]:
-        """Lists all discovered plugins and their active load status."""
+        """Lists every discovered plugin with what an operator needs in order to judge it.
+
+        Three callers read this row — `harness plugin list`, the TUI, and the Studio's Plugins pane — so it
+        carries more than a name: the capability family it came from, whether the user switched it off, how
+        many settings it brings and which tab they live on, and whether it contributes any UI at all. A
+        plugin browser that cannot answer "does this one do anything I can see?" is a list of directories.
+
+        The two state flags are deliberately not collapsed. ``loaded`` is the live answer
+        (`registry.is_loaded`); ``disabled`` is the user's intent for the **next start**, because
+        `plugins.enable` / `plugins.disable` only write ``kernel.plugins.disabled`` and nothing hot-unloads a
+        plugin mid-session. Reporting one boolean would imply a restart never matters. Settings ownership and
+        the tab come from the same derivation the settings surface uses (`settings_owner_index` +
+        ``x-ui.group``), so a pane cannot disagree with the modal about where a plugin's controls are.
+        """
+        registered = self.settings.get_registered_schemas()
+        disabled = {str(name) for name in self.settings.get("kernel.plugins.disabled", []) or []}
+        owners = settings_owner_index(self.registry)
         results: list[dict[str, Any]] = []
         for name, dp in self.registry.discovered.items():
+            namespace = f"plugins.{name}"
+            meta = owners.get(namespace, {})
+            props = flatten_schema_properties(registered.get(namespace, {}).get("properties", {}))
+            group: str | None = None
+            for prop in props.values():
+                declared = with_ui_defaults(prop, namespace, **meta).get("x-ui", {}).get("group")
+                if declared:
+                    group = str(declared)
+                    break
+            ui = getattr(dp.manifest, "ui", None)
             results.append({
                 "name": name,
                 "version": dp.manifest.version,
@@ -377,6 +418,14 @@ class Commands:
                 ],
                 "tier": dp.tier.value,
                 "loaded": self.registry.is_loaded(name),
+                "disabled": name in disabled,
+                "family": meta.get("family"),
+                "has_settings": bool(props),
+                "settings_count": len(props),
+                "settings_group": group,
+                "panels": sorted(panel.id for panel in getattr(ui, "panels", None) or []),
+                "record_renderers": sorted(getattr(ui, "record_renderers", None) or []),
+                "client_module": getattr(ui, "client_module", None),
             })
         return results
 
@@ -396,7 +445,8 @@ class Commands:
             ],
             "tier": dp.tier.value,
             "loaded": self.registry.is_loaded(name),
-            "path": str(dp.path),
+            "path": str(plugin_dir(dp)),
+            "settings_schema": dp.manifest.settings_schema,
         }
 
     async def plugins_enable(self, name: str) -> bool:
@@ -422,17 +472,18 @@ class Commands:
         return self.gate.approvals.pending()
 
     async def economics(self, session_id: str | None = None) -> dict[str, Any]:
-        """Returns spend and token usage ledger totals."""
-        turn_cost = self.runner.cost_ledger
-        totals = None
-        if turn_cost:
-            totals = await turn_cost.totals(session_id=session_id)
+        """Returns the ``EconomicsSnapshot`` for a session (defaults to the active session).
 
-        spend_cap = self.settings.get("kernel.security.spend_cap_usd", 5.0)
-        return {
-            "spend_cap_usd": spend_cap,
-            "totals": totals.to_dict() if totals else None,
-        }
+        Same shape as the ``cost.updated`` event payload and ``GET /health`` ``spend``.
+        """
+        if session_id is None and self.session_manager.active_session:
+            session_id = self.session_manager.active_session.session_id
+        snapshot = await economics_snapshot(
+            ledger=self.runner.cost_ledger,
+            settings=self.settings,
+            session_id=session_id,
+        )
+        return snapshot.to_dict()
 
     async def form_submit(self, form_id: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
         """Handles human interactive form submission from studio frontends."""
@@ -441,49 +492,80 @@ class Commands:
             self.bus.publish(
                 Event(
                     type="ui.card",
-                    data={
-                        "card": {
-                            "kind": "notice",
-                            "payload": {
-                                "level": "success",
-                                "message": f"Form '{form_id}' submitted.",
-                            },
-                        }
-                    },
+                    data=UiCard(
+                        card=Card.notice(f"Form '{form_id}' submitted.", level="success", title="Form submitted").to_dict()
+                    ),
                     session_id=self.session_manager.active_session.session_id if self.session_manager.active_session else None,
                 )
             )
         return {"form_id": form_id, "status": "submitted", "data": payload}
 
-    async def dispatch(self, command: str, args: dict[str, Any] | None = None) -> Any:
-        """Generic command dispatcher for JSON-based frontend interfaces."""
-        params = args or {}
-        cmd_map = {
-            "submit_turn": self.submit_turn,
-            "cancel_turn": self.cancel_turn,
-            "resolve_approval": self.resolve_approval,
-            "form.submit": self.form_submit,
-            "form_submit": self.form_submit,
-            "sessions.list": self.sessions_list,
-            "sessions.create": self.sessions_create,
-            "sessions.get": self.sessions_get,
-            "sessions.switch": self.sessions_switch,
-            "settings.get": self.settings_get,
-            "settings.set": self.settings_set,
-            "settings.schema": self.settings_schema,
-            "models.list": self.models_list,
-            "files.read": self.files_read,
-            "files.write": self.files_write,
-            "plugins.list": self.plugins_list,
-            "plugins.info": self.plugins_info,
-            "plugins.enable": self.plugins_enable,
-            "plugins.disable": self.plugins_disable,
-            "approvals.list": self.approvals_list,
-            "economics": self.economics,
+    async def commands_list(self) -> list[dict[str, Any]]:
+        """``commands.list`` → every command a frontend may dispatch, with its argument names.
+
+        The dispatch table is the source: built-ins are this class's methods (``name.replace(".", "_")``) and
+        plugin commands are the registered custom ones, so a frontend can check its own bindings against
+        reality instead of against a list kept in a JS file. ``alias_of`` marks the underscore spellings kept
+        for external callers and ``exposed`` is false for them: an alias is a compatibility shim, not something
+        to put on a button.
+        """
+        out: list[dict[str, Any]] = []
+        names = set(BUILTIN_COMMANDS) | set(self._custom_commands)
+        for name in sorted(names):
+            handler = self._custom_commands.get(name) or getattr(self, name.replace(".", "_").replace("-", "_"), None)
+            args: list[str] = []
+            if handler is not None:
+                args = [
+                    param.name
+                    for param in inspect.signature(handler).parameters.values()
+                    if param.kind in (param.POSITIONAL_OR_KEYWORD, param.KEYWORD_ONLY)
+                ]
+            alias_of = None
+            if "_" in name:
+                dotted = name.replace("_", ".", 1)
+                if dotted in BUILTIN_COMMANDS:
+                    alias_of = dotted
+            out.append({"name": name, "args": args, "alias_of": alias_of, "exposed": alias_of is None})
+        return out
+
+    async def ui_contributions(self) -> dict[str, Any]:
+        """``ui.contributions`` → what the client mounts: panels, record renderers, client modules, settings tabs.
+
+        One request at boot replaces three lists the client used to keep by hand. A panel is a declaration plus
+        a dispatchable command, so a feature's pane disappears with the feature: disabling it unloads the
+        manifest, and an unloaded manifest contributes nothing (WS-05).
+        """
+        contrib = self.registry.ui_contributions()
+        schema = await self.settings_schema()
+        rows = await self.commands_list()
+        dispatchable = {row["name"] for row in rows if row["exposed"]}
+        accepts = {row["name"]: list(row.get("args") or []) for row in rows}
+        # A panel whose command does not exist is a tab that shows an error, so it is not handed out at all —
+        # and it is reported in the same response, which is what lets the contract test fail on the cause
+        # rather than on a panel that silently never renders.
+        panels, broken = [], []
+        for panel in contrib["panels"]:
+            # `accepts` is the argument names the panel's command takes, so a client that has to choose what to
+            # send (the generic renderer refreshes with the active session) reads the signature instead of
+            # guessing it: `dispatch` forwards args as keyword arguments, so one unexpected `session_id` is a
+            # TypeError and an empty pane. The three built-in panels all happened to accept it, which is the
+            # only reason no one met this before a plugin declared a fourth over `plugins.list` (R61).
+            (panels if panel["command"] in dispatchable else broken).append(
+                {**panel, "accepts": accepts.get(panel["command"], [])}
+            )
+        return {
+            **contrib,
+            "panels": panels,
+            "unbacked_panels": broken,
+            "settings_groups": schema["groups"],
+            "record_kinds": sorted(RECORD_KINDS),
         }
 
-        if command in cmd_map:
-            handler = cmd_map[command]
+    async def dispatch(self, command: str, args: dict[str, Any] | None = None) -> Any:
+        """Generic command dispatcher for JSON-based frontend interfaces (``POST /commands/<name>``)."""
+        params = args or {}
+        if command in BUILTIN_COMMANDS:
+            handler = getattr(self, command.replace(".", "_"))
             return await handler(**params)
 
         if command in self._custom_commands:

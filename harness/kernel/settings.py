@@ -26,14 +26,40 @@ KERNEL_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
-        "provider": {"type": "string", "default": ""},
-        "model": {"type": "string", "default": ""},
+        "provider": {
+            "type": "string",
+            "default": "",
+            "title": "Default Provider",
+            "x-ui": {"group": "Models & Providers", "widget": "select"},
+        },
+        "model": {
+            "type": "string",
+            "default": "",
+            "title": "Default Model",
+            "x-ui": {"group": "Models & Providers", "widget": "text"},
+        },
         "strategy": {
             "type": "string",
             "default": "single_loop",
             "enum": ["single_loop", "architect_editor", "architect"],
+            "title": "Turn Strategy",
+            "x-ui": {"group": "Execution & Strategies", "widget": "select"},
         },
-        "max_tool_iterations": {"type": "integer", "default": 20, "minimum": 1},
+        "max_tool_iterations": {
+            "type": "integer",
+            "default": 20,
+            "minimum": 1,
+            "title": "Max Tool Iterations",
+            "x-ui": {"group": "Execution & Strategies", "widget": "number"},
+        },
+        "request_timeout_s": {
+            "type": "number",
+            "default": 60.0,
+            "minimum": 1.0,
+            "title": "Provider Request Timeout (s)",
+            "description": "HTTP timeout the Anthropic and Gemini providers use; Ollama applies 120 s.",
+            "x-ui": {"group": "Execution & Strategies", "widget": "number"},
+        },
         "security": {
             "type": "object",
             "additionalProperties": False,
@@ -42,17 +68,42 @@ KERNEL_SCHEMA: dict[str, Any] = {
                     "type": "string",
                     "default": "ask",
                     "enum": ["allow", "ask", "plan", "bypass"],
+                    "title": "Permission Mode",
+                    "x-ui": {"group": "Security & Sandboxing", "widget": "select"},
                 },
-                "destructive_blocking": {"type": "boolean", "default": True},
-                "approval_timeout_s": {"type": "integer", "default": 300, "minimum": 0},
-                "spend_cap_usd": {"type": "number", "default": 5.0, "minimum": 0.0},
+                "destructive_blocking": {
+                    "type": "boolean",
+                    "default": True,
+                    "title": "Block Destructive Commands",
+                    "x-ui": {"group": "Security & Sandboxing", "widget": "boolean"},
+                },
+                "approval_timeout_s": {
+                    "type": "integer",
+                    "default": 300,
+                    "minimum": 0,
+                    "title": "Approval Timeout (s)",
+                    "x-ui": {"group": "Security & Sandboxing", "widget": "number"},
+                },
+                "spend_cap_usd": {
+                    "type": "number",
+                    "default": 5.0,
+                    "minimum": 0.0,
+                    "title": "Spend Cap (USD)",
+                    "x-ui": {"group": "Economics & Spend", "widget": "number"},
+                },
             },
         },
         "context": {
             "type": "object",
             "additionalProperties": False,
             "properties": {
-                "budget_tokens": {"type": "integer", "default": 60000, "minimum": 1000},
+                "budget_tokens": {
+                    "type": "integer",
+                    "default": 60000,
+                    "minimum": 1000,
+                    "title": "Context Budget (tokens)",
+                    "x-ui": {"group": "Execution & Strategies", "widget": "number"},
+                },
             },
         },
         "background": {
@@ -67,6 +118,9 @@ KERNEL_SCHEMA: dict[str, Any] = {
             "additionalProperties": False,
             "properties": {
                 "tool_result_bytes": {"type": "integer", "default": 65536, "minimum": 1024},
+                # WS-03 cooperative timeout: after the deadline the handler gets this much time to
+                # return partial output (and to let a tracked process exit) before it is cancelled.
+                "tool_grace_s": {"type": "number", "default": 5.0, "minimum": 0.0},
                 "upload_bytes": {"type": "integer", "default": 26214400, "minimum": 1024},
             },
         },
@@ -78,6 +132,13 @@ KERNEL_SCHEMA: dict[str, Any] = {
                 "disabled": {"type": "array", "items": {"type": "string"}, "default": []},
                 "allow_inprocess_third_party": {"type": "boolean", "default": False},
                 "trusted_workspace_plugins": {"type": "boolean", "default": False},
+                # Capability overrides are read as f"kernel.plugins.capabilities.{name}"
+                # (registry), so this container stays open and keyed by plugin name.
+                "capabilities": {
+                    "type": "object",
+                    "default": {},
+                    "additionalProperties": {"type": "array", "items": {"type": "string"}},
+                },
             },
         },
         "secrets": {
@@ -196,6 +257,12 @@ class SettingsStore:
 
         # Register standard kernel schema
         self.register_schema("kernel", KERNEL_SCHEMA)
+        # The secrets namespace is a kernel surface: values live in the Secrets store, but the
+        # *key list* is contributed by plugins declaring `x-secrets` (WS-02). Seeded open so the
+        # settings panel always has the tab, and so a bare kernel is not missing a namespace.
+        self.register_schema(
+            "secrets", {"type": "object", "additionalProperties": True, "properties": {}}
+        )
 
         # Load existing or initialize
         self._load()

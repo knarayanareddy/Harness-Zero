@@ -79,6 +79,7 @@ def mock_provider() -> OpenAICompatProvider:
 async def test_provider_kit_list_models(mock_provider: OpenAICompatProvider):
     """Verifies list_models with ProviderKit."""
     kit = ProviderKit()
+    await kit.test_readiness(mock_provider)
     await kit.test_list_models(mock_provider)
     models = await mock_provider.list_models()
     assert len(models) >= 2

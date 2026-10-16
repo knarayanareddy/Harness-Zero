@@ -5,6 +5,7 @@ All types are slot dataclasses or string enums, fully serializable to and from d
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -196,9 +197,74 @@ class Message:
         )
 
 
+RECORD_KINDS: tuple[str, ...] = (
+    # Session facts, in the order they can appear. Every model-visible or user-visible fact is one of
+    # these (WS-04: "model-visible ⇒ logged"); the log is the source of truth and `derive_messages` is
+    # the only producer of a `ModelRequest.messages` list.
+    "turn.started",
+    "turn.completed",
+    "turn.error",
+    "turn.cancelled",
+    "user.message",
+    "assistant.message",
+    "tool.call",
+    "tool.decision",
+    "approval.requested",
+    "approval.resolved",
+    "tool.result",
+    "ui.card",
+    "compaction.summary",
+    "system.notice",
+    "settings.changed",
+    "checkpoint.created",
+    # reserved for WS-10 (background jobs / goals); declared so the catalogue and the upgrader know them
+    "job.started",
+    "job.completed",
+    "goal.created",
+    "goal.completed",
+)
+
+RecordKind = str  # Literal[RECORD_KINDS] is not expressible; validated by `infer_record_kind`
+
+
+def infer_record_kind(
+    *,
+    role: str = "",
+    tool_calls: Sequence[Any] = (),
+    tool_results: Sequence[Any] = (),
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    """The record kind for a v1 record that never declared one.
+
+    Order matters: a compaction summary is a system message that must be findable as such, and a
+    tool-result carrier is a *user-role* message in this transcript format (§4.1 #4), so role alone
+    cannot tell the two apart.
+    """
+    md = metadata or {}
+    if md.get("compaction_summary"):
+        return "compaction.summary"
+    if tool_results:
+        return "tool.result"
+    if tool_calls or role == "assistant":
+        return "assistant.message"
+    if role == "user":
+        return "user.message"
+    if role in ("", "system", "tool"):
+        return "system.notice"
+    return "system.notice"
+
+
 @dataclass(slots=True)
 class TranscriptRecord:
-    role: str  # "user", "assistant", "system"
+    """One appended fact in a session's transcript (v2).
+
+    `kind` is what makes the log self-describing: a v1 line had only `role`, so a reloaded session
+    could not tell a tool result from a user message, and cards/approvals were not in it at all.
+    `v` exists so a future format change can be upgraded on read instead of guessed.
+    """
+
+    role: str = ""  # "user", "assistant", "system"
+    kind: str = ""  # one of RECORD_KINDS; derived from role/payload when not given
     content: str = ""
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     tool_results: list[dict[str, Any]] = field(default_factory=list)
@@ -207,9 +273,23 @@ class TranscriptRecord:
     timestamp: float = field(default_factory=time.time)
     metadata: dict[str, Any] = field(default_factory=dict)
     step_index: int | None = None
+    v: int = 2
+
+    def __post_init__(self) -> None:
+        if not self.kind:
+            self.kind = infer_record_kind(
+                role=self.role,
+                tool_calls=self.tool_calls,
+                tool_results=self.tool_results,
+                metadata=self.metadata,
+            )
+        elif self.kind not in RECORD_KINDS:
+            raise ValueError(f"unknown transcript record kind {self.kind!r}")
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
+            "v": self.v,
+            "kind": self.kind,
             "role": self.role,
             "content": self.content,
             "timestamp": self.timestamp,
@@ -265,8 +345,15 @@ class TranscriptRecord:
         if typ == "COMPACTION_SUMMARY":
             metadata["compaction_summary"] = True
 
+        # A kind this build does not know (written by a newer harness, or by a store with its own
+        # vocabulary) is not an error to *read*: fall back to inference so an old client can still
+        # replay a session it cannot fully interpret.
+        disk_kind = str(data.get("kind", "") or "")
+        kind = disk_kind if disk_kind in RECORD_KINDS else ""
+
         return cls(
             role=role,
+            kind=kind,
             content=str(content or ""),
             tool_calls=tool_calls,
             tool_results=tool_results,
@@ -275,6 +362,7 @@ class TranscriptRecord:
             timestamp=float(data.get("timestamp", time.time())),
             metadata=metadata,
             step_index=data.get("step_index"),
+            v=int(data.get("v", 2) or 2),
         )
 
 
@@ -502,6 +590,47 @@ class Usage:
             cache_write_tokens=int(data.get("cache_write_tokens", 0)),
             reasoning_tokens=int(data.get("reasoning_tokens", 0)),
             cost_usd=data.get("cost_usd"),
+        )
+
+
+@dataclass(slots=True)
+class EconomicsSnapshot:
+    """The one spend shape: returned by the ``economics`` command, carried by ``cost.updated``,
+    and embedded in ``GET /health`` as ``spend``.
+
+    ``turn_usd`` is the cost of the running (or most recent) turn; ``session_usd`` and ``usage``
+    are the cost ledger's totals for the session; ``lifetime_usd`` is the ledger total across all
+    sessions of the workspace; ``cap_usd`` is the per-turn spend cap (``kernel.security.spend_cap_usd``);
+    ``unknown_pricing`` is true when tokens were consumed by a model without known pricing, in
+    which case the USD figures are lower bounds.
+    """
+
+    turn_usd: float = 0.0
+    session_usd: float = 0.0
+    lifetime_usd: float = 0.0
+    cap_usd: float | None = None
+    unknown_pricing: bool = False
+    usage: Usage = field(default_factory=Usage)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "turn_usd": self.turn_usd,
+            "session_usd": self.session_usd,
+            "lifetime_usd": self.lifetime_usd,
+            "cap_usd": self.cap_usd,
+            "unknown_pricing": self.unknown_pricing,
+            "usage": self.usage.to_dict(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> EconomicsSnapshot:
+        return cls(
+            turn_usd=float(data.get("turn_usd", 0.0)),
+            session_usd=float(data.get("session_usd", 0.0)),
+            lifetime_usd=float(data.get("lifetime_usd", 0.0)),
+            cap_usd=data.get("cap_usd"),
+            unknown_pricing=bool(data.get("unknown_pricing", False)),
+            usage=Usage.from_dict(data.get("usage") or {}),
         )
 
 
@@ -824,6 +953,12 @@ class HookEvent(str, Enum):
     USER_PROMPT_SUBMIT = "user_prompt_submit"
     PRE_TOOL_USE = "pre_tool_use"
     POST_TOOL_USE = "post_tool_use"
+    # Fires in gate step 9, *after* the handler returned and *before* sanitisation and the
+    # `tool_result_bytes` truncation, so a hook can replace the result the model will see.
+    # The size guards (pruner, spill) must live here: at POST_TOOL_USE they would be undone by
+    # truncation, and truncation alone keeps the head and throws away the tail — which is where
+    # test failures and stack traces are.
+    TOOL_RESULT_FINALIZE = "tool_result_finalize"
     PRE_COMPACT = "pre_compact"
     STOP = "stop"
     TURN_ERROR = "turn_error"
@@ -836,6 +971,10 @@ class HookOutcome:
     reason: str = ""
     arguments: dict[str, Any] | None = None
     additional_context: str | None = None
+    # With `action == "mutate"` on TOOL_RESULT_FINALIZE, the hook's replacement result.
+    # `arguments` mutates the *call*; `result` mutates the *outcome* — the two directions of the
+    # same seam, kept separate so a hook cannot accidentally rewrite a call after it ran.
+    result: ToolResult | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -843,6 +982,7 @@ class HookOutcome:
             "reason": self.reason,
             "arguments": self.arguments,
             "additional_context": self.additional_context,
+            "result": self.result.to_dict() if self.result is not None else None,
         }
 
     @classmethod
@@ -928,6 +1068,91 @@ class SessionInfo:
             created_at=float(data.get("created_at", 0.0)),
             metadata=data.get("metadata", {}),
         )
+
+
+@dataclass(slots=True)
+class ModelRow:
+    """One row of ``models.list`` — a ``ModelInfo`` plus the provider's own verdict on whether it can be used.
+
+    ``status`` is derived: ``needs_key`` when the provider is not configured, ``unreachable`` when it is
+    configured but its liveness probe failed, else ``ready``. ``reachable`` is ``None`` for providers that
+    do not probe (hosted APIs); the row stays ``ready`` and a bad key surfaces at call time.
+    """
+
+    id: str
+    display_name: str
+    provider: str
+    context_tokens: int | None = None
+    input_usd_per_mtok: float | None = None
+    output_usd_per_mtok: float | None = None
+    configured: bool = True
+    reachable: bool | None = None
+
+    @property
+    def status(self) -> str:
+        if not self.configured:
+            return "needs_key"
+        if self.reachable is False:
+            return "unreachable"
+        return "ready"
+
+    @classmethod
+    def from_info(cls, info: ModelInfo, provider: str, *, configured: bool, reachable: bool | None) -> ModelRow:
+        return cls(
+            id=info.id,
+            display_name=info.display_name,
+            provider=provider,
+            context_tokens=info.context_tokens,
+            input_usd_per_mtok=info.input_usd_per_mtok,
+            output_usd_per_mtok=info.output_usd_per_mtok,
+            configured=configured,
+            reachable=reachable,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "display_name": self.display_name,
+            "provider": self.provider,
+            "context_tokens": self.context_tokens,
+            "input_usd_per_mtok": self.input_usd_per_mtok,
+            "output_usd_per_mtok": self.output_usd_per_mtok,
+            "configured": self.configured,
+            "reachable": self.reachable,
+            "status": self.status,
+        }
+
+
+@dataclass(slots=True)
+class SessionRow:
+    """One row of ``sessions.list`` — what a session picker renders.
+
+    ``title`` is the first user prompt (≤ 60 chars); ``turns`` counts user prompts; ``message_count`` counts
+    transcript records; ``updated_at`` is the transcript's last write (or ``created_at`` for an empty session).
+    """
+
+    session_id: str
+    workspace: str
+    created_at: float
+    updated_at: float
+    title: str = ""
+    turns: int = 0
+    message_count: int = 0
+    active: bool = False
+    busy: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "session_id": self.session_id,
+            "workspace": self.workspace,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "title": self.title,
+            "turns": self.turns,
+            "message_count": self.message_count,
+            "active": self.active,
+            "busy": self.busy,
+        }
 
 
 @dataclass(slots=True)

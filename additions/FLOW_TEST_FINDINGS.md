@@ -153,6 +153,7 @@ Not part of the suite at all: CLI frontend, ACP bridge, settings UI, artifacts p
 ```bash
 python3 -m venv .venv && . .venv/bin/activate && pip install -q -e ".[dev]"
 npm --prefix additions/scenarios/_lib/node ci          # jsdom lane, once
+# (paths as run at the time; the suite is `tests/scenarios/` since P5, see docs/testing/SCENARIOS.md)
 export HOME=$(mktemp -d) HARNESS_CONFIG_DIR=$HOME/.harness           # hermetic
 pytest additions/scenarios -q                            # 20 passed
 pytest tests -q                                                       # 357 passed

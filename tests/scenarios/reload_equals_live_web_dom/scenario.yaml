@@ -1,0 +1,32 @@
+name: reload_equals_live_web_dom
+kind: web
+summary: >-
+  Everything the log learned during a live turn — the approval the user answered, the policy decision the
+  gate made, the card a tool rendered — must be on screen after a reload with no further click. This is
+  WS-04's whole claim tested from the browser's side: the session log is the only source the client needs.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: ask
+turns:
+  - prompt: "Write notes.txt, then load the code-architect skill."
+approvals:
+  - approve
+expect:
+  dom_approves: true
+  dom_turns_completed: true
+  tools_called: [write_to_file, view_skill]
+  files:
+    notes.txt: {contains: "written while you watched"}
+  event_types_include: [approval.required, approval.resolved, tool.decision, ui.card, tool.result, turn.completed]
+  event_types_exclude: [turn.error, turn.cancelled]
+  reload_equals_live: true
+  dom_reload: true
+  dom_reload_contains_live_lines: true
+  # The facts a role-based renderer dropped: the approval the user answered, the gate's decision, and the
+  # card a tool emitted. All of them are records now, so all of them survive a refresh.
+  reload_timeline_contains:
+    - "Approval Required"
+    - "Resolved: approved by user"
+    - "Successfully wrote 26 characters"
+    - "Skill Playbook"
+    - "Notes written and the playbook loaded"

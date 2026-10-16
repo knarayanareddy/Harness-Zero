@@ -6,3 +6,6 @@ summary = "Anthropic Messages API provider with prompt caching, thinking blocks,
 provides = ["provider"]
 capabilities = ["net", "secrets"]
 entry = "harness.plugins.providers.anthropic.plugin:AnthropicProviderPlugin"
+
+[settings]
+schema = "settings.schema.json"

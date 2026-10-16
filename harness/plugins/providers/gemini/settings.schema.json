@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Gemini provider settings",
+  "properties": {
+    "base_url": {
+      "type": "string",
+      "default": "https://generativelanguage.googleapis.com/v1beta",
+      "title": "Gemini Base URL",
+      "x-ui": {
+        "group": "Models & Providers",
+        "widget": "text"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "x-secrets": {
+    "GEMINI_API_KEY": {
+      "title": "Gemini API Key"
+    },
+    "GOOGLE_API_KEY": {
+      "title": "Google API Key (alias of GEMINI_API_KEY)"
+    }
+  }
+}

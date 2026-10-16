@@ -1,6 +1,6 @@
 # Machine-readable index of the DeepSeek-Harness integration pack.
 # Source of truth for sequencing; the WS-*.md files are the source of truth for design.
-# Status values: specified | in_progress | landed | dropped
+# Status values: specified | in_progress | executed | landed | dropped
 version: 1
 baseline:
   harness_zero_commit: f43c272
@@ -26,9 +26,9 @@ workstreams:
   - id: WS-01
     title: Record/replay golden tests
     doc: WS-01_record_replay_tests.md
-    status: in_progress  # working implementation in additions/scenarios (11 scenarios, 3 lanes); left: record CLI flag, git mv to tests/scenarios, CI job
-    implementation: additions/scenarios
-    effort_days: 1  # remaining
+    status: executed  # 25 scenarios in 3 lanes under tests/scenarios, goldens + `HARNESS_REPLAY=record|replay|update`, record-path tests, CI job (node + jsdom, replay only), docs/testing/SCENARIOS.md. Deviations (reasons in review/CONSOLIDATION_LOG.md §P11b): providers keyed `replay` not `scenario`; headless script lives in the suite, not tools/; `_last_run/` ignored by tests/scenarios/.gitignore.
+    implementation: tests/scenarios
+    effort_days: 1
     depends_on: [P0]
     principles: [P5, P1]
     dsh_refs: [packages/testing/llm-replay, packages/testing/session-snapshot, client/testing]
@@ -57,7 +57,7 @@ workstreams:
   - id: WS-02
     title: Generated catalogs and freshness gates
     doc: WS-02_generated_catalogs_gates.md
-    status: specified
+    status: executed        # consolidation P7; readmes + scenarios checks warn, scaffold kinds deferred
     effort_days: 1.5
     depends_on: [P0]
     soft_depends_on: [WS-01]
@@ -96,7 +96,7 @@ workstreams:
   - id: WS-03
     title: Loop hygiene (pruner, spill, repeat reminder, cooperative timeout, read-before-edit)
     doc: WS-03_loop_hygiene.md
-    status: specified
+    status: executed        # consolidation P8 (WS-03a seams + WS-03b hooks); namespaces are hook-*, no 600 s timeout scenario
     effort_days: 2
     depends_on: [WS-01]
     split: [WS-03a kernel seams, WS-03b hook plugins]
@@ -130,7 +130,7 @@ workstreams:
   - id: WS-04
     title: Session log as single source of truth
     doc: WS-04_session_log_single_source.md
-    status: specified
+    status: executed  # WS-04a (P9) records + derive_messages + fail-closed append; WS-04b (P10) durability declared, policy facts recorded, on-disk repair; WS-04c (P11) client renders records, reload_equals_live_web_dom scenario, SESSION_LOG.md + generated RECORD_KINDS.md, harness sessions reindex. Not done, with reasons in review/CONSOLIDATION_LOG.md §P11: the crash_between_call_and_result / append_failure_fails_closed scenarios (both properties pinned by kernel tests instead) and §3.6 checkpoint.created records.
     effort_days: 3
     depends_on: [WS-01]
     soft_depends_on: [WS-03]
@@ -160,8 +160,19 @@ workstreams:
   - id: WS-05
     title: Feature-owned UI
     doc: WS-05_feature_owned_ui.md
-    status: specified
-    effort_days: 2.5
+    status: executed  # WS-05a (P12a) + WS-05b (P12b) + WS-05c (P14), plus two extras the product review asked for
+    #   (P13a settings grouping, P13b the Plugins & Integrations pane). 05a/05b: manifest [ui] + ui.toml +
+    #   ui.contributions + commands.list + order_groups + UI_CONTRACT.md, then the client restructure (registry.js,
+    #   renderers/ one module per kind, panels/, CommandBinder, catalogue/test coverage follow-ups R49-R52).
+    #   05c: `harness/sdk/plugin_static.py` serves a plugin's declared module at
+    #   `/static/plugins/<plugin>/<path>` (404 for every refusal), installed plugins load at all (R60), panels
+    #   carry `accepts` (R61), and both acceptance scenarios exist — `plugin_panel_appears_when_enabled` (mounted
+    #   panel, module fetched, disable switch, panel gone after restart) and `settings_tab_from_plugin_schema`.
+    #   §2's fallback-schema / data-notice / 10-panel claims were already fixed upstream, so those tests are
+    #   regression pins (CONSOLIDATION_LOG §P12a, §P12b, §P14).
+    effort_days: 2.5  # 4.0 spent: 05a 1.0, 05b 1.0, P13a 0.5, P13b 0.5, 05c 1.0. The two P13 extras were not in
+    #   the estimate; they came from reviewing the running Studio ("no actual plugin integrations"), and 05c also
+    #   paid for R60 — the repo had never loaded a plugin that was not in its own tree.
     depends_on: [P0, WS-02, WS-04]
     principles: [P2, P4, P6]
     dsh_refs: [client/features/ui-settings-*, client/core/conversation, client/core/plugin-host, scripts/verify-client-settings-tabs.ts, scripts/verify-client-event-renderers.ts]

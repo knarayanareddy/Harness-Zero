@@ -35,14 +35,12 @@ class MCPClientBridgePlugin:
         settings = getattr(ctx, "settings", None)
         raw_servers: Any = None
         if settings:
-            # Own namespace first (`plugins.bridge-mcp-client.servers`, which the
-            # PluginSettingsView resolves from the bare key), then the legacy
-            # global keys that earlier docs/examples used.
-            raw_servers = (
-                settings.get("servers")
-                or settings.get("plugins.mcp-client.servers")
-                or settings.get("extensions.mcp_servers")
-            )
+            # Own namespace first (the view resolves the bare key to
+            # `plugins.bridge-mcp-client.servers`), then the pre-0.2 spelling that
+            # was written into early docs and settings files. A third "extensions"
+            # fallback was removed: the view prefixes it to a key that never existed,
+            # so it could not have resolved for anybody (R37).
+            raw_servers = settings.get("servers") or settings.get("plugins.mcp-client.servers")
 
         # Normalize server configurations
         server_configs: list[dict[str, Any]] = []

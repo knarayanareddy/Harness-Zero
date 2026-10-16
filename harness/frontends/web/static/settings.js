@@ -13,8 +13,9 @@ export class SettingsPanel {
     this.container = containerElement;
     this.schema = null;
     this.values = {};
-    this.activeGroup = 'Models & Providers';
+    this.activeGroup = null; // no tab of the client's own: `settings.schema`'s `groups` picks the first one
     this.statusMessage = null;
+    this.loadError = null;
 
     if (this.container) {
       this._bindDelegatedEvents();
@@ -61,70 +62,26 @@ export class SettingsPanel {
         const remoteSchema = await this.api.command('settings.schema');
         if (remoteSchema && remoteSchema.properties) {
           this.schema = remoteSchema;
+          this.loadError = null;
         }
       } catch (err) {
-        console.warn('[SettingsPanel] Remote schema fetch fallback:', err);
+        console.warn('[SettingsPanel] Remote schema fetch failed:', err);
       }
 
-      if (!this.schema) {
-        this.schema = {
-          groups: [
-            'Models & Providers',
-            'Security & Sandboxing',
-            'Execution & Strategies',
-            'Economics & Spend',
-            'Secrets',
-          ],
-          properties: {
-            'kernel.provider': {
-              title: 'Default Provider',
-              type: 'string',
-              enum: ['openai_compat', 'anthropic', 'gemini', 'ollama', 'mock'],
-              default: 'openai_compat',
-              'x-ui': { group: 'Models & Providers', widget: 'select' },
-            },
-            'kernel.model.default': {
-              title: 'Default Model',
-              type: 'string',
-              default: 'gpt-4o',
-              'x-ui': { group: 'Models & Providers', widget: 'text' },
-            },
-            'kernel.security.jail_enabled': {
-              title: 'Workspace Jail Boundary',
-              type: 'boolean',
-              default: true,
-              'x-ui': { group: 'Security & Sandboxing', widget: 'boolean' },
-            },
-            'kernel.security.allow_shell_execution': {
-              title: 'Allow Shell Commands',
-              type: 'boolean',
-              default: true,
-              'x-ui': { group: 'Security & Sandboxing', widget: 'boolean' },
-            },
-            'kernel.security.spend_cap_usd': {
-              title: 'Spend Cap (USD)',
-              type: 'number',
-              default: 5.0,
-              minimum: 0.0,
-              'x-ui': { group: 'Economics & Spend', widget: 'number' },
-            },
-            'secrets.OPENAI_API_KEY': {
-              title: 'OpenAI API Key',
-              type: 'string',
-              'x-ui': { group: 'Secrets', widget: 'secret' },
-            },
-            'secrets.ANTHROPIC_API_KEY': {
-              title: 'Anthropic API Key',
-              type: 'string',
-              'x-ui': { group: 'Secrets', widget: 'secret' },
-            },
-            'secrets.GEMINI_API_KEY': {
-              title: 'Gemini API Key',
-              type: 'string',
-              'x-ui': { group: 'Secrets', widget: 'secret' },
-            },
-          },
-        };
+      if (!this.schema || !this.schema.properties) {
+        // No client-side copy of the settings surface: the kernel's `settings.schema` command is the
+        // only source (WS-02). If it is unreachable the panel says so instead of rendering a stale form.
+        this.schema = { groups: [], properties: {} };
+        this.loadError = 'Settings schema unavailable — the daemon did not answer `settings.schema`.';
+        this.render();
+        return;
+      }
+
+      // Which tab is open is the kernel's answer too: a remembered or requested group that no longer exists (no
+      // provider plugin loaded, a plugin disabled, a renamed tab) would otherwise render an empty pane over 40
+      // real settings. `groups[0]` is the schema's own first choice, ordered by `x-ui.order`.
+      if (!this.schema.groups.includes(this.activeGroup)) {
+        this.activeGroup = this.schema.groups[0] || null;
       }
 
       // Fetch active values
@@ -152,6 +109,9 @@ export class SettingsPanel {
   }
 
   setGroup(groupName) {
+    // A request for a tab the schema does not offer is ignored rather than honoured with an empty pane (the
+    // onboarding banner asks for `Models & Providers`, which a daemon with no provider plugin has not got).
+    if (this.schema?.groups?.length && !this.schema.groups.includes(groupName)) return;
     this.activeGroup = groupName;
     this.render();
   }
@@ -167,6 +127,11 @@ export class SettingsPanel {
 
   render() {
     if (!this.container) return;
+
+    if (this.loadError) {
+      this.container.innerHTML = `<div class="p-4 text-xs border rounded bg-red-950/80 text-red-200 border-red-800">${escapeHtml(this.loadError)}</div>`;
+      return;
+    }
 
     const groups = this.schema.groups || [];
     let tabsHtml = '';
@@ -189,11 +154,37 @@ export class SettingsPanel {
       `;
     }
 
-    // Filter properties for current group
+    // One block per owner inside the tab (WS-05 follow-up). `settings.schema` says which plugin a control belongs
+    // to (`x-ui.owner`), so a tab groups like *behaviour* — hooks under `Hooks`, bridges under
+    // `Bridges & Integrations` — while a heading names the integration you are actually configuring. Kernel and
+    // secret properties own no plugin and render unheaded, exactly as before; the client invents no tab name of
+    // its own, because `tests/frontends/test_ui_contract.py` fails the moment it does.
     let fieldsHtml = '';
+    let block = '';
+    let blockOwner = null;
+    const flushBlock = () => {
+      if (!block) return;
+      fieldsHtml += blockOwner
+        ? `<div class="settings-owner">
+            <div class="settings-owner-head">
+              <span class="settings-owner-title">${escapeHtml(blockOwner.title)}</span>
+              ${blockOwner.summary ? `<span class="settings-owner-summary">${escapeHtml(blockOwner.summary)}</span>` : ''}
+            </div>
+            <div class="settings-owner-fields">${block}</div>
+          </div>`
+        : block;
+      block = '';
+    };
     for (const [key, prop] of Object.entries(this.schema.properties || {})) {
       const ui = prop['x-ui'] || {};
       if (ui.group !== this.activeGroup) continue;
+
+      const owner = ui.owner ? { id: ui.owner, title: ui.owner_title || ui.owner, summary: ui.owner_summary || '' } : null;
+      const ownerChanged = (owner?.id || null) !== (blockOwner?.id || null);
+      if (ownerChanged) {
+        flushBlock();
+        blockOwner = owner;
+      }
 
       const title = escapeHtml(prop.title || key);
       const widget = ui.widget || (prop.type === 'boolean' ? 'boolean' : 'text');
@@ -205,7 +196,7 @@ export class SettingsPanel {
           ? '<span class="text-xs px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-300 font-mono">Configured ✓</span>'
           : '<span class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400 font-mono">Not Set</span>';
 
-        fieldsHtml += `
+        block += `
           <div class="setting-item flex flex-col gap-1 py-3 border-b border-gray-800">
             <div class="flex items-center justify-between">
               <label class="text-sm font-medium text-gray-200">${title}</label>
@@ -218,7 +209,7 @@ export class SettingsPanel {
           </div>
         `;
       } else if (widget === 'boolean') {
-        fieldsHtml += `
+        block += `
           <div class="setting-item flex items-center justify-between py-3 border-b border-gray-800">
             <label class="text-sm font-medium text-gray-200">${title}</label>
             <input type="checkbox" id="input_${escapeHtml(key)}" data-setting-path="${escapeHtml(key)}" data-setting-type="boolean" ${val ? 'checked' : ''} class="rounded bg-gray-900 border-gray-700 h-4 w-4 text-blue-600 focus:ring-blue-500" />
@@ -230,7 +221,7 @@ export class SettingsPanel {
           return `<option value="${escapeHtml(opt)}" ${selected}>${escapeHtml(opt)}</option>`;
         }).join('');
 
-        fieldsHtml += `
+        block += `
           <div class="setting-item flex flex-col gap-1 py-3 border-b border-gray-800">
             <label class="text-sm font-medium text-gray-200">${title}</label>
             <select id="input_${escapeHtml(key)}" data-setting-path="${escapeHtml(key)}" data-setting-type="string" class="px-3 py-1.5 rounded bg-gray-900 border border-gray-700 text-xs text-white">
@@ -239,14 +230,14 @@ export class SettingsPanel {
           </div>
         `;
       } else if (widget === 'number') {
-        fieldsHtml += `
+        block += `
           <div class="setting-item flex flex-col gap-1 py-3 border-b border-gray-800">
             <label class="text-sm font-medium text-gray-200">${title}</label>
             <input type="number" step="0.5" id="input_${escapeHtml(key)}" data-setting-path="${escapeHtml(key)}" data-setting-type="number" value="${escapeHtml(val ?? '')}" class="px-3 py-1.5 rounded bg-gray-900 border border-gray-700 text-xs text-white" />
           </div>
         `;
       } else {
-        fieldsHtml += `
+        block += `
           <div class="setting-item flex flex-col gap-1 py-3 border-b border-gray-800">
             <label class="text-sm font-medium text-gray-200">${title}</label>
             <input type="text" id="input_${escapeHtml(key)}" data-setting-path="${escapeHtml(key)}" data-setting-type="string" value="${escapeHtml(val ?? '')}" class="px-3 py-1.5 rounded bg-gray-900 border border-gray-700 text-xs text-white" />
@@ -254,6 +245,7 @@ export class SettingsPanel {
         `;
       }
     }
+    flushBlock();
 
     this.container.innerHTML = `
       <div class="settings-modal-content flex flex-col h-full">

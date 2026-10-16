@@ -44,6 +44,10 @@ packages = ["harness"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "scenario: flow-of-information scenario test — real kernel/daemon/client, recorded model (tests/scenarios)",
+    "web: a scenario with a web lane (daemon + SSE, and the shipped client in jsdom when node is installed)",
+]
 
 [tool.ruff]
 line-length = 120

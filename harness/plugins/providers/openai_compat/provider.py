@@ -111,25 +111,33 @@ class OpenAICompatProvider:
         if self._client is not None and not self._client.is_closed:
             await self._client.aclose()
 
+    #: Endpoints that reject anonymous requests; anything else (vLLM, LM Studio, a proxy) may be keyless.
+    HOSTED_HOSTS: tuple[str, ...] = ("openai.com", "openrouter.ai", "deepseek.com")
+
+    def requires_api_key(self) -> bool:
+        return any(host in self.base_url for host in self.HOSTED_HOSTS)
+
+    def is_configured(self) -> bool:
+        """Hosted endpoints need a key; self-hosted OpenAI-compatible servers are usable without one."""
+        return bool(self.api_key) or not self.requires_api_key()
+
+    async def is_reachable(self) -> bool | None:
+        """Not probed: hosted APIs are assumed up and self-hosted servers answer at call time."""
+        return None
+
     async def list_models(self) -> list[ModelInfo]:
         """
         Lists supported models with a 24-hour cache.
-        Queries /models endpoint or falls back to built-in models.
+        Queries /models when configured; otherwise (or on failure) returns the built-in catalogue.
         """
         now = time.time()
         if self._cached_models and (now - self._cached_models_ts) < 86400:
             return self._cached_models
 
-        # If commercial provider and no api key configured, raise auth error
-        if not self.api_key and any(k in self.base_url for k in ("openai.com", "openrouter.ai", "deepseek.com")):
-            raise ProviderError(
-                provider=self.name,
-                model="*",
-                status_code=401,
-                kind="auth",
-                message=f"Missing API key for provider '{self.name}'",
-                retryable=False,
-            )
+        if not self.is_configured():
+            self._cached_models = self._default_models
+            self._cached_models_ts = now
+            return self._cached_models
 
         client = self._get_client()
         try:

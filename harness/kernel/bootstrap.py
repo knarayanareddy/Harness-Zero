@@ -44,11 +44,17 @@ async def bootstrap_kernel(
     log_file: Path | str | None = None,
     verbose: bool = False,
     overrides: dict[str, Any] | None = None,
+    resume_session: bool = True,
 ) -> KernelRuntime:
     """
     Initializes and boots all kernel services:
     EventBus -> SettingsStore -> Secrets -> WorkspaceJail -> PluginRegistry ->
     PolicyGate -> SessionManager -> ContextAssembler -> Compactor -> TurnRunner -> Commands.
+
+    With ``resume_session`` (the default) the most recent session that has recorded turns becomes
+    the active session, so frontends continue the last conversation instead of creating a new one
+    per daemon start. New sessions are created lazily by ``submit_turn`` or explicitly via
+    ``sessions.create``.
     """
     ws = Path(workspace).resolve()
     env_cfg = os.environ.get("HARNESS_CONFIG_DIR")
@@ -110,6 +116,19 @@ async def bootstrap_kernel(
         settings=settings,
         bus=bus,
     )
+
+    def _session_log(session_id: str):
+        """The transcript log for one session, or None (WS-04b).
+
+        Resolved per call rather than held: the approval broker is kernel-wide while logs are per session,
+        and `get_session` is what loads a session from disk if it is not resident.
+        """
+        sess = session_manager.get_session(session_id) if session_id else None
+        return sess.log if sess is not None else None
+
+    approvals.log_for = _session_log
+    if resume_session:
+        await session_manager.resume_last()
     assembler = ContextAssembler(registry=registry, settings=settings)
     cost_ledger = registry.stores.get("cost")[0] if "cost" in registry.stores else None
     transcript_store = registry.stores.get("transcript")[0] if "transcript" in registry.stores else None

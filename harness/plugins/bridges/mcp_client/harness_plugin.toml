@@ -6,3 +6,6 @@ summary = "Model Context Protocol stdio client bridge connecting external MCP se
 provides = ["tool"]
 capabilities = ["exec", "net"]
 entry = "harness.plugins.bridges.mcp_client.plugin:MCPClientBridgePlugin"
+
+[settings]
+schema = "settings.schema.json"

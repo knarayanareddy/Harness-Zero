@@ -11,7 +11,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from harness.sdk.events import Event
+from harness.sdk.cards import Card
+from harness.sdk.events import Event, HookFired, UiCard
 from harness.sdk.types import HookEvent, HookOutcome
 
 from .config import matches_tool
@@ -249,13 +250,13 @@ class ShellHook:
                     Event(
                         type="hook.fired",
                         session_id=session_id,
-                        data={
-                            "hook": self.name,
-                            "event": event.value,
-                            "command": self.command,
-                            "outcome": outcome.to_dict(),
-                            "duration_ms": elapsed_ms,
-                        },
+                        data=HookFired(
+                            hook=self.name,
+                            event=event.value,
+                            command=self.command,
+                            outcome=outcome.to_dict(),
+                            duration_ms=elapsed_ms,
+                        ),
                     )
                 )
                 # S13: Reason from stderr shown as a notice card on block
@@ -264,14 +265,13 @@ class ShellHook:
                         Event(
                             type="ui.card",
                             session_id=session_id,
-                            data={
-                                "kind": "notice",
-                                "payload": {
-                                    "level": "error",
-                                    "title": "Hook Blocked Action",
-                                    "message": f"Hook '{self.name}' blocked {tool_name or event.value}: {outcome.reason}",
-                                },
-                            },
+                            data=UiCard(
+                                card=Card.notice(
+                                    f"Hook '{self.name}' blocked {tool_name or event.value}: {outcome.reason}",
+                                    level="error",
+                                    title="Hook blocked action",
+                                ).to_dict()
+                            ),
                         )
                     )
             except Exception as bus_err:

@@ -42,11 +42,30 @@ class Plugin(Protocol):
 
 @runtime_checkable
 class Provider(Protocol):
+    """A model backend. The provider is the only authority on its own readiness:
+
+    * ``is_configured()`` — it has what it needs to be *called* (credentials present, or none needed). Pure.
+    * ``is_reachable()`` — a cheap, short-timeout liveness probe for providers that have something local to
+      probe (Ollama); ``None`` means "not probed" (hosted APIs). Must never raise; callers may run it on every
+      page load, so cache the answer for ~30 s.
+    * ``list_models()`` — the catalogue the provider *knows*, with or without credentials (a missing key is
+      reported by ``is_configured()``, not by raising). Hit the network only when configured; fall back to
+      the built-in list; raise ``ProviderError(kind="auth")`` only when the service rejected real credentials.
+    """
+
     name: str
     caps: ProviderCaps
 
+    def is_configured(self) -> bool:
+        """True when the provider can be called as configured (keys present or not required). No I/O."""
+        ...
+
+    async def is_reachable(self) -> bool | None:
+        """Short-timeout liveness probe; ``None`` when the provider does not probe. Never raises."""
+        ...
+
     async def list_models(self) -> list[ModelInfo]:
-        """Returns available models supported by this provider."""
+        """Returns the models this provider knows about (installed, served, or built-in catalogue)."""
         ...
 
     def generate(self, req: ModelRequest) -> AsyncIterator[ModelEvent]:
@@ -118,6 +137,9 @@ class ContextSource(Protocol):
 
 @runtime_checkable
 class TranscriptStore(Protocol):
+    """Append-only transcript of *one* session. Listing sessions is the kernel's job
+    (``SessionManager.list_sessions()`` scans the sessions directory), not the store's."""
+
     async def append(self, record: dict[str, Any]) -> int:
         """Appends step record and returns step_index."""
         ...
@@ -128,10 +150,6 @@ class TranscriptStore(Protocol):
 
     async def last_compaction(self) -> dict[str, Any] | None:
         """Returns last compaction record if any."""
-        ...
-
-    async def list_sessions(self) -> list[dict[str, Any]]:
-        """Lists historical sessions metadata."""
         ...
 
 
@@ -178,13 +196,13 @@ class ArtifactStore(Protocol):
 @runtime_checkable
 class CostLedger(Protocol):
     async def record(
-        self, *, model: str, provider: str, usage: Usage, turn_id: str
+        self, *, model: str, provider: str, usage: Usage, turn_id: str, session_id: str | None = None
     ) -> None:
-        """Records model usage and costs."""
+        """Records model usage and costs for a turn (and the session it belongs to)."""
         ...
 
     async def totals(self, *, session_id: str | None = None) -> Usage:
-        """Returns total usage across turns or session."""
+        """Returns total usage for one session, or across every session when ``session_id`` is None."""
         ...
 
 
@@ -203,6 +221,9 @@ class Hook(Protocol):
     events: frozenset[HookEvent]
     matcher: str | None  # regex on tool name for tool hooks
     timeout_s: float
+    # Hooks at the same event run in ascending `order`; the size guards deliberately run late
+    # (pruner 900) so they see what earlier hooks appended. Missing attribute ⇒ 500.
+    order: int
 
     async def on(
         self, event: HookEvent, payload: dict[str, Any], ctx: Any
