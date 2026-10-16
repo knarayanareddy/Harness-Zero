@@ -104,6 +104,9 @@ async def test_every_model_request_is_derivable_from_the_log(tmp_path: Path):
             "assistant.message",
             "tool.result",
             "assistant.message",
+            # The turn ends with a marker record (WS-04 §3.3), so the log alone says how it finished —
+            # and `derive_messages` ignores it, so it is not part of any request.
+            "turn.completed",
         ], records
 
         # request k saw the history as of that moment: 1 record for the prompt, then 2 per tool iteration.

@@ -224,3 +224,14 @@ def test_model_visible_kinds_are_all_producible(kind: str):
         rec = _rec(role="system", content="x", metadata={"compaction_summary": True})
     assert TranscriptRecord.from_dict(rec).kind == kind
     assert derive_messages([rec]), kind
+
+
+def test_the_message_counter_and_the_projection_agree_on_what_a_message_is() -> None:
+    """`sessions.list` counts messages; `derive_messages` builds them. Same question, one answer.
+
+    If these two sets drift, either the listing counts turn markers as conversation or the model stops
+    seeing something a human can see — both are the "two sources of truth" shape WS-04 removed.
+    """
+    from harness.kernel.transcript import MESSAGE_KINDS
+
+    assert MESSAGE_KINDS == MODEL_VISIBLE_KINDS

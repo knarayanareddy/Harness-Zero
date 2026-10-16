@@ -72,6 +72,201 @@
     "data": {
       "type": "object",
       "description": "Event-specific payload; see $defs/payloads/<type>"
+    },
+    "record": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Transcript record this event mirrors, as stored (durable types only)"
+    }
+  },
+  "events": {
+    "approval.required": {
+      "payload": "ApprovalRequired",
+      "durable": false,
+      "record_kind": null,
+      "transient": false
+    },
+    "approval.resolved": {
+      "payload": "ApprovalResolved",
+      "durable": false,
+      "record_kind": null,
+      "transient": false
+    },
+    "compaction.completed": {
+      "payload": "CompactionCompleted",
+      "durable": false,
+      "record_kind": null,
+      "transient": false
+    },
+    "compaction.started": {
+      "payload": "CompactionStarted",
+      "durable": false,
+      "record_kind": null,
+      "transient": true
+    },
+    "context.assembled": {
+      "payload": "ContextAssembled",
+      "durable": false,
+      "record_kind": null,
+      "transient": true
+    },
+    "cost.updated": {
+      "payload": "CostUpdated",
+      "durable": false,
+      "record_kind": null,
+      "transient": true
+    },
+    "hook.fired": {
+      "payload": "HookFired",
+      "durable": false,
+      "record_kind": null,
+      "transient": false
+    },
+    "model.completed": {
+      "payload": "ModelCompleted",
+      "durable": true,
+      "record_kind": "assistant.message",
+      "transient": false
+    },
+    "model.notice": {
+      "payload": "ModelNotice",
+      "durable": false,
+      "record_kind": null,
+      "transient": false
+    },
+    "model.started": {
+      "payload": "ModelStarted",
+      "durable": false,
+      "record_kind": null,
+      "transient": true
+    },
+    "model.text.delta": {
+      "payload": "ModelTextDelta",
+      "durable": false,
+      "record_kind": null,
+      "transient": true
+    },
+    "model.thinking.delta": {
+      "payload": "ModelThinkingDelta",
+      "durable": false,
+      "record_kind": null,
+      "transient": true
+    },
+    "model.tool_call": {
+      "payload": "ModelToolCall",
+      "durable": false,
+      "record_kind": null,
+      "transient": false
+    },
+    "plugin.error": {
+      "payload": "PluginError",
+      "durable": false,
+      "record_kind": null,
+      "transient": false
+    },
+    "plugin.loaded": {
+      "payload": "PluginLoaded",
+      "durable": false,
+      "record_kind": null,
+      "transient": false
+    },
+    "session.started": {
+      "payload": "SessionStarted",
+      "durable": false,
+      "record_kind": null,
+      "transient": false
+    },
+    "session.switched": {
+      "payload": "SessionSwitched",
+      "durable": false,
+      "record_kind": null,
+      "transient": false
+    },
+    "settings.changed": {
+      "payload": "SettingsChanged",
+      "durable": false,
+      "record_kind": null,
+      "transient": false
+    },
+    "task.completed": {
+      "payload": "TaskCompleted",
+      "durable": false,
+      "record_kind": null,
+      "transient": false
+    },
+    "task.started": {
+      "payload": "TaskStarted",
+      "durable": false,
+      "record_kind": null,
+      "transient": false
+    },
+    "tool.call": {
+      "payload": "ToolCallStarted",
+      "durable": false,
+      "record_kind": null,
+      "transient": false
+    },
+    "tool.decision": {
+      "payload": "ToolDecision",
+      "durable": false,
+      "record_kind": null,
+      "transient": false
+    },
+    "tool.output.delta": {
+      "payload": "ToolOutputDelta",
+      "durable": false,
+      "record_kind": null,
+      "transient": true
+    },
+    "tool.repeat_detected": {
+      "payload": "ToolRepeatDetected",
+      "durable": false,
+      "record_kind": null,
+      "transient": true
+    },
+    "tool.result": {
+      "payload": "ToolCallResult",
+      "durable": false,
+      "record_kind": null,
+      "transient": false
+    },
+    "tool.result.pruned": {
+      "payload": "ToolResultPruned",
+      "durable": false,
+      "record_kind": null,
+      "transient": true
+    },
+    "turn.cancelled": {
+      "payload": "TurnCancelled",
+      "durable": true,
+      "record_kind": "turn.cancelled",
+      "transient": false
+    },
+    "turn.completed": {
+      "payload": "TurnCompleted",
+      "durable": true,
+      "record_kind": "turn.completed",
+      "transient": false
+    },
+    "turn.error": {
+      "payload": "TurnError",
+      "durable": true,
+      "record_kind": "turn.error",
+      "transient": false
+    },
+    "turn.started": {
+      "payload": "TurnStarted",
+      "durable": true,
+      "record_kind": "user.message",
+      "transient": false
+    },
+    "ui.card": {
+      "payload": "UiCard",
+      "durable": false,
+      "record_kind": null,
+      "transient": false
     }
   },
   "allOf": [

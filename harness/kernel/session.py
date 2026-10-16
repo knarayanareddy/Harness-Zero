@@ -17,7 +17,7 @@ from typing import Any
 from harness.kernel.bus import EventBus
 from harness.kernel.registry import PluginRegistry
 from harness.kernel.settings import SettingsStore
-from harness.kernel.transcript import TranscriptLog
+from harness.kernel.transcript import MESSAGE_KINDS, TranscriptLog, upgrade_record_v1
 from harness.kernel.validators import validate_session_id
 from harness.sdk.errors import TurnInProgress
 from harness.sdk.events import Event, SessionStarted, SessionSwitched
@@ -72,7 +72,7 @@ class _NullTranscriptStore:
 
 def _summarize_transcript(path: Path, title_chars: int = 60) -> dict[str, Any]:
     """Cheap scan of a transcript.jsonl: record count, number of user prompts, and the first prompt as title."""
-    out: dict[str, Any] = {"records": 0, "turns": 0, "title": ""}
+    out: dict[str, Any] = {"records": 0, "messages": 0, "turns": 0, "title": ""}
     if not path.exists():
         return out
     try:
@@ -86,6 +86,14 @@ def _summarize_transcript(path: Path, title_chars: int = 60) -> dict[str, Any]:
                     rec = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                # `message_count` answers "how much conversation", not "how many lines": turn markers and
+                # decision records would inflate it every turn. Upgraded per line so the answer is the
+                # same for a v1 file as for a v2 one.
+                try:
+                    if upgrade_record_v1(rec).get("kind") in MESSAGE_KINDS:
+                        out["messages"] += 1
+                except Exception:
+                    pass
                 if rec.get("role") != "user" or not rec.get("content"):
                     continue  # tool-result records are user-role with empty content
                 out["turns"] += 1
@@ -372,7 +380,7 @@ class SessionManager:
                     updated_at=updated_at,
                     title=summary["title"],
                     turns=summary["turns"],
-                    message_count=summary["records"],
+                    message_count=summary["messages"],
                     active=self.active_session.session_id == sess_id if self.active_session else False,
                     busy=bool(live and live.is_busy),
                 ).to_dict()

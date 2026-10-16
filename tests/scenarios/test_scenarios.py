@@ -182,7 +182,17 @@ async def test_scenario(scenario_dir: Path, tmp_path: Path, hermetic_env: Path, 
     if sc.expect.get("transcript_golden", True):
         compare_golden(golden / "transcript.json", norm["transcript"])
     if sc.expect.get("events_golden", True):
-        compare_golden(golden / "events.json", [{"type": e["type"], "data": e.get("data", {})} for e in norm["events"]])
+        # WS-04b: a durable event's record pointer is part of the observable contract, so the golden keeps
+        # `record` when the kernel attached one (it is the stored record: `kind`, `step_index`, content).
+        # Transient and kernel-only events omit it rather than carrying a null, so the golden says which
+        # is which without restating the schema.
+        rows = []
+        for e in norm["events"]:
+            row = {"type": e["type"], "data": e.get("data", {})}
+            if e.get("record") is not None:
+                row["record"] = e["record"]
+            rows.append(row)
+        compare_golden(golden / "events.json", rows)
     if sc.expect.get("requests_golden", True):
         compare_golden(golden / "requests.json", norm["requests"])
     if sc.kind == "web" and sc.expect.get("http_golden", True):

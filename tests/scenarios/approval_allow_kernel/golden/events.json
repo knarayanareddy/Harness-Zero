@@ -22,6 +22,13 @@
       "provider": "replay",
       "strategy": "single_loop"
     },
+    "record": {
+      "content": "Create notes.txt",
+      "kind": "user.message",
+      "role": "user",
+      "step_index": 1,
+      "v": 2
+    },
     "type": "turn.started"
   },
   {
@@ -63,6 +70,31 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 2,
+      "tool_calls": [
+        {
+          "arguments": {
+            "content": "approved write\n",
+            "file_path": "notes.txt"
+          },
+          "id": "evt#1",
+          "name": "write_to_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -171,6 +203,21 @@
         "reasoning_tokens": 0
       }
     },
+    "record": {
+      "content": "Wrote notes.txt.",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "end_turn",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 4,
+      "v": 2
+    },
     "type": "model.completed"
   },
   {
@@ -182,6 +229,21 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "Turn completed (end_turn) with 1 tool call(s).",
+      "kind": "turn.completed",
+      "metadata": {
+        "stop_reason": "end_turn",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "system",
+      "step_index": 5,
+      "v": 2
     },
     "type": "turn.completed"
   }

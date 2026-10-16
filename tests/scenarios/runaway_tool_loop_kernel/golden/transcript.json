@@ -925,5 +925,20 @@
       }
     ],
     "v": 2
+  },
+  {
+    "content": "Turn completed (max_iterations) with 20 tool call(s).",
+    "kind": "turn.completed",
+    "metadata": {
+      "stop_reason": "max_iterations",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "role": "system",
+    "step_index": 42,
+    "v": 2
   }
 ]

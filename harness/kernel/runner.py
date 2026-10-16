@@ -228,6 +228,7 @@ class KernelServicesImpl:
         self.cost_ledger = c_ledger
 
         # Turn state
+        self._pending_model_completed: Any = None
         self.turn_cost_usd: float = 0.0
         self.turn_unknown_pricing: bool = False
         # WS-04: the transcript log is the source of truth; there is no parallel in-memory record list
@@ -528,14 +529,11 @@ class KernelServicesImpl:
                 f"Turn spend of ${self.turn_cost_usd:.4f} exceeded configured spend cap of ${self.spend_cap_usd:.2f}"
             )
 
-        await self.emit(
-            Event(
-                type="model.completed",
-                session_id=self.session.session_id,
-                turn_id=self.turn_id,
-                data=ModelCompleted(stop_reason=stop_reason, usage=usage),
-            )
-        )
+        # `model.completed` is durable, so it is not published yet: the assistant record it names does not
+        # exist until the strategy records the message, and an event that points at nothing would be the
+        # second source of truth. `record()` emits it with the stored record attached; the flush in
+        # `execute_turn` guarantees a turn that never recorded still tells the client the call finished.
+        self._pending_model_completed = ModelCompleted(stop_reason=stop_reason, usage=usage)
 
         content_blocks = []
         if thinking_parts:
@@ -623,6 +621,12 @@ class KernelServicesImpl:
         step_idx = await self.log.append(rec)
         rec = self.log.records[-1]
 
+        # Pair the model call with its record: `model.completed` waits here so the event and the log agree
+        # on what the assistant said, in that order. Only the assistant message the stream produced carries
+        # `stop_reason`, so a strategy recording something else first cannot steal the pairing.
+        if msg.role == Role.ASSISTANT and rec.get("metadata", {}).get("stop_reason"):
+            await self.flush_pending_model_completed(record=rec)
+
         if self.search_index:
             try:
                 await self.search_index.index(self.session.session_id, rec)
@@ -630,6 +634,28 @@ class KernelServicesImpl:
                 logger.warning(f"Error indexing transcript record: {e}")
 
         return step_idx
+
+    async def flush_pending_model_completed(self, record: dict[str, Any] | None = None) -> None:
+        """Emits a `model.completed` that was waiting for its record (see `_stream`)."""
+        pending = getattr(self, "_pending_model_completed", None)
+        if pending is None:
+            return
+        self._pending_model_completed = None
+        await self._announce_plain("model.completed", pending, record=record)
+
+    async def _announce_plain(
+        self, event_type: str, data: Any, record: dict[str, Any] | None = None
+    ) -> None:
+        if self.bus:
+            self.bus.publish(
+                Event(
+                    type=event_type,
+                    session_id=self.session.session_id,
+                    turn_id=self.turn_id,
+                    data=data,
+                    record=record,
+                )
+            )
 
     async def spawn_child(
         self,
@@ -701,6 +727,74 @@ class TurnRunner:
         # Active turn cancellation tracking
         self._active_cancels: dict[str, asyncio.Event] = {}
 
+    async def _announce(
+        self,
+        *,
+        services: Any,
+        session_id: str,
+        turn_id: str,
+        data: Any,
+        marker: bool = False,
+        record: dict[str, Any] | None = None,
+    ) -> None:
+        """Publishes a turn event, writing its marker record to the log first (WS-04 log-before-emit).
+
+        `marker` means "this event is itself a fact worth keeping" — `turn.completed`, `turn.error`,
+        `turn.cancelled` — and the kind comes from the payload class, so the event and the record can
+        never disagree about what they are. A client may therefore render the event's `record` and get the
+        same thing back from the log after a reload.
+        """
+        if marker and record is None:
+            record = await self._append_marker(services, data)
+        if self.bus:
+            self.bus.publish(
+                Event(type=data.EVENT_TYPE, session_id=session_id, turn_id=turn_id, data=data, record=record)
+            )
+
+    async def _append_marker(self, services: Any, data: Any) -> dict[str, Any] | None:
+        """Appends the marker record a durable turn event names, best-effort.
+
+        Best-effort on purpose: this runs at the *end* of a turn, so the work it summarises is already
+        logged. Failing to write a summary line must not destroy a finished turn — but it does drop the
+        record pointer, and the client then falls back to reading the log.
+        """
+        kind = getattr(type(data), "record_kind", None)
+        if services is None or not kind:
+            return None
+        content, metadata = _marker_fields(kind, data)
+        try:
+            await services.log.append(
+                TranscriptRecord(kind=kind, role="system", content=content, metadata=metadata)
+            )
+            return services.log.records[-1]
+        except Exception as e:
+            logger.warning(f"Could not append the {kind} marker to the session log: {e}")
+            return None
+
+    async def _fail_closed(
+        self, session_id: str, turn_id: str, services: Any, err: TranscriptAppendError
+    ) -> TurnResult:
+        """Stops a turn whose log could not be written, and says so.
+
+        Not retryable: earlier steps of the turn are already on disk, so running it again would append
+        them twice. The event carries no record pointer — the log being writable is exactly what failed.
+        """
+        logger.error(f"Turn aborted: {err}")
+        await self._announce(
+            services=None,
+            session_id=session_id,
+            turn_id=turn_id,
+            data=TurnError(
+                message=(
+                    "The session log could not be written, so the turn was stopped rather than continue "
+                    f"unrecorded ({err.reason}). Nothing was lost that was not already written."
+                ),
+                kind="transcript_append_failed",
+                retryable=False,
+            ),
+        )
+        return TurnResult(output="", error=str(err), stop_reason="transcript_append_failed")
+
     def cancel_turn(self, session_id: str) -> bool:
         """Signals cancellation to an active turn."""
         cancel_evt = self._active_cancels.get(session_id)
@@ -748,47 +842,12 @@ class TurnRunner:
         provider_name = turn_options.get("provider", "default")
         model_name = turn_options.get("model", "default")
 
-        if self.bus:
-            self.bus.publish(
-                Event(
-                    type="turn.started",
-                    session_id=session.session_id,
-                    turn_id=turn_id,
-                    data=TurnStarted(
-                        prompt_preview=prompt[:120],
-                        strategy=strat_name,
-                        provider=provider_name,
-                        model=model_name,
-                        options=turn_options,
-                    ),
-                )
-            )
-
-        # 2. Fire USER_PROMPT_SUBMIT hooks
-        hook_ctx = HookContextImpl(session_id=session.session_id, workspace=session.workspace)
-        hooks = self.registry.get_hooks_for_event(HookEvent.USER_PROMPT_SUBMIT)
-        for h in hooks:
-            try:
-                outcome = await asyncio.wait_for(
-                    h.on(HookEvent.USER_PROMPT_SUBMIT, {"prompt": prompt}, hook_ctx),
-                    timeout=h.timeout_s,
-                )
-                if outcome.action == "block":
-                    err_msg = f"Turn blocked by hook '{h.name}': {outcome.reason}"
-                    if self.bus:
-                        self.bus.publish(
-                            Event(
-                                type="turn.error",
-                                session_id=session.session_id,
-                                turn_id=turn_id,
-                                data=TurnError(message=err_msg, kind="hook_blocked", retryable=False),
-                            )
-                        )
-                    return TurnResult(output="", error=err_msg, stop_reason="cancelled")
-            except Exception as e:
-                logger.warning(f"Error in hook '{h.name}': {e}")
-
-        # 3. Instantiate KernelServices and TurnContext
+        # 2. Instantiate KernelServices, then load the log and record the prompt.
+        #
+        # This sits ahead of the USER_PROMPT_SUBMIT hooks and ahead of `turn.started` on purpose
+        # (WS-04 log-before-emit): a turn the client was told about must already exist in the log, and a
+        # prompt a hook blocked must still be there — otherwise a reload shows neither the attempt nor the
+        # reason it stopped.
         services = KernelServicesImpl(
             runner=self,
             session=session,
@@ -807,9 +866,19 @@ class TurnRunner:
 
         # WS-03: hooks that need session history (read-before-edit) read it from here instead of
         # keeping a private copy. `turn_state` is per turn — services are rebuilt each turn — and
-        # this is the same list object the runner appends to, so the ledger a guard sees includes the
-        # read that happened two steps ago in this very turn, and nothing from the next turn.
+        # this is the same list object the log appends to, so the ledger a guard sees includes the read
+        # that happened two steps ago in this very turn, and nothing from the next turn.
         services.turn_state["records"] = services.log.records
+
+        # A previous process may have died between recording a tool call and recording its result. Close
+        # those calls *in the log* now, so every later request is derived from a self-consistent
+        # transcript rather than being silently repaired differently in each reader.
+        try:
+            await services.log.repair_dangling_tool_calls()
+        except TranscriptAppendError as e:
+            return await self._fail_closed(session.session_id, turn_id, services, e)
+        except Exception as e:
+            logger.warning(f"Could not close unanswered tool calls: {e}")
 
         turn_ctx = TurnContextImpl(
             session=session,
@@ -821,7 +890,54 @@ class TurnRunner:
             cancel=cancel,
         )
 
-        # 4. Resolve Strategy
+        # 3. Record the prompt, then announce the turn with the record it describes.
+        user_blocks = [TextBlock(text=prompt)]
+        if media:
+            user_blocks.extend(media)
+        try:
+            await services.record(Message(role=Role.USER, content=user_blocks))
+        except TranscriptAppendError as e:
+            return await self._fail_closed(session.session_id, turn_id, services, e)
+
+        await self._announce(
+            services=services,
+            session_id=session.session_id,
+            turn_id=turn_id,
+            data=TurnStarted(
+                prompt_preview=prompt[:120],
+                strategy=strat_name,
+                provider=provider_name,
+                model=model_name,
+                options=turn_options,
+            ),
+            record=services.log.records[-1] if services.log.records else None,
+        )
+
+        # 4. Fire USER_PROMPT_SUBMIT hooks
+        hook_ctx = HookContextImpl(session_id=session.session_id, workspace=session.workspace)
+        hooks = self.registry.get_hooks_for_event(HookEvent.USER_PROMPT_SUBMIT)
+        for h in hooks:
+            try:
+                outcome = await asyncio.wait_for(
+                    h.on(HookEvent.USER_PROMPT_SUBMIT, {"prompt": prompt}, hook_ctx),
+                    timeout=h.timeout_s,
+                )
+                if outcome.action == "block":
+                    err_msg = f"Turn blocked by hook '{h.name}': {outcome.reason}"
+                    await self._announce(
+                        services=services,
+                        session_id=session.session_id,
+                        turn_id=turn_id,
+                        data=TurnError(message=err_msg, kind="hook_blocked", retryable=False),
+                        marker=True,
+                    )
+                    return TurnResult(output="", error=err_msg, stop_reason="cancelled")
+            except TranscriptAppendError as e:
+                return await self._fail_closed(session.session_id, turn_id, services, e)
+            except Exception as e:
+                logger.warning(f"Error in hook '{h.name}': {e}")
+
+        # 5. Resolve Strategy
         strategy: Strategy
         reg_strat = self.registry.get_strategy(strat_name)
         if reg_strat:
@@ -829,118 +945,76 @@ class TurnRunner:
         else:
             strategy = SingleLoopStrategy()
 
-        # 5. Execute Strategy
+        # 6. Execute Strategy
         try:
-            # Record user Message — inside the guarded region on purpose. Logging is what makes a step
-            # real, so if the prompt cannot be written the model is not called at all (WS-04 §1.3);
-            # a turn that ran but was not recorded is a turn that did not happen.
-            user_blocks = [TextBlock(text=prompt)]
-            if media:
-                user_blocks.extend(media)
-            await services.record(Message(role=Role.USER, content=user_blocks))
-
             result = await strategy.run(turn_ctx, services)
         except asyncio.CancelledError:
-            if self.bus:
-                self.bus.publish(
-                    Event(
-                        type="turn.cancelled",
-                        session_id=session.session_id,
-                        turn_id=turn_id,
-                        data=TurnCancelled(reason="Turn cancelled by user"),
-                    )
-                )
-            await services.record(
-                Message(
-                    role=Role.SYSTEM,
-                    content=[TextBlock(text="Turn cancelled by user.")],
-                    metadata={"type": "notification"},
-                )
+            # The `turn.cancelled` marker record *is* what happened — there is no second notification
+            # to keep in step with it (derive_messages ignores the kind, so the model never saw either).
+            await self._announce(
+                services=services,
+                session_id=session.session_id,
+                turn_id=turn_id,
+                data=TurnCancelled(reason="Turn cancelled by user"),
+                marker=True,
             )
             return TurnResult(output="Turn cancelled", stop_reason="cancelled")
         except SpendCapExceeded as e:
-            if self.bus:
-                self.bus.publish(
-                    Event(
-                        type="turn.error",
-                        session_id=session.session_id,
-                        turn_id=turn_id,
-                        data=TurnError(message=str(e), kind="spend_cap", retryable=False),
-                    )
-                )
+            await self._announce(
+                services=services,
+                session_id=session.session_id,
+                turn_id=turn_id,
+                data=TurnError(message=str(e), kind="spend_cap", retryable=False),
+                marker=True,
+            )
             return TurnResult(output="", error=str(e), stop_reason="spend_cap_exceeded")
         except ProviderError as e:
             logger.warning(f"Provider configuration error: {e}")
-            if self.bus:
-                self.bus.publish(
-                    Event(
-                        type="turn.error",
-                        session_id=session.session_id,
-                        turn_id=turn_id,
-                        data=TurnError(message=str(e), kind=e.kind, retryable=False),
-                    )
-                )
+            await self._announce(
+                services=services,
+                session_id=session.session_id,
+                turn_id=turn_id,
+                data=TurnError(message=str(e), kind=e.kind, retryable=False),
+                marker=True,
+            )
             return TurnResult(output="", error=str(e), stop_reason="error")
         except TranscriptAppendError as e:
             # The log *is* the conversation. If a step cannot be written, the turn stops here instead of
             # carrying on over a history nobody will ever read again — the alternative is a session that
             # looks normal live and is missing turns on reload. Not retryable: earlier steps of this turn
             # are already logged, so re-running it would append them twice.
-            logger.error(f"Turn aborted: {e}")
-            if self.bus:
-                self.bus.publish(
-                    Event(
-                        type="turn.error",
-                        session_id=session.session_id,
-                        turn_id=turn_id,
-                        data=TurnError(
-                            message=(
-                                "The session log could not be written, so the turn was stopped rather "
-                                f"than continue unrecorded ({e.reason}). Nothing was lost that was not "
-                                "already written."
-                            ),
-                            kind="transcript_append_failed",
-                            retryable=False,
-                        ),
-                    )
-                )
-            return TurnResult(output="", error=str(e), stop_reason="transcript_append_failed")
+            return await self._fail_closed(session.session_id, turn_id, services, e)
         except Exception as e:
             logger.exception(f"Turn execution error: {e}")
-            if self.bus:
-                self.bus.publish(
-                    Event(
-                        type="turn.error",
-                        session_id=session.session_id,
-                        turn_id=turn_id,
-                        data=TurnError(message=str(e), kind="runtime_error", retryable=False),
-                    )
-                )
+            await self._announce(
+                services=services,
+                session_id=session.session_id,
+                turn_id=turn_id,
+                data=TurnError(message=str(e), kind="runtime_error", retryable=False),
+                marker=True,
+            )
             return TurnResult(output="", error=str(e), stop_reason="error")
         finally:
+            # A model response that was streamed but never recorded (the strategy raised in between) still
+            # owes the client its `model.completed`; flushing here keeps the event from vanishing while
+            # `record()` keeps it ordered after the record it points at.
+            await services.flush_pending_model_completed()
             self._active_cancels.pop(session.session_id, None)
 
         # Check if cancelled during strategy
         if cancel.is_set():
-            if self.bus:
-                self.bus.publish(
-                    Event(
-                        type="turn.cancelled",
-                        session_id=session.session_id,
-                        turn_id=turn_id,
-                        data=TurnCancelled(reason="Turn cancelled by user"),
-                    )
-                )
-            await services.record(
-                Message(
-                    role=Role.SYSTEM,
-                    content=[TextBlock(text="Turn cancelled by user.")],
-                    metadata={"type": "notification"},
-                )
+            # The `turn.cancelled` marker record *is* what happened — there is no second notification
+            # to keep in step with it (derive_messages ignores the kind, so the model never saw either).
+            await self._announce(
+                services=services,
+                session_id=session.session_id,
+                turn_id=turn_id,
+                data=TurnCancelled(reason="Turn cancelled by user"),
+                marker=True,
             )
             return TurnResult(output="Turn cancelled", stop_reason="cancelled")
 
-        # 6. STOP hooks
+        # 7. STOP hooks
         stop_hooks = self.registry.get_hooks_for_event(HookEvent.STOP)
         for h in stop_hooks:
             try:
@@ -951,21 +1025,45 @@ class TurnRunner:
             except Exception as e:
                 logger.warning(f"Error in STOP hook '{h.name}': {e}")
 
-        # 7. Emit turn.completed
+        # 8. Record how the turn ended, then announce it (WS-04: log first, event second).
         duration_ms = int((time.time() - start_time) * 1000)
-        if self.bus:
-            self.bus.publish(
-                Event(
-                    type="turn.completed",
-                    session_id=session.session_id,
-                    turn_id=turn_id,
-                    data=TurnCompleted(
-                        stop_reason=result.stop_reason,
-                        usage=result.usage,
-                        duration_ms=duration_ms,
-                        tool_calls=result.tool_calls,
-                    ),
-                )
-            )
+        await self._announce(
+            services=services,
+            session_id=session.session_id,
+            turn_id=turn_id,
+            data=TurnCompleted(
+                stop_reason=result.stop_reason,
+                usage=result.usage,
+                duration_ms=duration_ms,
+                tool_calls=result.tool_calls,
+            ),
+            marker=True,
+        )
 
         return result
+
+
+def _marker_fields(kind: str, data: Any) -> tuple[str, dict[str, Any]]:
+    """(content, metadata) for a turn marker record, derived from the event payload it mirrors.
+
+    Deriving rather than passing two descriptions of the same fact is the point: the event and the record
+    cannot drift, and `derive_messages` ignores these kinds, so no marker text reaches a model request.
+    """
+    d = data.to_dict() if hasattr(data, "to_dict") else dict(vars(data))
+    if kind == "turn.completed":
+        # No latency in the text: a duration in a record body makes the transcript nondeterministic (the
+        # golden normaliser drops `duration_ms` *keys*, not a number baked into prose). It stays in
+        # metadata, where a reader that wants it can find it.
+        calls = d.get("tool_calls", 0)
+        return (
+            f"Turn completed ({d.get('stop_reason', 'end_turn')}) with {calls} tool call(s).",
+            {"stop_reason": d.get("stop_reason"), "duration_ms": d.get("duration_ms"), "usage": d.get("usage")},
+        )
+    if kind == "turn.error":
+        return (
+            f"Turn failed ({d.get('kind', 'error')}): {d.get('message', '')}",
+            {"error_kind": d.get("kind"), "retryable": d.get("retryable")},
+        )
+    if kind == "turn.cancelled":
+        return (f"Turn cancelled: {d.get('reason', 'by user')}", {})
+    return (f"{kind}: {d}", dict(d))

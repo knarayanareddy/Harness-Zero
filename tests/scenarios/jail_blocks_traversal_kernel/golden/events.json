@@ -22,6 +22,13 @@
       "provider": "replay",
       "strategy": "single_loop"
     },
+    "record": {
+      "content": "Read /etc/hostname and write a file one level up.",
+      "kind": "user.message",
+      "role": "user",
+      "step_index": 1,
+      "v": 2
+    },
     "type": "turn.started"
   },
   {
@@ -62,6 +69,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 2,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "../../../../etc/hostname"
+          },
+          "id": "evt#1",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -139,6 +170,31 @@
         "reasoning_tokens": 0
       }
     },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 4,
+      "tool_calls": [
+        {
+          "arguments": {
+            "content": "outside\n",
+            "file_path": "../escape.txt"
+          },
+          "id": "evt#2",
+          "name": "write_to_file"
+        }
+      ],
+      "v": 2
+    },
     "type": "model.completed"
   },
   {
@@ -211,6 +267,21 @@
         "reasoning_tokens": 0
       }
     },
+    "record": {
+      "content": "Both attempts were blocked by the workspace jail.",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "end_turn",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 6,
+      "v": 2
+    },
     "type": "model.completed"
   },
   {
@@ -222,6 +293,21 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "Turn completed (end_turn) with 2 tool call(s).",
+      "kind": "turn.completed",
+      "metadata": {
+        "stop_reason": "end_turn",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "system",
+      "step_index": 7,
+      "v": 2
     },
     "type": "turn.completed"
   }

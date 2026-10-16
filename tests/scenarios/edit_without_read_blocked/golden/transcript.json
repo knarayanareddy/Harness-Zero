@@ -160,5 +160,20 @@
     "role": "assistant",
     "step_index": 8,
     "v": 2
+  },
+  {
+    "content": "Turn completed (end_turn) with 3 tool call(s).",
+    "kind": "turn.completed",
+    "metadata": {
+      "stop_reason": "end_turn",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "role": "system",
+    "step_index": 9,
+    "v": 2
   }
 ]

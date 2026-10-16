@@ -69,10 +69,25 @@
     "v": 2
   },
   {
+    "content": "Turn completed (end_turn) with 1 tool call(s).",
+    "kind": "turn.completed",
+    "metadata": {
+      "stop_reason": "end_turn",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "role": "system",
+    "step_index": 5,
+    "v": 2
+  },
+  {
     "content": "What is the codename?",
     "kind": "user.message",
     "role": "user",
-    "step_index": 5,
+    "step_index": 6,
     "v": 2
   },
   {
@@ -87,7 +102,7 @@
       }
     },
     "role": "assistant",
-    "step_index": 6,
+    "step_index": 7,
     "tool_calls": [
       {
         "arguments": {
@@ -106,7 +121,7 @@
       "tool_results": true
     },
     "role": "user",
-    "step_index": 7,
+    "step_index": 8,
     "tool_results": [
       {
         "content": [
@@ -133,7 +148,22 @@
       }
     },
     "role": "assistant",
-    "step_index": 8,
+    "step_index": 9,
+    "v": 2
+  },
+  {
+    "content": "Turn completed (end_turn) with 1 tool call(s).",
+    "kind": "turn.completed",
+    "metadata": {
+      "stop_reason": "end_turn",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "role": "system",
+    "step_index": 10,
     "v": 2
   }
 ]

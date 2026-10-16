@@ -25,6 +25,12 @@ logger = logging.getLogger(__name__)
 
 RECORD_VERSION = 2
 
+#: Kinds that read as a message — to a human or to a model. Everything else in the log (turn markers,
+#: decisions, approvals, cards) is a record *about* the conversation, not a message in it, so a session
+#: that ran one tool call has three messages and eight records. `MESSAGE_KINDS == MODEL_VISIBLE_KINDS`
+#: is asserted in tests/kernel/test_derive_messages.py: the counter and the projection may not drift.
+MESSAGE_KINDS = frozenset({"user.message", "assistant.message", "tool.result", "compaction.summary"})
+
 # v1 lines sometimes carried a `source`/`type` instead of a role (the pre-WS-04 store shape and the
 # `COMPACTION_SUMMARY` marker). Only used when `role` is missing.
 _ROLE_FROM_LEGACY_TYPE = {
@@ -228,6 +234,73 @@ class TranscriptLog:
         data["step_index"] = step or len(self._cache) + 1
         self._cache.append(data)
         return data["step_index"]
+
+    def dangling_tool_calls(self) -> list[dict[str, Any]]:
+        """`tool_use` blocks in the log that no later record answered.
+
+        The crash shape this looks for: an assistant record was written with tool calls, and the process
+        died before the results were. `derive_messages` repairs the *view* (it has to — a provider 400s
+        on an unpaired `tool_use`), but the repair belongs in the log too, otherwise every subsequent
+        request re-invents it and nothing on disk says the call was never answered.
+        """
+        answered: set[str] = set()
+        for rec in self.records:
+            for res in rec.get("tool_results") or []:
+                tid = res.get("tool_use_id") if isinstance(res, dict) else None
+                if tid:
+                    answered.add(str(tid))
+            meta = rec.get("metadata") or {}
+            if isinstance(meta, dict) and meta.get("call_id") and str(rec.get("kind") or "") == "tool.result":
+                answered.add(str(meta["call_id"]))
+        out: list[dict[str, Any]] = []
+        for rec in self.records:
+            for call in rec.get("tool_calls") or []:
+                if not isinstance(call, dict):
+                    continue
+                cid = str(call.get("id") or "")
+                if cid and cid not in answered:
+                    out.append({"call_id": cid, "name": str(call.get("name") or ""), "record_index": rec.get("step_index")})
+                    answered.add(cid)
+        return out
+
+    async def repair_dangling_tool_calls(self) -> list[dict[str, Any]]:
+        """Appends an explicit error result for every unanswered tool call; returns what was written.
+
+        Synthetic and labelled as such (`metadata.synthetic`): a fabricated success would be the worse
+        lie, and the alternative — repairing only in memory — leaves a transcript that cannot explain the
+        gap to whoever reads it next.
+        """
+        from harness.sdk.types import TranscriptRecord
+
+        appended: list[dict[str, Any]] = []
+        for dangling in self.dangling_tool_calls():
+            name = dangling["name"] or "tool"
+            rec = TranscriptRecord(
+                kind="tool.result",
+                role="tool",
+                content=(
+                    f"[Synthetic result] The turn ended before `{name}` recorded a result, so this call "
+                    "is closed as an error rather than left dangling. Check whether the tool ran."
+                ),
+                metadata={
+                    "call_id": dangling["call_id"],
+                    "tool_name": name,
+                    "is_error": True,
+                    "synthetic": True,
+                    "repair": True,
+                    "source_record_index": dangling.get("record_index"),
+                },
+                tool_results=[
+                    {
+                        "tool_use_id": dangling["call_id"],
+                        "content": [{"type": "text", "text": "Tool call was never answered (repaired on resume)."}],
+                        "is_error": True,
+                    }
+                ],
+            )
+            await self.append(rec)
+            appended.append(self._records[-1])
+        return appended
 
     async def append_notice(self, text: str, *, metadata: dict[str, Any] | None = None) -> int:
         """A user-visible system notice (`model_visible: True` also reaches the model)."""

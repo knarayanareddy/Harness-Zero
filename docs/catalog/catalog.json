@@ -453,6 +453,7 @@
   "events": [
     {
       "client_renderer": "app.js",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "approval_id",
@@ -467,14 +468,17 @@
       "producers": [
         "harness/kernel/approvals.py"
       ],
+      "record_kind": null,
       "scenarios": [
         "approval_allow_kernel",
         "approval_allow_web_dom"
       ],
+      "transient": false,
       "type": "approval.required"
     },
     {
       "client_renderer": "app.js",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "approval_id",
@@ -486,14 +490,17 @@
       "producers": [
         "harness/kernel/approvals.py"
       ],
+      "record_kind": null,
       "scenarios": [
         "approval_allow_kernel",
         "approval_allow_web_dom"
       ],
+      "transient": false,
       "type": "approval.resolved"
     },
     {
       "client_renderer": "app.js",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "duration_ms",
@@ -503,44 +510,56 @@
       "producers": [
         "harness/kernel/compaction.py"
       ],
+      "record_kind": null,
       "scenarios": [],
+      "transient": false,
       "type": "compaction.completed"
     },
     {
       "client_renderer": "app.js",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
-        "estimated_tokens"
+        "estimated_tokens",
+        "transient"
       ],
       "payload": "CompactionStarted",
       "producers": [
         "harness/kernel/compaction.py"
       ],
+      "record_kind": null,
       "scenarios": [],
+      "transient": true,
       "type": "compaction.started"
     },
     {
       "client_renderer": "app.js",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "blocks",
         "history_messages",
-        "total_tokens"
+        "total_tokens",
+        "transient"
       ],
       "payload": "ContextAssembled",
       "producers": [
         "harness/kernel/context.py"
       ],
+      "record_kind": null,
       "scenarios": [],
+      "transient": true,
       "type": "context.assembled"
     },
     {
       "client_renderer": "app.js",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "cap_usd",
         "lifetime_usd",
         "session_usd",
+        "transient",
         "turn_usd",
         "unknown_pricing",
         "usage"
@@ -549,6 +568,7 @@
       "producers": [
         "harness/kernel/runner.py"
       ],
+      "record_kind": null,
       "scenarios": [
         "approval_allow_kernel",
         "approval_allow_web_dom",
@@ -575,10 +595,12 @@
         "tirith_blocks_ssrf_kernel",
         "tirith_blocks_ssrf_web_dom"
       ],
+      "transient": true,
       "type": "cost.updated"
     },
     {
       "client_renderer": "none (live only)",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "command",
@@ -591,20 +613,23 @@
       "producers": [
         "harness/plugins/bridges/shell_hooks/hook.py"
       ],
+      "record_kind": null,
       "scenarios": [],
+      "transient": false,
       "type": "hook.fired"
     },
     {
       "client_renderer": "none (live only)",
+      "durable": true,
       "fields": [
         "EVENT_TYPE",
+        "record_kind",
         "stop_reason",
         "usage"
       ],
       "payload": "ModelCompleted",
-      "producers": [
-        "harness/kernel/runner.py"
-      ],
+      "producers": [],
+      "record_kind": "assistant.message",
       "scenarios": [
         "approval_allow_kernel",
         "approval_allow_web_dom",
@@ -631,10 +656,12 @@
         "tirith_blocks_ssrf_kernel",
         "tirith_blocks_ssrf_web_dom"
       ],
+      "transient": false,
       "type": "model.completed"
     },
     {
       "client_renderer": "none (live only)",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "message"
@@ -643,21 +670,26 @@
       "producers": [
         "harness/kernel/runner.py"
       ],
+      "record_kind": null,
       "scenarios": [],
+      "transient": false,
       "type": "model.notice"
     },
     {
       "client_renderer": "none (live only)",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "model",
         "provider",
-        "request_tokens_estimate"
+        "request_tokens_estimate",
+        "transient"
       ],
       "payload": "ModelStarted",
       "producers": [
         "harness/kernel/runner.py"
       ],
+      "record_kind": null,
       "scenarios": [
         "approval_allow_kernel",
         "approval_allow_web_dom",
@@ -684,18 +716,22 @@
         "tirith_blocks_ssrf_kernel",
         "tirith_blocks_ssrf_web_dom"
       ],
+      "transient": true,
       "type": "model.started"
     },
     {
       "client_renderer": "app.js",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
-        "text"
+        "text",
+        "transient"
       ],
       "payload": "ModelTextDelta",
       "producers": [
         "harness/kernel/runner.py"
       ],
+      "record_kind": null,
       "scenarios": [
         "approval_allow_kernel",
         "approval_allow_web_dom",
@@ -721,25 +757,31 @@
         "tirith_blocks_ssrf_kernel",
         "tirith_blocks_ssrf_web_dom"
       ],
+      "transient": true,
       "type": "model.text.delta"
     },
     {
       "client_renderer": "app.js",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
-        "text"
+        "text",
+        "transient"
       ],
       "payload": "ModelThinkingDelta",
       "producers": [
         "harness/kernel/runner.py"
       ],
+      "record_kind": null,
       "scenarios": [
         "thinking_then_answer_web"
       ],
+      "transient": true,
       "type": "model.thinking.delta"
     },
     {
       "client_renderer": "none (live only)",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "arguments",
@@ -750,6 +792,7 @@
       "producers": [
         "harness/kernel/runner.py"
       ],
+      "record_kind": null,
       "scenarios": [
         "approval_allow_kernel",
         "approval_allow_web_dom",
@@ -770,10 +813,12 @@
         "tirith_blocks_ssrf_kernel",
         "tirith_blocks_ssrf_web_dom"
       ],
+      "transient": false,
       "type": "model.tool_call"
     },
     {
       "client_renderer": "none (live only)",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "error",
@@ -783,11 +828,14 @@
       "producers": [
         "harness/kernel/registry.py"
       ],
+      "record_kind": null,
       "scenarios": [],
+      "transient": false,
       "type": "plugin.error"
     },
     {
       "client_renderer": "none (live only)",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "capabilities",
@@ -800,11 +848,14 @@
       "producers": [
         "harness/kernel/registry.py"
       ],
+      "record_kind": null,
       "scenarios": [],
+      "transient": false,
       "type": "plugin.loaded"
     },
     {
       "client_renderer": "app.js",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "model",
@@ -817,6 +868,7 @@
       "producers": [
         "harness/kernel/session.py"
       ],
+      "record_kind": null,
       "scenarios": [
         "approval_allow_kernel",
         "approval_allow_web_dom",
@@ -843,10 +895,12 @@
         "tirith_blocks_ssrf_kernel",
         "tirith_blocks_ssrf_web_dom"
       ],
+      "transient": false,
       "type": "session.started"
     },
     {
       "client_renderer": "app.js",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "session_id",
@@ -856,11 +910,14 @@
       "producers": [
         "harness/kernel/session.py"
       ],
+      "record_kind": null,
       "scenarios": [],
+      "transient": false,
       "type": "session.switched"
     },
     {
       "client_renderer": "app.js",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "paths"
@@ -869,11 +926,14 @@
       "producers": [
         "harness/kernel/commands.py"
       ],
+      "record_kind": null,
       "scenarios": [],
+      "transient": false,
       "type": "settings.changed"
     },
     {
       "client_renderer": "app.js",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "exit_code",
@@ -885,11 +945,14 @@
       "producers": [
         "harness/kernel/inbox.py"
       ],
+      "record_kind": null,
       "scenarios": [],
+      "transient": false,
       "type": "task.completed"
     },
     {
       "client_renderer": "app.js",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "label",
@@ -899,11 +962,14 @@
       "producers": [
         "harness/kernel/inbox.py"
       ],
+      "record_kind": null,
       "scenarios": [],
+      "transient": false,
       "type": "task.started"
     },
     {
       "client_renderer": "app.js",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "arguments",
@@ -916,6 +982,7 @@
       "producers": [
         "harness/kernel/gate.py"
       ],
+      "record_kind": null,
       "scenarios": [
         "approval_allow_kernel",
         "approval_allow_web_dom",
@@ -936,10 +1003,12 @@
         "tirith_blocks_ssrf_kernel",
         "tirith_blocks_ssrf_web_dom"
       ],
+      "transient": false,
       "type": "tool.call"
     },
     {
       "client_renderer": "app.js",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "action",
@@ -952,6 +1021,7 @@
       "producers": [
         "harness/kernel/gate.py"
       ],
+      "record_kind": null,
       "scenarios": [
         "approval_allow_kernel",
         "approval_allow_web_dom",
@@ -972,44 +1042,54 @@
         "tirith_blocks_ssrf_kernel",
         "tirith_blocks_ssrf_web_dom"
       ],
+      "transient": false,
       "type": "tool.decision"
     },
     {
       "client_renderer": "app.js",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "call_id",
         "stream",
-        "text"
+        "text",
+        "transient"
       ],
       "payload": "ToolOutputDelta",
       "producers": [
         "harness/kernel/gate.py"
       ],
+      "record_kind": null,
       "scenarios": [
         "huge_tool_output_pruned_and_spilled",
         "repeat_call_reminder"
       ],
+      "transient": true,
       "type": "tool.output.delta"
     },
     {
       "client_renderer": "none (live only)",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "blocked",
         "call_id",
         "count",
-        "name"
+        "name",
+        "transient"
       ],
       "payload": "ToolRepeatDetected",
       "producers": [],
+      "record_kind": null,
       "scenarios": [
         "repeat_call_reminder"
       ],
+      "transient": true,
       "type": "tool.repeat_detected"
     },
     {
       "client_renderer": "app.js",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "call_id",
@@ -1023,6 +1103,7 @@
       "producers": [
         "harness/kernel/gate.py"
       ],
+      "record_kind": null,
       "scenarios": [
         "approval_allow_kernel",
         "approval_allow_web_dom",
@@ -1043,51 +1124,59 @@
         "tirith_blocks_ssrf_kernel",
         "tirith_blocks_ssrf_web_dom"
       ],
+      "transient": false,
       "type": "tool.result"
     },
     {
       "client_renderer": "none (live only)",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "call_id",
         "name",
         "original_chars",
         "shown_chars",
-        "spill_path"
+        "spill_path",
+        "transient"
       ],
       "payload": "ToolResultPruned",
       "producers": [],
+      "record_kind": null,
       "scenarios": [
         "huge_tool_output_pruned_and_spilled"
       ],
+      "transient": true,
       "type": "tool.result.pruned"
     },
     {
       "client_renderer": "app.js",
+      "durable": true,
       "fields": [
         "EVENT_TYPE",
-        "reason"
+        "reason",
+        "record_kind"
       ],
       "payload": "TurnCancelled",
-      "producers": [
-        "harness/kernel/runner.py"
-      ],
+      "producers": [],
+      "record_kind": "turn.cancelled",
       "scenarios": [],
+      "transient": false,
       "type": "turn.cancelled"
     },
     {
       "client_renderer": "app.js",
+      "durable": true,
       "fields": [
         "EVENT_TYPE",
         "duration_ms",
+        "record_kind",
         "stop_reason",
         "tool_calls",
         "usage"
       ],
       "payload": "TurnCompleted",
-      "producers": [
-        "harness/kernel/runner.py"
-      ],
+      "producers": [],
+      "record_kind": "turn.completed",
       "scenarios": [
         "approval_allow_kernel",
         "approval_allow_web_dom",
@@ -1114,37 +1203,41 @@
         "tirith_blocks_ssrf_kernel",
         "tirith_blocks_ssrf_web_dom"
       ],
+      "transient": false,
       "type": "turn.completed"
     },
     {
       "client_renderer": "app.js",
+      "durable": true,
       "fields": [
         "EVENT_TYPE",
         "kind",
         "message",
+        "record_kind",
         "retryable"
       ],
       "payload": "TurnError",
-      "producers": [
-        "harness/kernel/runner.py"
-      ],
+      "producers": [],
+      "record_kind": "turn.error",
       "scenarios": [],
+      "transient": false,
       "type": "turn.error"
     },
     {
       "client_renderer": "app.js",
+      "durable": true,
       "fields": [
         "EVENT_TYPE",
         "model",
         "options",
         "prompt_preview",
         "provider",
+        "record_kind",
         "strategy"
       ],
       "payload": "TurnStarted",
-      "producers": [
-        "harness/kernel/runner.py"
-      ],
+      "producers": [],
+      "record_kind": "user.message",
       "scenarios": [
         "approval_allow_kernel",
         "approval_allow_web_dom",
@@ -1171,10 +1264,12 @@
         "tirith_blocks_ssrf_kernel",
         "tirith_blocks_ssrf_web_dom"
       ],
+      "transient": false,
       "type": "turn.started"
     },
     {
       "client_renderer": "app.js",
+      "durable": false,
       "fields": [
         "EVENT_TYPE",
         "card"
@@ -1185,6 +1280,7 @@
         "harness/kernel/gate.py",
         "harness/plugins/bridges/shell_hooks/hook.py"
       ],
+      "record_kind": null,
       "scenarios": [
         "edit_without_read_blocked",
         "memory_remember_search_kernel",
@@ -1193,6 +1289,7 @@
         "read_then_edit_web_dom",
         "skills_view_kernel"
       ],
+      "transient": false,
       "type": "ui.card"
     }
   ],

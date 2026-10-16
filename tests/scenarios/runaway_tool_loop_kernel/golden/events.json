@@ -22,6 +22,13 @@
       "provider": "replay",
       "strategy": "single_loop"
     },
+    "record": {
+      "content": "Loop forever",
+      "kind": "user.message",
+      "role": "user",
+      "step_index": 1,
+      "v": 2
+    },
     "type": "turn.started"
   },
   {
@@ -62,6 +69,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 2,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#1",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -143,6 +174,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 4,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#2",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -224,6 +279,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 6,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#3",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -305,6 +384,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 8,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#4",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -386,6 +489,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 10,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#5",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -467,6 +594,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 12,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#6",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -548,6 +699,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 14,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#7",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -629,6 +804,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 16,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#8",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -710,6 +909,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 18,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#9",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -791,6 +1014,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 20,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#10",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -872,6 +1119,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 22,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#11",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -953,6 +1224,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 24,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#12",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -1034,6 +1329,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 26,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#13",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -1115,6 +1434,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 28,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#14",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -1196,6 +1539,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 30,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#15",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -1277,6 +1644,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 32,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#16",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -1358,6 +1749,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 34,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#17",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -1439,6 +1854,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 36,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#18",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -1520,6 +1959,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 38,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#19",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -1601,6 +2064,30 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 40,
+      "tool_calls": [
+        {
+          "arguments": {
+            "file_path": "app.py"
+          },
+          "id": "evt#20",
+          "name": "view_file"
+        }
+      ],
+      "v": 2
     },
     "type": "model.completed"
   },
@@ -1653,6 +2140,21 @@
         "cache_write_tokens": 0,
         "reasoning_tokens": 0
       }
+    },
+    "record": {
+      "content": "Turn completed (max_iterations) with 20 tool call(s).",
+      "kind": "turn.completed",
+      "metadata": {
+        "stop_reason": "max_iterations",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "system",
+      "step_index": 42,
+      "v": 2
     },
     "type": "turn.completed"
   }

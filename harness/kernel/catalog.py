@@ -387,6 +387,12 @@ async def build_catalog(runtime: Any = None, repo_root: Path | None = None) -> d
                 "fields": sorted(getattr(payload, "__dataclass_fields__", {}) or {}),
                 "producers": _scan_producers(root, etype),
                 "client_renderer": "app.js" if etype in renderers else "none (live only)",
+                # WS-04: whether the event has a counterpart in the session log, and which record kind it
+                # is. `durable` is derived from `record_kind` (see `harness.sdk.events.EventPayload`), so
+                # this cannot claim durability the payload does not.
+                "durable": payload.record_kind is not None,
+                "record_kind": payload.record_kind,
+                "transient": bool(payload.transient),
                 "scenarios": sorted(scenario_events.get(etype, [])),
             }
         )
@@ -600,15 +606,21 @@ def render_markdown(cat: dict[str, Any], name: str) -> str:
         body.append("# Event catalogue\n\nPayloads come from `harness.sdk.events.EVENT_PAYLOADS` (the same dataclasses that "
                     "produce `docs/events.schema.json`). `Producers` is a heuristic scan for the literal event type. "
                     "`Client renderer` names the shipped web module that subscribes; `none (live only)` means the event is "
-                    "on the bus but the web client does not paint it (it may still drive the CLI or a card).\n")
+                    "on the bus but the web client does not paint it (it may still drive the CLI or a card).\n\n"
+                    "`In the log` is the WS-04 contract: `record: <kind>` means the event mirrors a transcript "
+                    "record of that kind and may carry it on `Event.record`, so a reload re-renders it from the "
+                    "log; `transient` marks streamed or derived events that no replay may depend on; `—` is a "
+                    "kernel fact that was never part of a conversation.\n")
         body.append(
             _table(
-                ["Event", "Payload", "Fields", "Client renderer", "Scenarios"],
+                ["Event", "Payload", "Fields", "In the log", "Client renderer", "Scenarios"],
                 [
                     [
                         f"`{e['type']}`",
                         f"`{e['payload']}`",
                         ", ".join(f"`{f}`" for f in e["fields"]) or "—",
+                        (f"`record: {e['record_kind']}`" if e.get("durable")
+                         else "transient" if e.get("transient") else "—"),
                         e["client_renderer"],
                         ", ".join(e["scenarios"]) or "—",
                     ]

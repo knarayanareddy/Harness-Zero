@@ -38,9 +38,29 @@ def _to_jsonable(value: Any) -> Any:
 
 
 class EventPayload:
-    """Base class for typed event payloads. Subclasses declare ``EVENT_TYPE`` and are dataclasses."""
+    """Base class for typed event payloads. Subclasses declare ``EVENT_TYPE`` and are dataclasses.
+
+    Two more ClassVars place an event against the session log (WS-04), and `harness catalog gen`
+    renders both into `docs/events.schema.json` — they are the machine-readable form of "the log is the
+    source of truth":
+
+    ``record_kind``
+        The `TranscriptRecord` kind this event mirrors. An event that names a kind is **durable**: the
+        same fact exists as a record in the session log, so a client can re-render it after a reload, and
+        the publisher can attach the stored record itself on ``Event.record``.
+    ``transient``
+        Streamed or derived noise (`*.delta`, cost updates, context assembly) that has no record and that
+        no replay may depend on. Anything neither durable nor transient (e.g. ``plugin.loaded``) is a
+        kernel fact with no session-log counterpart — visible live, not part of any transcript.
+    """
 
     EVENT_TYPE: ClassVar[str] = ""
+    record_kind: ClassVar[str | None] = None
+    transient: ClassVar[bool] = False
+
+    @classmethod
+    def durable(cls) -> bool:
+        return cls.record_kind is not None
 
     def to_dict(self) -> dict[str, Any]:
         return {f.name: _to_jsonable(getattr(self, f.name)) for f in fields(self)}  # type: ignore[arg-type]
@@ -103,6 +123,7 @@ class PluginError(EventPayload):
 @dataclass(slots=True)
 class TurnStarted(EventPayload):
     EVENT_TYPE: ClassVar[str] = "turn.started"
+    record_kind: ClassVar[str | None] = 'user.message'
     prompt_preview: str
     strategy: str
     provider: str
@@ -114,6 +135,7 @@ class TurnStarted(EventPayload):
 @dataclass(slots=True)
 class TurnCompleted(EventPayload):
     EVENT_TYPE: ClassVar[str] = "turn.completed"
+    record_kind: ClassVar[str | None] = 'turn.completed'
     stop_reason: str
     usage: Usage
     duration_ms: float
@@ -124,6 +146,7 @@ class TurnCompleted(EventPayload):
 @dataclass(slots=True)
 class TurnCancelled(EventPayload):
     EVENT_TYPE: ClassVar[str] = "turn.cancelled"
+    record_kind: ClassVar[str | None] = 'turn.cancelled'
     reason: str
 
 
@@ -131,6 +154,7 @@ class TurnCancelled(EventPayload):
 @dataclass(slots=True)
 class TurnError(EventPayload):
     EVENT_TYPE: ClassVar[str] = "turn.error"
+    record_kind: ClassVar[str | None] = 'turn.error'
     message: str
     kind: str
     retryable: bool = False
@@ -150,6 +174,7 @@ class ContextBlockInfo:
 @dataclass(slots=True)
 class ContextAssembled(EventPayload):
     EVENT_TYPE: ClassVar[str] = "context.assembled"
+    transient: ClassVar[bool] = True
     blocks: list[ContextBlockInfo]
     total_tokens: int
     history_messages: int
@@ -159,6 +184,7 @@ class ContextAssembled(EventPayload):
 @dataclass(slots=True)
 class ModelStarted(EventPayload):
     EVENT_TYPE: ClassVar[str] = "model.started"
+    transient: ClassVar[bool] = True
     provider: str
     model: str
     request_tokens_estimate: int
@@ -168,6 +194,7 @@ class ModelStarted(EventPayload):
 @dataclass(slots=True)
 class ModelTextDelta(EventPayload):
     EVENT_TYPE: ClassVar[str] = "model.text.delta"
+    transient: ClassVar[bool] = True
     text: str
 
 
@@ -175,6 +202,7 @@ class ModelTextDelta(EventPayload):
 @dataclass(slots=True)
 class ModelThinkingDelta(EventPayload):
     EVENT_TYPE: ClassVar[str] = "model.thinking.delta"
+    transient: ClassVar[bool] = True
     text: str
 
 
@@ -198,6 +226,7 @@ class ModelNotice(EventPayload):
 @dataclass(slots=True)
 class ModelCompleted(EventPayload):
     EVENT_TYPE: ClassVar[str] = "model.completed"
+    record_kind: ClassVar[str | None] = 'assistant.message'
     stop_reason: str
     usage: Usage
 
@@ -253,6 +282,7 @@ class ApprovalResolved(EventPayload):
 @dataclass(slots=True)
 class ToolOutputDelta(EventPayload):
     EVENT_TYPE: ClassVar[str] = "tool.output.delta"
+    transient: ClassVar[bool] = True
     call_id: str
     stream: str
     text: str
@@ -280,6 +310,7 @@ class ToolResultPruned(EventPayload):
     """
 
     EVENT_TYPE: ClassVar[str] = "tool.result.pruned"
+    transient: ClassVar[bool] = True
     call_id: str
     name: str
     original_chars: int
@@ -293,6 +324,7 @@ class ToolRepeatDetected(EventPayload):
     """Live-only (WS-03): this turn repeated an identical call whose result had not changed."""
 
     EVENT_TYPE: ClassVar[str] = "tool.repeat_detected"
+    transient: ClassVar[bool] = True
     call_id: str
     name: str
     count: int
@@ -321,6 +353,7 @@ class TaskCompleted(EventPayload):
 @dataclass(slots=True)
 class CompactionStarted(EventPayload):
     EVENT_TYPE: ClassVar[str] = "compaction.started"
+    transient: ClassVar[bool] = True
     estimated_tokens: int
 
 
@@ -338,6 +371,7 @@ class CostUpdated(EconomicsSnapshot, EventPayload):
     """``cost.updated`` carries the same ``EconomicsSnapshot`` the ``economics`` command returns."""
 
     EVENT_TYPE: ClassVar[str] = "cost.updated"
+    transient: ClassVar[bool] = True
 
     @classmethod
     def from_snapshot(cls, snapshot: EconomicsSnapshot) -> CostUpdated:
@@ -387,6 +421,11 @@ class Event:
     ts: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     session_id: str | None = None
     turn_id: str | None = None
+    #: The transcript record this event mirrors, exactly as stored (WS-04). Only set for durable event
+    #: types (see `EventPayload.record_kind`), and only when the publisher appended the record *before*
+    #: publishing — so a client can render history from `record` alone after a reload with no second
+    #: fetch. Omitted (not null) on the wire for every other event.
+    record: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         payload = self.data
@@ -406,6 +445,8 @@ class Event:
             d["session_id"] = self.session_id
         if self.turn_id is not None:
             d["turn_id"] = self.turn_id
+        if self.record is not None:
+            d["record"] = _to_jsonable(self.record)
         return d
 
     @classmethod
@@ -417,6 +458,7 @@ class Event:
             data=d.get("data", {}),
             session_id=d.get("session_id"),
             turn_id=d.get("turn_id"),
+            record=d.get("record"),
         )
 
 
@@ -501,6 +543,19 @@ def schema() -> dict[str, Any]:
             "session_id": {"type": ["string", "null"], "description": "Session identifier if correlated"},
             "turn_id": {"type": ["string", "null"], "description": "Turn identifier if correlated"},
             "data": {"type": "object", "description": "Event-specific payload; see $defs/payloads/<type>"},
+            "record": {
+                "type": ["object", "null"],
+                "description": "Transcript record this event mirrors, as stored (durable types only)",
+            },
+        },
+        "events": {
+            t: {
+                "payload": EVENT_PAYLOADS[t].__name__,
+                "durable": EVENT_PAYLOADS[t].record_kind is not None,
+                "record_kind": EVENT_PAYLOADS[t].record_kind,
+                "transient": bool(EVENT_PAYLOADS[t].transient),
+            }
+            for t in sorted(EVENT_PAYLOADS)
         },
         "allOf": [
             {
