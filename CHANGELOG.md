@@ -9,6 +9,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — P9 / WS-04a the session log is the source of truth (typed records, derive_messages, fail-closed append)
+- New `harness/kernel/transcript.py`: `TranscriptLog` owns the write path — one instance per session
+  directory per process, shared by the runner, `Session.log` and `sessions.get`. Before this, the runner
+  kept `transcript_records` in memory beside the JSONL file *and* built its own store instance over the
+  same directory as the `Session`'s, so two objects each held a step counter and a cache of one truth.
+  The log exposes `load`/`read`/`read_records`/`append`/`append_notice`/`last_compaction`, and its
+  `records` list is the same object consumers (message building, the WS-03 read ledger) read from.
+- Records are typed and versioned: `RECORD_KINDS` (20 kinds) + `infer_record_kind` +
+  `TranscriptRecord.kind`/`v = 2` in `harness/sdk/types.py`. `upgrade_record_v1` upgrades v1 lines **on
+  read** and never rewrites them — an appended line is the audit trail of what was recorded when. The
+  upgrade is lossless (store annotations such as `call_id`, `tool_name`, `is_error`, `full_offset`,
+  `truncated_fields` survive) and idempotent (`upgrade(v2) == v2`, because it only writes back a bag it
+  actually fills), which is what makes the live cache and a reload byte-equal.
+- **`derive_messages` is the only producer of a model request's message list.** Kind-driven rather than
+  role-driven: `user.message`, `assistant.message`, `tool.result`, `compaction.summary` and a
+  `system.notice` marked `model_visible` reach the model; decisions, approvals, cards and turn markers are
+  in the log for the user and not in the request. Dangling `tool_use` repair (explicit synthetic error
+  result), thinking-only turns stay in the transcript but off the wire, compaction slices the *derived
+  view* only, media is dropped with an explicit `[media omitted: …]` note. `records_to_messages` is kept
+  as an alias so nothing else can become a second producer.
+- **Appending is fail-closed.** `TranscriptAppendError` from the store aborts the turn *before* the model
+  is called — the user prompt is recorded inside the guarded region — with
+  `turn.error(kind="transcript_append_failed", retryable=False)` and
+  `TurnResult(stop_reason="transcript_append_failed")` (retrying would double-append what was already
+  logged).
+- `sessions.get` returns the session's `records` (upgraded) alongside `messages`, so a client can render
+  and persist a session from the log alone.
+- Catalog: `_scan_producers` now requires a publish marker (`Event(` / `publish` / `type=`) next to each
+  occurrence of the name, instead of matching the name anywhere in the file — otherwise a file that merely
+  *declares* a vocabulary (the new `RECORD_KINDS`) is listed as a producer of it.
+- Tests: 33 new — `tests/kernel/test_derive_messages.py` (16, incl. a parametrised proof that no
+  model-invisible kind is producible through `derive_messages`), `tests/kernel/test_record_upgrade_v1.py`
+  (12, incl. real v1 files read through the store and `sessions.get` preserving `full_offset`),
+  `tests/kernel/test_log_is_source.py` (4, incl. "a store that cannot append stops the turn" and
+  "a record survives a reload with its kind"). Full `pytest -q` → 507 passed; the 24 scenario goldens
+  were re-baselined and the only change in them is `"kind"`/`"v"` (plus one dropped empty `metadata`).
+- Docs: `docs/ARCHITECTURE.md` §5 states the contract; the scenario count in `README.md` and
+  `docs/ARCHITECTURE.md` was stale at 21 and is now 24.
+
 ### Added — P8 / WS-03 loop hygiene (tool-result size guards, cooperative timeout, read-before-edit)
 - New kernel seam: `HookEvent.TOOL_RESULT_FINALIZE` fires in the gate after the handler returns and
   **before** secret sanitisation and the `kernel.limits.tool_result_bytes` truncation, so a hook can

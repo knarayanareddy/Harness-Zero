@@ -706,3 +706,51 @@ python tests/frontends/ui_audit.py --strict                 # web UI coherent (i
 # only when a change is *meant* to move the wire: re-baseline once, inspect `git diff tests/scenarios/*/golden`, then strict again
 HARNESS_REPLAY=update SCENARIO_DOM_WAIT_MS=6000 python -m pytest tests/scenarios -q -k <scenario>
 ```
+
+---
+
+## P9 — WS-04a: the log is the source of truth
+
+**Why.** The spec's diagnosis matched the code exactly: two record streams (JSONL + a runner-owned
+`transcript_records`), role-based projection that had no way to say "this record is not for the model",
+an appender that returned `None` on failure, and a `Session`/runner pair each holding *their own*
+`for_session()` store instance — two step counters over one file. Anything not expressed as a record
+could not survive a restart, which is also why the client re-rendered approvals and cards from a separate
+`history[]` array.
+
+**Decision.** Split WS-04 along the plan's own line: 04a = record v2 + `derive_messages` (+ the
+fail-closed append and the shared log, which cannot be deferred without leaving a half-moved state);
+04b = `record_kind` on durable events + the client's kind-driven grouping (`liveHistory` off the bus) +
+`sessions.truncate` / `session.fork`; 04c = `docs/architecture/SESSION_LOG.md`, the reload scenario and
+the memory-projection check. Non-goals respected: no SQLite, no telemetry pipeline, no projection tables,
+no history rewriting.
+
+**Changes (11 files + goldens).** `harness/sdk/types.py` (`RECORD_KINDS`, `infer_record_kind`,
+`TranscriptRecord.kind/v`), `harness/kernel/transcript.py` (new), `harness/kernel/context.py`
+(`MODEL_VISIBLE_KINDS`, `slice_at_last_compaction`, `repair_dangling_tool_calls`, `derive_messages`,
+alias), `harness/kernel/runner.py` (shared log via `TranscriptLog.for_session`, `transcript_records`
+deleted, prompt recorded inside the guarded region, `TranscriptAppendError` handler),
+`harness/kernel/session.py` (eager `Session._log`, `get_history` through it),
+`harness/kernel/commands.py` (`sessions.get` → `records`), `harness/kernel/catalog.py` (producer windows),
+`docs/ARCHITECTURE.md`, `README.md`, CHANGELOG, 3 new test files, 24 re-baselined `transcript.json` goldens.
+
+**Things that bit me.**
+- `upgrade_record_v1` initially wrote `"tool_calls": []` / `"metadata": {}`; `TranscriptRecord.to_dict()`
+  omits empty bags, so "upgrade is idempotent" and "reload equals live" both failed. Fix: write a bag back
+  only when there is something in it, and *drop* empty ones (the store `setdefault`s `metadata: {}`), while
+  leaving a store's non-list placeholder (`"[3 items] … [TRUNCATED]"`) alone.
+- The fail-closed test could not fail the turn at first: it monkeypatched `session.transcript.append`, but
+  the runner's log held a *different* store instance. That was the bug, not the test — hence `for_session`
+  handing out one log (and therefore one store) per directory, built eagerly in `Session.__init__` so the
+  session's instance is the canonical one.
+- `execute_turn(session=session.info)` passes a `SessionInfo`, which has no `.log`; `getattr(self.session,
+  "log", None)` silently returned `None` and services quietly kept its own cache. Sharing has to be wired
+  through a path that actually sees the `Session`.
+- A file-wide producer scan is unusable once the SDK declares a vocabulary: `RECORD_KINDS` made
+  `harness/sdk/types.py` a "producer" of `tool.call`, `approval.resolved`, `settings.changed` in the
+  generated EVENTS.md. The fix was a localised window in `_scan_producers`, not an exclusion list.
+
+**Verification.** New tests 33; `pytest tests/kernel tests/plugins tests/frontends` → 467 passed; full
+`pytest -q` → **507 passed**; `ruff check .` clean; `harness catalog gen` + `--check` (drift/settings/ui)
+green; `harness doctor` reports 24 scenarios, 0 errors; golden diff reviewed line by line (only `kind`/`v`
+and one dropped empty `metadata`).
