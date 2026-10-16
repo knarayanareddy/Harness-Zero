@@ -750,7 +750,10 @@ deleted, prompt recorded inside the guarded region, `TranscriptAppendError` hand
   `harness/sdk/types.py` a "producer" of `tool.call`, `approval.resolved`, `settings.changed` in the
   generated EVENTS.md. The fix was a localised window in `_scan_producers`, not an exclusion list.
 
-**Verification.** New tests 33; `pytest tests/kernel tests/plugins tests/frontends` → 467 passed; full
-`pytest -q` → **507 passed**; `ruff check .` clean; `harness catalog gen` + `--check` (drift/settings/ui)
-green; `harness doctor` reports 24 scenarios, 0 errors; golden diff reviewed line by line (only `kind`/`v`
-and one dropped empty `metadata`).
+**Verification.** 33 new tests. `pytest tests/kernel tests/plugins tests/frontends` → 467 passed; full
+`pytest -q` → **507 passed** (incl. the 24 scenarios, DOM lane on); `ruff check .` clean; `harness catalog
+gen` + `--check` (drift/settings/ui) green; `python tests/frontends/ui_audit.py --strict` exit 0;
+`harness plugin doctor --all` ok and `harness plugin test --all` → 220 passed. Golden diff reviewed line by
+line: the only changes are `"kind"` and `"v": 2` (plus one dropped empty `metadata`). Scenario coverage stays
+warning-only per P7 (`harness catalog --check --section scenarios`: 5 tools / 11 commands uncovered) — note
+there is no `harness doctor` command in this repo.
