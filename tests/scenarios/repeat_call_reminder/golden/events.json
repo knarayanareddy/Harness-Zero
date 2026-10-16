@@ -112,6 +112,7 @@
     "data": {
       "action": "allow",
       "call_id": "call#1",
+      "plugin": "shell-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "exec"
@@ -123,6 +124,7 @@
       "metadata": {
         "action": "allow",
         "call_id": "call#1",
+        "plugin": "shell-tools",
         "policy": "policy_gate",
         "reason": "OK",
         "risk": "exec"
@@ -234,6 +236,7 @@
     "data": {
       "action": "allow",
       "call_id": "call#2",
+      "plugin": "shell-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "exec"
@@ -245,6 +248,7 @@
       "metadata": {
         "action": "allow",
         "call_id": "call#2",
+        "plugin": "shell-tools",
         "policy": "policy_gate",
         "reason": "OK",
         "risk": "exec"
@@ -356,6 +360,7 @@
     "data": {
       "action": "allow",
       "call_id": "call#3",
+      "plugin": "shell-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "exec"
@@ -367,6 +372,7 @@
       "metadata": {
         "action": "allow",
         "call_id": "call#3",
+        "plugin": "shell-tools",
         "policy": "policy_gate",
         "reason": "OK",
         "risk": "exec"

@@ -112,6 +112,7 @@
     "data": {
       "action": "deny",
       "call_id": "call#1",
+      "plugin": "fs-tools",
       "policy": "workspace_jail",
       "reason": "Path outside workspace: Access blocked: path '../../../../etc/hostname' (<tmp>/etc/hostname) is outside workspace root '<ws>'",
       "risk": "destructive"
@@ -123,6 +124,7 @@
       "metadata": {
         "action": "deny",
         "call_id": "call#1",
+        "plugin": "fs-tools",
         "policy": "workspace_jail",
         "reason": "Path outside workspace: Access blocked: path '../../../../etc/hostname' (<tmp>/etc/hostname) is outside workspace root '<ws>'",
         "risk": "destructive"
@@ -229,6 +231,7 @@
     "data": {
       "action": "deny",
       "call_id": "call#2",
+      "plugin": "fs-tools",
       "policy": "workspace_jail",
       "reason": "Path outside workspace: Access blocked: path '../escape.txt' (<ws-parent>/escape.txt) is outside workspace root '<ws>'",
       "risk": "destructive"
@@ -240,6 +243,7 @@
       "metadata": {
         "action": "deny",
         "call_id": "call#2",
+        "plugin": "fs-tools",
         "policy": "workspace_jail",
         "reason": "Path outside workspace: Access blocked: path '../escape.txt' (<ws-parent>/escape.txt) is outside workspace root '<ws>'",
         "risk": "destructive"

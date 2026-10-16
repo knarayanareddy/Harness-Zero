@@ -118,6 +118,7 @@
     "data": {
       "action": "allow",
       "call_id": "call#1",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -129,6 +130,7 @@
       "metadata": {
         "action": "allow",
         "call_id": "call#1",
+        "plugin": "fs-tools",
         "policy": "policy_gate",
         "reason": "OK",
         "risk": "read"
@@ -241,6 +243,7 @@
     "data": {
       "action": "allow",
       "call_id": "call#2",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "write"
@@ -252,6 +255,7 @@
       "metadata": {
         "action": "allow",
         "call_id": "call#2",
+        "plugin": "fs-tools",
         "policy": "policy_gate",
         "reason": "OK",
         "risk": "write"

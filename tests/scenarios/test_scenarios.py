@@ -133,6 +133,11 @@ def _check_expectations(sc, result) -> None:
         text = rep.get("timeline_text_on_load") or ""
         for needle in exp["reload_timeline_not_contains"]:
             assert needle not in text, f"after a page refresh the timeline shows {needle!r}"
+    if exp.get("dom_reload_contains_live_lines"):
+        # Live-only chrome is allowed to differ; facts are not.
+        live_only = ("streaming", "Assistant turn completed", "idle", "·", "plugin:")
+        missing = [line for line in ((result.dom or {}).get("reload_missing_lines") or []) if not any(t in line for t in live_only)]
+        assert not missing, "a page refresh lost what the live session painted:\n" + "\n".join(missing[:12])
     if exp.get("dom_restart"):
         rep = (result.dom or {}).get("restart") or {}
         info = result.extra.get("restart") or {}

@@ -9,6 +9,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — P11 / WS-04c the client renders the log
+- **One renderer path in the shipped client.** `harness/frontends/web/static/app.js`: `reloadTranscript()`
+  no longer re-derives a conversation from roles. It feeds every record `sessions.get` returns to
+  `renderRecord(rec)`, a switch on `rec.kind` that calls *the same painters the live event handlers call*
+  (`appendUserTurn`, `appendTurnBlock`/`streamAssistantText`/`finalizeStreamingBlock`, `appendToolCall`,
+  `updateToolResult`, `updateToolDecision`, `appendCard`, `showApproval`/`resolveApprovalUI`,
+  `appendNotice`). A refreshed page now shows the approval the user answered, the decision the policy made
+  and the cards a tool emitted — all of which used to be dropped, because `user`/`assistant`/`system`
+  cannot tell a decision from a notice. A reloaded tool card is appended as `running` and finished by its
+  own records, so a call whose result never arrived stays visibly open rather than claiming success.
+  `compaction.summary` paints as a markdown card; turn markers and `checkpoint.created`/`job.*` are
+  history the timeline does not need.
+- **`tool.decision` gained `plugin`, on the event and in the record alike.** The `fs-tools · write`
+  subtitle on a tool card is part of *what was decided*, and until now only `tool.call` carried it — so
+  the log could not reproduce the card. `ToolDecision`, the four gate publish sites and the record metadata
+  match; `docs/events.schema.json`, `docs/catalog/EVENTS.md` and `docs/ARCHITECTURE.md` §4 regenerated, and
+  `tests/frontends/test_static_contract.py` keeps the client reading only declared keys.
+- **The derived search index projects v2 records.** `harness/plugins/stores/fts5_search/index.py`:
+  `record_row()` reads `role`/`kind` (falling back to the v1 `source`/`type`), and both the live hook
+  (`index()`, called by the runner per appended record) and the rebuild walk go through it. Before this,
+  every row a running session indexed said `UNKNOWN`/`UNKNOWN` — visible as the `Source` column of a
+  `search_memory` result.
+- **`harness sessions reindex`** (new `harness sessions` group): `FTS5SearchIndex.rebuild_from_sessions`
+  deletes and re-projects the table plus the `conversation_summaries` counts from the log, unconditionally —
+  the old `maybe_reindex_from_sessions` only ran on an empty table, so a stale index could not be repaired.
+  `--dry-run` sizes the job. A rebuild is a repair, not a rewrite: the log stays untouched.
+- **Scenario `reload_equals_live_web_dom`** (the 25th) tests WS-04's claim from the browser's side:
+  `reload_equals_live` compared against a *second boot* (the web lane had no live-side comparison at all —
+  `sessions.get` on the same daemon would have made it vacuous), `dom_reload_contains_live_lines` (every
+  line the live session painted is on screen after a refresh with no further click; live-only chrome
+  exempt), and `reload_timeline_contains` pinning the approval, its resolution, the tool output and the
+  skill card.
+- **`docs/architecture/SESSION_LOG.md`**: the seven invariants with the test that enforces each, record
+  anatomy and the empty-bag rule, the on-disk order for a step (and the two deliberately surprising orders),
+  the three durability classes, the v1→v2 upgrade table, the client mapping with its two honest caveats, and
+  what is deliberately not here. Linked from `README.md` §5 and `docs/ARCHITECTURE.md` §5.
+- **`docs/catalog/RECORD_KINDS.md`** (generated, new `CATALOG_DOCS` entry): for every kind in
+  `RECORD_KINDS` — model-visible (`MESSAGE_KINDS`), which durable event carries it
+  (`EventPayload.record_kind`), and how many scenario transcripts hold one. A producer *scan* was tried
+  first and dropped: turn markers are written through a generic marker path where the kind is a variable,
+  so "not yet written" would have been a lie about `turn.error`. Measured coverage cannot lie: the reserved
+  `job.*`/`goal.*` kinds and `tool.call` show `0 scenario(s)`.
+- Goldens were re-baselined twice while landing this. The whole diff is `+ "plugin": "<owner>"` in 18
+  `transcript.json` + 18 `events.json`, and 6 rows where a memory-search hit gained a real `Source` label
+  (`UNKNOWN` → `user`) — one `timeline.txt` of 25 changed, for that label. `requests.json` and `http.json`
+  are untouched: what the model reads and what the user sees are still the same, the log just explains
+  itself now.
+- Recorded deviation: the plan asked to keep `sessions.get`'s `history` key as a deprecated alias for one
+  minor version. It returns `records` only — there is no in-tree consumer of the old name, and a second
+  key to keep in step is the two-source pattern this workstream exists to remove.
+
 ### Added — P10 / WS-04b durable events, recorded policy facts, on-disk repair
 - **Durability is now a declared property of an event.** `harness/sdk/events.py`:
   `EventPayload.record_kind` (the transcript kind the event mirrors), `EventPayload.transient` (the streamed

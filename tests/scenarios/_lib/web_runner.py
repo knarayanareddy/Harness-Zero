@@ -47,6 +47,9 @@ class WebRunResult:
     transcript_reloaded: list[dict[str, Any]]
     provider_requests: list[dict[str, Any]]
     dom: dict[str, Any] | None  # headless report, if the DOM lane ran
+    #: The live session log as the running kernel held it, for `reload_equals_live` (WS-04c). The web lane's
+    #: reload source is a *fresh daemon over the same workspace*, because that is what a restart shows.
+    transcript_live: list[dict[str, Any]] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     tools_called: list[str] = field(default_factory=list)
     extra: dict[str, Any] = field(default_factory=dict)
@@ -92,6 +95,10 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
     http_log: list[dict[str, Any]] = []
     errors: list[str] = []
     sid: str | None = None
+    # The transcript as the live kernel held it and as a restart reads it back; both empty until the run
+    # reaches the reload step, which keeps the post-run comparison below total rather than conditional.
+    live_records: list[dict[str, Any]] = []
+    reloaded: list[dict[str, Any]] = []
     dom_report: dict[str, Any] | None = None
     approver = ScriptedApprover(rt.bus, rt.commands, sc.approvals) if sc.approvals and not (dom and sc.expect.get("dom_approves")) else None
 
@@ -169,6 +176,9 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
                 reloaded = (got.get("result") or {}).get("records", []) if status == 200 else []
             else:
                 reloaded = []
+            sess = rt.session_manager.get_session(sid) if sid else None
+            if sess is not None:
+                live_records = await sess.get_history()
             await asyncio.sleep(0.2)
         finally:
             await sse.close()
@@ -176,6 +186,18 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
                 await approver.close()
             await server.stop()
             await rt.registry.unload_all()
+
+    # `reload_equals_live`: the same session read back through a *second* boot, so the comparison is
+    # across processes and not just across two API calls on one kernel. This is the property a user
+    # actually depends on after `harness ui` is restarted: what the log holds is all the client needs.
+    if sc.expect.get("reload_equals_live") and sid:
+        rt2 = await bootstrap_kernel(workspace=ws, config_dir=env_conf, overrides=base_overrides(sc))
+        try:
+            fresh = await rt2.commands.sessions_get(session_id=sid)
+            reloaded = (fresh or {}).get("records", []) or reloaded
+        finally:
+            await rt2.registry.unload_all()
+        live_vs_reloaded_equal = json.dumps(live_records, sort_keys=True) == json.dumps(reloaded, sort_keys=True)
 
     restart: dict[str, Any] | None = None
     if dom and dom_report is not None and sc.expect.get("dom_restart"):
@@ -185,6 +207,21 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
         restart = await _restart_daemon_and_reload(sc, ws, env_conf)
         dom_report["restart"] = restart.get("dom") or {}
 
+    live_vs_reloaded_equal = None if not sc.expect.get("reload_equals_live") else (
+        json.dumps(live_records, sort_keys=True) == json.dumps(reloaded, sort_keys=True)
+    )
+
+    # `dom_reload_contains_live_lines`: the refreshed page paints the session log, so every line the live
+    # session showed has to be there again. Compared here, in the runner, because both texts and the path
+    # normaliser are at hand; the test decides what counts as live-only chrome.
+    if dom_report is not None and sc.expect.get("dom_reload_contains_live_lines"):
+        norm = Normalizer(workspace=ws, session_id=sid)
+        live_text = norm.text(dom_report.get("timeline_text", "") or "")
+        back_text = norm.text((dom_report.get("reload") or {}).get("timeline_text_on_load", "") or "")
+        dom_report["reload_missing_lines"] = [
+            line.strip() for line in live_text.splitlines() if line.strip() and line.strip() not in back_text
+        ]
+
     tools_called = [e.get("data", {}).get("name") or e.get("data", {}).get("tool") for e in sse.events if e.get("type") == "tool.call"]
     return WebRunResult(
         session_id=sid,
@@ -193,6 +230,7 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
         events=sse.events,
         frames=sse.frames,
         transcript_reloaded=reloaded,
+        transcript_live=live_records,
         provider_requests=[request_summary(r) for r in provider.requests],
         dom=dom_report,
         errors=errors,
@@ -201,6 +239,7 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
             "replay_remaining": provider.remaining,
             "named_sse_frames": sum(1 for f in sse.frames if f["event"] != "message"),
             "unauthenticated": unauth,
+            "live_vs_reloaded_equal": live_vs_reloaded_equal,
             **({"restart": {k: v for k, v in restart.items() if k != "dom"}} if restart else {}),
         },
     )

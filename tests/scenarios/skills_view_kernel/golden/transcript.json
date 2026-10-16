@@ -37,6 +37,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#1",
+      "plugin": "tool-skills",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"

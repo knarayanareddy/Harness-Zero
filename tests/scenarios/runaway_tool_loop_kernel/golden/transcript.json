@@ -37,6 +37,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#1",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -98,6 +99,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#2",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -159,6 +161,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#3",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -220,6 +223,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#4",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -281,6 +285,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#5",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -342,6 +347,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#6",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -403,6 +409,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#7",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -464,6 +471,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#8",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -525,6 +533,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#9",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -586,6 +595,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#10",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -647,6 +657,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#11",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -708,6 +719,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#12",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -769,6 +781,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#13",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -830,6 +843,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#14",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -891,6 +905,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#15",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -952,6 +967,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#16",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -1013,6 +1029,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#17",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -1074,6 +1091,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#18",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -1135,6 +1153,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#19",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -1196,6 +1215,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#20",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"

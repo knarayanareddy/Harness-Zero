@@ -646,6 +646,18 @@ export class HarnessStudioApp {
     if (!callId) return;
     const card = document.querySelector(`.harness-card-tool[data-call-id=${cssString(callId)}]`);
     if (card) {
+      // The card subtitle (`plugin · risk`) belongs to the decision as much as to the call: the assistant
+      // record knows *what* was asked, the decision record knows *who may run it and at what risk*. A live
+      // session already painted it from `tool.call`, so only fill a subtitle that is missing — that is exactly
+      // the reload case, where there is no call event and the decision record is all the log kept.
+      const metaText = [data.plugin, data.risk].filter(Boolean).join(' · ');
+      const nameEl = card.querySelector('.tool-name');
+      if (metaText && nameEl && nameEl.parentElement && !card.querySelector('.card-meta')) {
+        const metaEl = document.createElement('span');
+        metaEl.className = 'card-meta text-xs';
+        metaEl.textContent = metaText;
+        nameEl.parentElement.insertBefore(metaEl, nameEl.nextSibling);
+      }
       const badge = card.querySelector('.card-badge');
       if (badge) {
         // `tool.decision` payload: {call_id, action: allow|deny|ask, policy, risk, reason}.
@@ -1142,33 +1154,110 @@ export class HarnessStudioApp {
     }
 
     try {
-      // TranscriptRecord (harness/sdk/types.py): {role, content, tool_calls: [{id, name, arguments}],
-      // tool_results: [{tool_use_id, content: [{type, text}], is_error}], thinking?, metadata}
       const sData = await this.api.command('sessions.get', { session_id: this.activeSessionId });
-      for (const rec of (sData.records || [])) {
-        if (rec.role === 'user') {
-          // Tool results are stored as user-role records with empty content: no empty bubble for them.
-          if (rec.content) this.appendUserTurn(rec.content);
-          for (const tr of (rec.tool_results || [])) {
-            const text = (tr.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
-            this.updateToolResult({ call_id: tr.tool_use_id, is_error: !!tr.is_error, preview: text });
-          }
-        } else if (rec.role === 'assistant') {
-          if (rec.content) {
-            this.appendTurnBlock('assistant');
-            this.streamAssistantText(rec.content);
-            this.finalizeStreamingBlock();
-          }
-          for (const tc of (rec.tool_calls || [])) {
-            this.appendToolCall({ call_id: tc.id, name: tc.name, arguments: tc.arguments || {}, status: 'completed' });
-          }
-        } else if (rec.role === 'system' && rec.content) {
-          this.appendNotice(rec.content, 'info');
-        }
-      }
+      for (const rec of (sData.records || [])) this.renderRecord(rec);
       if (!timeline.children.length) this.showEmptyTimelineHint();
     } catch (err) {
       console.warn('Failed to reload transcript:', err);
+    }
+  }
+
+  // One renderer per fact (WS-04c). `sessions.get` returns the session log's records; each kind maps to
+  // the same painter the live event handler calls, so a reloaded session paints what the user already saw
+  // — the approval they answered, the decision the policy made, the card the tool produced — instead of a
+  // thinner summary of the conversation. Dispatching on `rec.kind` rather than `rec.role` is what makes
+  // that possible: a decision, a tool result and a system notice are all `system`/`user`-role records and
+  // roles cannot tell them apart (that is exactly why the old role-based loop dropped them).
+  renderRecord(rec) {
+    if (!rec) return;
+    const meta = rec.metadata || {};
+    const textOf = (blocks) =>
+      (blocks || []).filter((b) => b && b.type === 'text').map((b) => b.text).join('');
+
+    switch (rec.kind) {
+      case 'user.message': {
+        if (rec.content) this.appendUserTurn(rec.content);
+        // A legacy record can carry its results inline; render them like any other tool result.
+        for (const tr of rec.tool_results || []) {
+          this.updateToolResult({ call_id: tr.tool_use_id, is_error: !!tr.is_error, preview: textOf(tr.content) });
+        }
+        break;
+      }
+      case 'assistant.message': {
+        if (rec.content) {
+          this.appendTurnBlock('assistant');
+          this.streamAssistantText(rec.content);
+          this.finalizeStreamingBlock();
+        }
+        for (const tc of rec.tool_calls || []) {
+          // 'running', not 'completed': the verdict is the next records' job, exactly as it is live. A
+          // call whose result never arrived then correctly stays open instead of claiming success.
+          this.appendToolCall({ call_id: tc.id, name: tc.name, arguments: tc.arguments || {}, status: 'running' });
+        }
+        break;
+      }
+      case 'tool.result': {
+        for (const tr of rec.tool_results || []) {
+          this.updateToolResult({ call_id: tr.tool_use_id, is_error: !!tr.is_error, preview: textOf(tr.content) });
+        }
+        break;
+      }
+      case 'tool.decision': {
+        this.updateToolDecision({
+          call_id: meta.call_id,
+          action: meta.action,
+          policy: meta.policy,
+          reason: meta.reason,
+          plugin: meta.plugin,
+          risk: meta.risk,
+        });
+        break;
+      }
+      case 'ui.card': {
+        if (meta.card) this.appendCard(meta.card);
+        break;
+      }
+      case 'approval.requested': {
+        this.showApproval({
+          approval_id: meta.approval_id,
+          call_id: meta.call_id,
+          kind: meta.approval_kind,
+          summary: rec.content,
+          details: meta.details || {},
+          timeout_s: meta.timeout_s,
+          options: meta.options || ['approve', 'deny'],
+        });
+        break;
+      }
+      case 'approval.resolved': {
+        this.resolveApprovalUI({
+          approval_id: meta.approval_id,
+          approved: !!meta.approved,
+          by: meta.by,
+          reason: meta.reason,
+        });
+        break;
+      }
+      case 'compaction.summary': {
+        // The live view gets a `compaction.completed` card (token counts); the log holds the summary text
+        // itself, which is the thing worth re-reading, so the reloaded session shows that.
+        this.appendCard({ kind: 'markdown', title: 'Context compacted', data: { body: rec.content || '' } });
+        break;
+      }
+      case 'turn.error':
+        this.appendNotice(rec.content || 'Turn failed.', 'error');
+        break;
+      case 'turn.cancelled':
+        this.appendNotice(rec.content || 'Turn cancelled.', 'warn');
+        break;
+      case 'system.notice':
+        if (rec.content) this.appendNotice(rec.content, meta.level || 'info');
+        break;
+      default:
+        // turn.started / turn.completed / checkpoint.created / job.* are history the timeline does not
+        // paint. They stay in the log — `derive_messages` ignores them too, so neither the model nor the
+        // transcript view is polluted by a bookkeeping row.
+        break;
     }
   }
 

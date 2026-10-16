@@ -147,6 +147,14 @@ harness plugin test --all
 harness plugin doctor --all
 ```
 
+### Maintaining the session log
+
+```bash
+# `sessions/<id>/transcript.jsonl` is the source of truth; the FTS5 search index is derived from it.
+# Rebuild the index after a crash, a partial write, or a record-format upgrade (--dry-run to size it first):
+harness sessions reindex --workspace .
+```
+
 ---
 
 ## 4. Verification & Testing
@@ -185,6 +193,7 @@ Documents that describe **this** system, in the order to read them:
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): process model, kernel modules, the command catalogue, the event catalogue with payload keys, session lifecycle, web authentication, where the tests live (checked against the code by `tests/test_docs_and_versions.py`).
 - [`docs/architecture/CONTRACTS.md`](docs/architecture/CONTRACTS.md): the SDK protocols plugins implement (`Provider`, `ToolHandler`, `Policy`, stores, strategies, hooks), domain types and boundary invariants.
+- [`docs/architecture/SESSION_LOG.md`](docs/architecture/SESSION_LOG.md): the session log as the single source of truth — record kinds and anatomy, log-before-execute and fail-closed append, `derive_messages`, the client's one-renderer reload path, and the v1→v2 upgrade policy.
 - [`docs/catalog/`](docs/catalog/PLUGINS.md): the generated catalogues — plugins, tools, settings, events, commands and the web client contract (`harness catalog gen`, gated by `harness catalog --check`).
 - [`docs/PORTING_RECIPES.md`](docs/PORTING_RECIPES.md): authoring new plugins, with conformance kits.
 - [`docs/events.schema.json`](docs/events.schema.json): generated event schema (`harness events schema`); [`CHANGELOG.md`](CHANGELOG.md) for what changed when.

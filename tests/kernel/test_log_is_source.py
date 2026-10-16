@@ -232,3 +232,86 @@ async def test_record_is_reloaded_equal_after_a_restart(tmp_path: Path):
         assert _norm(derive_messages(reloaded)) == _norm(derive_messages(live_records))
     finally:
         await rt2.registry.unload_all()
+
+
+@pytest.mark.asyncio
+async def test_the_search_index_is_rebuildable_from_the_log(tmp_path: Path):
+    """The FTS5 table is a *derived* index: rebuilding it from the transcript has to reproduce it (WS-04 §7).
+
+    Two bugs this pins. The row projection read v1 field names (`type`, `source`), so every row a live
+    session indexed said `UNKNOWN`/`UNKNOWN` and a search hit carried no kind; and the only rebuild path ran
+    when the table was *empty*, so a workspace whose index had gone stale could not be repaired at all. Now
+    one projection serves both paths, and `harness sessions reindex` rebuilds unconditionally.
+    """
+    from harness.plugins.stores.fts5_search.index import FTS5SearchIndex
+    from harness.sdk.paths import sessions_dir
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / "app.py").write_text("print('x')\n", encoding="utf-8")
+    conf = tmp_path / "conf"
+    conf.mkdir()
+    rt = await bootstrap_kernel(
+        workspace=ws,
+        config_dir=conf,
+        overrides={"kernel.security.permission_mode": "allow", "kernel.provider": "scripted", "kernel.model": MODEL.id},
+        resume_session=False,
+    )
+    provider = ScriptedProvider(models=[MODEL])
+    provider.add_response(_tool("view_file", "c1", {"file_path": "app.py"}))
+    provider.add_response([TextDelta(text="Read it."), Done(stop_reason="end_turn")])
+    rt.registry.register_provider(provider, plugin_name="test_scripted")
+    try:
+        session = await rt.session_manager.create_session()
+        await rt.runner.execute_turn(
+            session=session.info, prompt="read app.py", options={"provider": "scripted", "model": MODEL.id}
+        )
+        session_id = session.info.session_id
+        live_records = list(rt.session_manager.get_session(session_id).log.records)
+    finally:
+        await rt.registry.unload_all()
+
+    searchable = [r for r in live_records if str(r.get("content") or "").strip()]
+    assert searchable, "a turn that ran left nothing searchable in the log"
+
+    # The live path and the rebuild walk must agree row for row.
+    live_db, rebuilt_db = tmp_path / "live.db", tmp_path / "rebuilt.db"
+    live = FTS5SearchIndex(live_db)
+    try:
+        for rec in live_records:
+            await live.index(session_id, rec)
+        rows_live = sorted(live.conn.execute("SELECT step_index, source, step_type, content FROM turns_fts").fetchall())
+    finally:
+        live.close()
+
+    rebuilt = FTS5SearchIndex(rebuilt_db)
+    try:
+        found, rows = rebuilt.rebuild_from_sessions(sessions_dir(ws))
+        assert found >= 1 and rows == len(searchable), f"indexed {rows} of {len(searchable)} searchable records"
+        rows_back = sorted(
+            rebuilt.conn.execute("SELECT step_index, source, step_type, content FROM turns_fts").fetchall()
+        )
+        assert rows_back == rows_live, "a reindexed workspace differs from a session indexed while it ran"
+        kinds = {r[2] for r in rows_back}
+        assert "UNKNOWN" not in kinds, kinds
+        assert {"user.message", "assistant.message"} <= kinds, kinds
+
+        # A rebuild repairs staleness rather than only filling an empty table.
+        rebuilt.conn.execute(
+            "INSERT INTO turns_fts (conversation_id, step_index, source, step_type, content)"
+            " VALUES ('ghost', 0, 'user', 'user.message', 'a row the log does not contain')"
+        )
+        rebuilt.conn.commit()
+        _, rows_after = rebuilt.rebuild_from_sessions(sessions_dir(ws))
+        assert rebuilt.conn.execute("SELECT count(*) FROM turns_fts WHERE conversation_id='ghost'").fetchone()[0] == 0
+        assert rows_after == rows
+
+        from click.testing import CliRunner
+
+        from harness.cli import main
+
+        result = CliRunner().invoke(main, ["sessions", "reindex", "--workspace", str(ws), "--dry-run"])
+        assert result.exit_code == 0, result.output
+        assert "would re-index" in result.output and str(len(searchable)) in result.output
+    finally:
+        rebuilt.close()

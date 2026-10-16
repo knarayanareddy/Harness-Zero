@@ -472,6 +472,7 @@ class PolicyGate:
                             f"Tool `{call.name}` denied by hook `{hook.name}`: {reason}",
                             {
                                 "call_id": call_id,
+                                "plugin": plugin_name,
                                 "action": "deny",
                                 "policy": f"hook:{hook.name}",
                                 "risk": risk_val,
@@ -486,6 +487,7 @@ class PolicyGate:
                                     data=ToolDecision(
                                         call_id=call_id,
                                         action="deny",
+                                        plugin=plugin_name,
                                         policy=f"hook:{hook.name}",
                                         risk=risk_val,
                                         reason=reason,
@@ -573,6 +575,7 @@ class PolicyGate:
                 f"Tool `{call.name}` denied by `{first_deny.policy or 'policy'}`: {first_deny.reason}",
                 {
                     "call_id": call_id,
+                    "plugin": plugin_name,
                     "action": "deny",
                     "policy": first_deny.policy or "policy",
                     "risk": effective_risk_val,
@@ -587,6 +590,7 @@ class PolicyGate:
                         data=ToolDecision(
                             call_id=call_id,
                             action="deny",
+                            plugin=plugin_name,
                             policy=first_deny.policy or "policy",
                             risk=effective_risk_val,
                             reason=first_deny.reason,
@@ -621,6 +625,7 @@ class PolicyGate:
                 f"Tool `{call.name}` needs approval: {reasons or 'policy requires it'}",
                 {
                     "call_id": call_id,
+                    "plugin": plugin_name,
                     "action": "ask",
                     "policy": asks[0].policy or "policy",
                     "risk": effective_risk_val,
@@ -635,6 +640,7 @@ class PolicyGate:
                         data=ToolDecision(
                             call_id=call_id,
                             action="ask",
+                            plugin=plugin_name,
                             policy=asks[0].policy or "policy",
                             risk=effective_risk_val,
                             reason=reasons,
@@ -689,6 +695,7 @@ class PolicyGate:
                 f"Tool `{call.name}` allowed ({effective_risk_val}).",
                 {
                     "call_id": call_id,
+                    "plugin": plugin_name,
                     "action": "allow",
                     "policy": "policy_gate",
                     "risk": effective_risk_val,
@@ -703,6 +710,7 @@ class PolicyGate:
                         data=ToolDecision(
                             call_id=call_id,
                             action="allow",
+                            plugin=plugin_name,
                             policy="policy_gate",
                             risk=effective_risk_val,
                             reason="OK",

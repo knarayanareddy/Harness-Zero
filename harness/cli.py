@@ -286,6 +286,39 @@ def events_schema():
     click.echo(json.dumps(schema(), indent=2))
 
 
+@main.group()
+def sessions():
+    """Session log maintenance (the log is the source; everything else is derived)."""
+    pass
+
+
+@sessions.command(name="reindex")
+@click.option("--workspace", "-w", default=".", help="Workspace path")
+@click.option("--dry-run", is_flag=True, default=False, help="Count what a rebuild would index; write nothing")
+def sessions_reindex(workspace: str, dry_run: bool):
+    """Rebuild the FTS5 search index from the session log.
+
+    Safe at any time: `sessions/<id>/transcript.jsonl` is the source of truth and the search index is
+    derived from it, so a rebuild is a repair, not a rewrite of history. Run it after a crash, a partial
+    write, or a record-format upgrade; `harness sessions reindex --dry-run` first to see the size.
+    """
+    from harness.plugins.stores.fts5_search.index import FTS5SearchIndex
+    from harness.sdk.paths import memory_db_path, sessions_dir
+
+    ws = Path(workspace).resolve()
+    src = sessions_dir(ws)
+    index = FTS5SearchIndex(memory_db_path(ws))
+    try:
+        found, rows = index.rebuild_from_sessions(src, dry_run=dry_run)
+    finally:
+        index.close()
+    verb = "would re-index" if dry_run else "re-indexed"
+    console.print(
+        f"[bold]{verb}[/bold] {rows} record(s) from {found} session(s) in {src}"
+        + ("  (nothing written)" if dry_run else "")
+    )
+
+
 from harness.cli_catalog import catalog as _catalog_group  # noqa: E402  (WS-02)
 
 main.add_command(_catalog_group)

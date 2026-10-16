@@ -38,6 +38,7 @@
     "metadata": {
       "action": "ask",
       "call_id": "call#1",
+      "plugin": "fs-tools",
       "policy": "permission_modes",
       "reason": "Approval required for 'write_to_file' (write).; Action 'write_to_file' (risk: write) requires user approval in 'ask' mode",
       "risk": "write"

@@ -38,6 +38,7 @@
     "metadata": {
       "action": "deny",
       "call_id": "call#1",
+      "plugin": "fs-tools",
       "policy": "hook:read_before_edit",
       "reason": "edit_file blocked: app.py has not been read in this session. Read it first.",
       "risk": "write"
@@ -99,6 +100,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#2",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -161,6 +163,7 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#3",
+      "plugin": "fs-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "write"

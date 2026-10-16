@@ -674,6 +674,9 @@ Plus one that only showed up under load: a timed-out `run_command` left its chil
 | R40 | `kernel/gate.py`, `plugins/tools/shell` | `asyncio.timeout(spec.timeout_s)` cancelled the *handler coroutine* only: the subprocess it had started kept running (pipe still open, work still burning CPU), any output it had streamed was thrown away, and the model got `Tool 'run_command' timed out after 600s` with nothing else. | P8: `cancel_event` + `kernel.limits.tool_grace_s` grace period, `ToolContext.track_process()`/`terminate_tracked()`, streamed deltas become the partial result; `run_command` registers its child and returns early when signalled |
 | R41 | `plugins/hooks/repeat_call_reminder` | The new plugin declared `enabled` in its schema but never read it — a settings row that changes nothing (the exact bug class WS-02 was built to catch, reintroduced by new code). | P8: caught by `test_settings_are_declared_under_the_manifest_namespace`, which every hook plugin now pins; the flag is read and honoured |
 | R31 | `tests/scenarios/_lib/normalize.py` | Goldens pinned `model.started.request_tokens_estimate` = prompt chars ÷ 4, which includes the tmp workspace path — flipped 73 → 74 when the pytest tmp counter reached three digits (the unexplained transient failure of P3). | P6: key dropped from goldens (22 files, only those lines) |
+| R42 | `kernel/approvals.py` → bus | `approval.resolved` omitted `session_id`, so a client that filters events by session left the approval card pending until the page was reloaded. | P10b: the payload carries it; `approval_allow_web_dom` pins the resolved card |
+| R43 | `frontends/web/static/app.js` | The reload path rendered `sessions.get` history by **role**, and the payload it re-derived contained only user/assistant text and tool results. Approvals, policy decisions, tool cards and the compaction summary were therefore invisible after a refresh — the log held them, the client had no case for them. A `plugin · risk` subtitle also existed only on the live `tool.call` event, so even a card that survived reloaded thinner. | P11: `renderRecord(rec)` switches on `rec.kind` and reuses the live painters; `tool.decision` gained `plugin` on the event and in the record; scenario `reload_equals_live_web_dom` asserts every live line survives a refresh |
+| R44 | `plugins/stores/fts5_search/` | Two related bugs. The row projection read v1 field names (`type`, `source`), so every row the runner indexed from a v2 record said `UNKNOWN`/`UNKNOWN` and `search_memory`'s Source column was decoration; and the only rebuild path ran when the table was empty, so a workspace whose index had gone stale had no repair — there was no CLI entry point at all. | P11: one `record_row()` shared by the live hook and the rebuild; `rebuild_from_sessions` is unconditional; new `harness sessions reindex`; `test_the_search_index_is_rebuildable_from_the_log` |
 
 ---
 
@@ -810,7 +813,80 @@ doctor --all` ok, `harness plugin test --all` 220 passed. Goldens: 18 × `transc
 `requests.json`, `http.json`, `timeline.txt` untouched across all 24 — the strongest available evidence that
 recording more did not change what the model reads or what the client paints.
 
-**Remaining in WS-04 (04c):** `docs/architecture/SESSION_LOG.md` (record-kinds table generated from the
-catalogue, invariants, upgrade policy), the client's single renderer path over `records` (`app.js`
-`loadHistory` still switches on event types), the `reload_equals_live` DOM scenario, and
+**Remaining in WS-04 (04c):** closed in P11 below — client single renderer over records, the
+`reload_equals_live` DOM scenario, `docs/architecture/SESSION_LOG.md` with a generated kind table, and
 `harness sessions reindex` for the derived FTS index.
+
+---
+
+## P11 — WS-04c: the client renders the log
+
+**Why.** 04a/04b made the log the only place a fact has to be written; 04c has to make it the only place a
+client reads from. Otherwise the work is invisible where users look: a refreshed page still showed less than
+the live one (**R43**).
+
+**Changes (7 files + goldens).** `harness/frontends/web/static/app.js` (`renderRecord(rec)` replacing the
+role-based loop in `reloadTranscript`, plus `updateToolDecision` filling a missing `plugin · risk`
+subtitle); `harness/sdk/events.py` + `harness/kernel/gate.py` (`plugin` on the decision event and record);
+`harness/plugins/stores/fts5_search/index.py` (`record_row`, `rebuild_from_sessions`); `harness/cli.py`
+(`harness sessions reindex`); `harness/kernel/catalog.py` (generated `RECORD_KINDS.md`);
+`tests/scenarios/_lib/web_runner.py` (`transcript_live`, second-boot `reload_equals_live`,
+`reload_missing_lines` for the DOM lane) and `tests/scenarios/test_scenarios.py`
+(`dom_reload_contains_live_lines`); new scenario `reload_equals_live_web_dom` + its recording in
+`make_recordings.py`; `docs/architecture/SESSION_LOG.md`, `docs/ARCHITECTURE.md` §5 pointer, README §5.
+
+**Design decisions worth keeping.**
+- *Paint facts, not summaries.* `renderRecord` calls the same methods the live handlers call instead of
+  growing a second renderer for history. That is the whole point of "reload = replay": if a fact needs a
+  special reload painter, the live path and the reload path will drift again in one release.
+- *A reloaded tool card starts `running`.* The verdict belongs to the later `tool.decision` / `tool.result`
+  records. Defaulting to `completed` would have made a crashed turn look successful after a refresh, which is
+  the opposite of what a log is for.
+- *Assertions compare lines, not positions.* One assistant record carries a step's whole batch of calls, so
+  a reload paints sibling tool cards together and the approval card after them, while live interleaved them.
+  `dom_reload_contains_live_lines` checks that no fact is missing and `reload_timeline_contains` pins the
+  ones a role-based renderer used to drop; neither pretends the two orders are the same.
+- *The generated kind table reports measured coverage, not a source scan.* Markers like
+  `("_record(", "kind=")` missed every kind written through `_append_marker` (there the kind is a variable),
+  so "no producer" would have been wrong for `turn.error`. Counting the scenario transcripts that actually
+  hold a kind is reproducible and honest: it says `0 scenario(s)` for the reserved `job.*`/`goal.*` and for
+  `tool.call`, which is exactly the state of things.
+
+**Things that bit me.**
+- The DOM goldens proved the client was right before the client was fixed: `timeline.txt` is captured from
+  the **live** session, so it stayed green while a refresh lost cards. The reload report is a separate field
+  (`dom["reload"]["timeline_text_on_load"]`) and needs its own assertion — that is why this scenario has
+  both `reload_equals_live` and the line-set check.
+- The web lane had no live-vs-reloaded comparison at all: `reload_equals_live` existed only in
+  `kernel_runner.py`, and `web_runner.py` fetched `sessions.get` on the *same* daemon. Left alone, the flag
+  would have compared a reload with itself; it now boots a second kernel over the same workspace, which is
+  also what restarting `harness ui` does.
+- Adding `plugin` to the record metadata first, and only then discovering `tests/frontends/test_static_contract.py`
+  forbids the client reading a key the *event payload* does not declare — good guard, right outcome: the field
+  belongs on both. Filling a missing `.card-meta` in the decision painter (rather than overwriting) is what
+  keeps the live view's `fs-tools · write` intact.
+- `record_row()` moved the memory scenarios' golden: the `Source` column of a `search_memory` hit is now
+  `user` instead of `UNKNOWN`, which changes one card body in one `timeline.txt`. Re-baselined deliberately.
+- A dataclass field with a default cannot sit before a field without one — `WebRunResult.transcript_live`
+  belongs after `dom`, not in the middle.
+
+**Verification.** 12 scenarios' worth of goldens reviewed line by line: the entire diff is
+`+ "plugin": "<owner>"` — 46 record-metadata rows across 18 `transcript.json`, and 92 lines across 18
+`events.json` (each decision event names the plugin once in its payload and once in the record it carries),
+plus 6 `UNKNOWN` → `user` cells in the two memory scenarios and the one `timeline.txt` that shows
+them. `requests.json`/`http.json` untouched in all 25. Full `pytest -q` with the DOM lane → **523 passed**
+in 328 s (521 at P10b, plus the new kernel test and the new scenario);
+`ruff check .` clean; `harness catalog gen` + `--check` exit 0 (new `RECORD_KINDS.md` drift-checked, 58
+settings all reads declared, ui ok, refs ok; the two warnings are the pre-existing README-completeness and
+scenario-coverage ones); `python tests/frontends/ui_audit.py --strict` exit 0; `harness plugin doctor --all`
+ok and `harness plugin test --all` → 220 passed; 1 new kernel test (`test_the_search_index_is_rebuildable_from_the_log`,
+verified to fail on the pre-fix projection).
+
+**Still open in WS-04 (with reasons).** Two of the plan's scenarios are not written:
+`crash_between_call_and_result` (needs a kill between the two appends — a mid-turn `SIGKILL` inside the
+scenario runner is not expressible in the current harness) and `append_failure_fails_closed` (needs a store
+that raises on the third append). Both properties are pinned by kernel tests instead
+(`test_a_store_that_cannot_append_stops_the_turn`, `test_dangling_tool_calls_are_repaired_on_disk`), which is
+where a monkeypatched store is cheap and a recorded session would be theatre. §3.6's `checkpoint.created`
+records stay out of scope for WS-04 (they belong with WS-07's diff view), and `settings.changed` records are
+declared but unwritten; the generated table shows both as `0 scenario(s)` rather than the docs claiming them.

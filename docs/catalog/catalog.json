@@ -472,7 +472,8 @@
       "record_kind": "approval.requested",
       "scenarios": [
         "approval_allow_kernel",
-        "approval_allow_web_dom"
+        "approval_allow_web_dom",
+        "reload_equals_live_web_dom"
       ],
       "transient": false,
       "type": "approval.required"
@@ -495,7 +496,8 @@
       "record_kind": "approval.resolved",
       "scenarios": [
         "approval_allow_kernel",
-        "approval_allow_web_dom"
+        "approval_allow_web_dom",
+        "reload_equals_live_web_dom"
       ],
       "transient": false,
       "type": "approval.resolved"
@@ -588,6 +590,7 @@
         "plain_answer_web",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
         "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
@@ -649,6 +652,7 @@
         "plain_answer_web",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
         "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
@@ -709,6 +713,7 @@
         "plain_answer_web",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
         "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
@@ -751,6 +756,7 @@
         "plain_answer_web",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
         "repeat_call_reminder",
         "secret_redacted_from_model_kernel",
         "session_reload_web_dom",
@@ -810,6 +816,7 @@
         "memory_remember_web_dom",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
         "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
@@ -889,6 +896,7 @@
         "plain_answer_web",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
         "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
@@ -1001,6 +1009,7 @@
         "memory_remember_web_dom",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
         "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
@@ -1019,6 +1028,7 @@
         "EVENT_TYPE",
         "action",
         "call_id",
+        "plugin",
         "policy",
         "reason",
         "record_kind",
@@ -1041,6 +1051,7 @@
         "memory_remember_web_dom",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
         "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
@@ -1125,6 +1136,7 @@
         "memory_remember_web_dom",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
         "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
@@ -1201,6 +1213,7 @@
         "plain_answer_web",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
         "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
@@ -1262,6 +1275,7 @@
         "plain_answer_web",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
         "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
@@ -1297,6 +1311,7 @@
         "memory_remember_web_dom",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
         "skills_view_kernel"
       ],
       "transient": false,
@@ -2105,11 +2120,290 @@
     "commands": "harness.kernel.commands.BUILTIN_COMMANDS",
     "events": "harness.sdk.events.EVENT_PAYLOADS; producers are a heuristic source scan",
     "plugins": "registry.discovered of a booted kernel",
+    "record_kinds": "harness.sdk.types.RECORD_KINDS + harness.kernel.transcript.MESSAGE_KINDS + EventPayload.record_kind + tests/scenarios/*/golden/transcript.json",
     "scenarios": "tests/scenarios/*/scenario.yaml + golden/events.json",
     "settings": "registered JSON Schemas (kernel + plugin settings.schema.json)",
     "tools": "registry.get_all_tool_specs()",
     "ui": "static parse of the shipped client and the aiohttp route table"
   },
+  "record_kinds": [
+    {
+      "durable_events": [],
+      "kind": "turn.started",
+      "model_visible": false,
+      "scenarios": []
+    },
+    {
+      "durable_events": [
+        "turn.completed"
+      ],
+      "kind": "turn.completed",
+      "model_visible": false,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "runaway_tool_loop_kernel",
+        "secret_redacted_from_model_kernel",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom"
+      ]
+    },
+    {
+      "durable_events": [
+        "turn.error"
+      ],
+      "kind": "turn.error",
+      "model_visible": false,
+      "scenarios": []
+    },
+    {
+      "durable_events": [
+        "turn.cancelled"
+      ],
+      "kind": "turn.cancelled",
+      "model_visible": false,
+      "scenarios": []
+    },
+    {
+      "durable_events": [
+        "turn.started"
+      ],
+      "kind": "user.message",
+      "model_visible": true,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "runaway_tool_loop_kernel",
+        "secret_redacted_from_model_kernel",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom"
+      ]
+    },
+    {
+      "durable_events": [
+        "model.completed"
+      ],
+      "kind": "assistant.message",
+      "model_visible": true,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "runaway_tool_loop_kernel",
+        "secret_redacted_from_model_kernel",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom"
+      ]
+    },
+    {
+      "durable_events": [],
+      "kind": "tool.call",
+      "model_visible": false,
+      "scenarios": []
+    },
+    {
+      "durable_events": [
+        "tool.decision"
+      ],
+      "kind": "tool.decision",
+      "model_visible": false,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "runaway_tool_loop_kernel",
+        "secret_redacted_from_model_kernel",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom"
+      ]
+    },
+    {
+      "durable_events": [
+        "approval.required"
+      ],
+      "kind": "approval.requested",
+      "model_visible": false,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "reload_equals_live_web_dom"
+      ]
+    },
+    {
+      "durable_events": [
+        "approval.resolved"
+      ],
+      "kind": "approval.resolved",
+      "model_visible": false,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "reload_equals_live_web_dom"
+      ]
+    },
+    {
+      "durable_events": [
+        "tool.result"
+      ],
+      "kind": "tool.result",
+      "model_visible": true,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "runaway_tool_loop_kernel",
+        "secret_redacted_from_model_kernel",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom"
+      ]
+    },
+    {
+      "durable_events": [
+        "ui.card"
+      ],
+      "kind": "ui.card",
+      "model_visible": false,
+      "scenarios": [
+        "edit_without_read_blocked",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "skills_view_kernel"
+      ]
+    },
+    {
+      "durable_events": [
+        "compaction.completed"
+      ],
+      "kind": "compaction.summary",
+      "model_visible": true,
+      "scenarios": []
+    },
+    {
+      "durable_events": [],
+      "kind": "system.notice",
+      "model_visible": false,
+      "scenarios": []
+    },
+    {
+      "durable_events": [],
+      "kind": "settings.changed",
+      "model_visible": false,
+      "scenarios": []
+    },
+    {
+      "durable_events": [],
+      "kind": "checkpoint.created",
+      "model_visible": false,
+      "scenarios": []
+    },
+    {
+      "durable_events": [],
+      "kind": "job.started",
+      "model_visible": false,
+      "scenarios": []
+    },
+    {
+      "durable_events": [],
+      "kind": "job.completed",
+      "model_visible": false,
+      "scenarios": []
+    },
+    {
+      "durable_events": [],
+      "kind": "goal.created",
+      "model_visible": false,
+      "scenarios": []
+    },
+    {
+      "durable_events": [],
+      "kind": "goal.completed",
+      "model_visible": false,
+      "scenarios": []
+    }
+  ],
   "scenarios": [
     {
       "kind": "kernel",
@@ -2234,6 +2528,16 @@
       "tools_called": [
         "edit_file",
         "view_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "reload_equals_live_web_dom",
+      "summary": ">-.",
+      "tools_called": [
+        "view_skill",
+        "write_to_file"
       ],
       "turns": 1
     },

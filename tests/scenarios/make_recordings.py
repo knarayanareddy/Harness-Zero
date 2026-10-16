@@ -113,6 +113,16 @@ RECORDINGS: dict[str, list[list]] = {
         tool("c2", "write_to_file", {"file_path": "../escape.txt", "content": "outside\n"}),
         text("Both attempts were blocked by the workspace jail."),
     ],
+    # 14. Reload equals live: one approval-gated write and one card-producing read, same step.
+    "reload_equals_live_web_dom": [
+        [
+            ToolCallEnd(id="c1", name="write_to_file", arguments={"file_path": "notes.txt", "content": "written while you watched\n"}),
+            ToolCallEnd(id="c2", name="view_skill", arguments={"skill_name": "code-architect"}),
+            usage(),
+            Done(stop_reason="tool_use"),
+        ],
+        text("Notes written and the playbook loaded — the card and the approval are both in your history now."),
+    ],
     # 13. EXEC risk in ask mode with nobody approving: the command must not run.
     "shell_exec_denied_without_approver_kernel": [
         tool("c1", "run_command", {"command": "touch ran.txt"}),

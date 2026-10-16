@@ -397,6 +397,29 @@ async def build_catalog(runtime: Any = None, repo_root: Path | None = None) -> d
             }
         )
 
+    # ---- record kinds (the session log's vocabulary, WS-04) ----
+    # No source scan here: which kinds a marker path writes is not visible in a literal, so the table says
+    # what is provable instead — the payload classes that name a kind, and the recorded transcripts that
+    # actually hold one. A kind with no scenario is declared but unused (WS-10's reserved rows).
+    from harness.kernel.transcript import MESSAGE_KINDS
+    from harness.sdk.types import RECORD_KINDS
+
+    kind_scenarios: dict[str, set[str]] = {}
+    for golden in sorted((root / "tests" / "scenarios").glob("*/golden/transcript.json")):
+        name = golden.parents[1].name
+        for rec in json.loads(golden.read_text(encoding="utf-8")):
+            kind_scenarios.setdefault(str(rec.get("kind", "")), set()).add(name)
+    record_kinds = [
+        {
+            "kind": kind,
+            # `derive_messages`' filter: a model-visible kind is one that reaches the next ModelRequest.
+            "model_visible": kind in MESSAGE_KINDS,
+            "durable_events": sorted(e for e, pl in EVENT_PAYLOADS.items() if pl.record_kind == kind),
+            "scenarios": sorted(kind_scenarios.get(kind, set())),
+        }
+        for kind in RECORD_KINDS
+    ]
+
     # ---- commands ----
     client_cmds = set(_CLIENT_CMD_RE.findall((client / "api.js").read_text(encoding="utf-8")))
     cmds = []
@@ -477,6 +500,7 @@ async def build_catalog(runtime: Any = None, repo_root: Path | None = None) -> d
         "events": events,
         "cards": {k: sorted(v) for k, v in sorted(CARD_FIELDS.items())},
         "commands": cmds,
+        "record_kinds": record_kinds,
         "ui": ui,
         "scenarios": scenarios,
         "coverage": coverage,
@@ -486,6 +510,8 @@ async def build_catalog(runtime: Any = None, repo_root: Path | None = None) -> d
             "settings": "registered JSON Schemas (kernel + plugin settings.schema.json)",
             "events": "harness.sdk.events.EVENT_PAYLOADS; producers are a heuristic source scan",
             "commands": "harness.kernel.commands.BUILTIN_COMMANDS",
+            "record_kinds": "harness.sdk.types.RECORD_KINDS + harness.kernel.transcript.MESSAGE_KINDS + "
+                            "EventPayload.record_kind + tests/scenarios/*/golden/transcript.json",
             "ui": "static parse of the shipped client and the aiohttp route table",
             "scenarios": "tests/scenarios/*/scenario.yaml + golden/events.json",
         },
@@ -501,6 +527,9 @@ def _version() -> str:
 # --------------------------------------------------------------------------------------
 # renderers
 # --------------------------------------------------------------------------------------
+
+
+CATALOG_DOCS = ("PLUGINS.md", "TOOLS.md", "SETTINGS.md", "EVENTS.md", "COMMANDS.md", "RECORD_KINDS.md", "UI_CONTRACT.md")
 
 
 def _table(columns: list[str], rows: list[list[Any]]) -> str:
@@ -655,6 +684,29 @@ def render_markdown(cat: dict[str, Any], name: str) -> str:
         aliases = [c["name"] for c in cat["commands"] if c["alias"]]
         if aliases:
             body.append("\nUnderscore aliases kept for external callers: " + ", ".join(f"`{a}`" for a in aliases) + ".")
+    elif name == "RECORD_KINDS.md":
+        body.append(
+            f"# Session log record kinds (v{cat['version']})\n\nThe vocabulary the transcript log accepts, from "
+            "`harness.sdk.types.RECORD_KINDS`. Every model-visible or user-visible fact is one of these; the log is "
+            "the source of truth and `derive_messages` is the only producer of a `ModelRequest.messages` list. "
+            "`Model-visible` marks the kinds `derive_messages` turns into messages — everything else is history the "
+            "user keeps but the model does not see. Invariants and the upgrade policy are in "
+            "`docs/architecture/SESSION_LOG.md`.\n"
+        )
+        body.append(
+            _table(
+                ["Kind", "Model-visible", "Durable event(s) carrying it", "Scenario transcripts holding it"],
+                [
+                    [
+                        f"`{r['kind']}`",
+                        "yes" if r["model_visible"] else "no",
+                        ", ".join(f"`{e}`" for e in r["durable_events"]) or "—",
+                        f"{len(r['scenarios'])} scenario(s)",
+                    ]
+                    for r in cat["record_kinds"]
+                ],
+            )
+        )
     elif name == "UI_CONTRACT.md":
         ui = cat["ui"]
         body.append("# Web client contract\n\nParsed statically from `harness/frontends/web/static/` and the daemon's route "
@@ -677,7 +729,7 @@ def render_markdown(cat: dict[str, Any], name: str) -> str:
 def write_outputs(cat: dict[str, Any], out_dir: Path) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     written = []
-    for name in ("PLUGINS.md", "TOOLS.md", "SETTINGS.md", "EVENTS.md", "COMMANDS.md", "UI_CONTRACT.md"):
+    for name in CATALOG_DOCS:
         path = out_dir / name
         path.write_text(render_markdown(cat, name), encoding="utf-8")
         written.append(path)
@@ -727,7 +779,7 @@ class CheckReport:
 
 def _check_drift(cat: dict[str, Any], root: Path) -> dict[str, Any]:
     bad = []
-    for name in ("PLUGINS.md", "TOOLS.md", "SETTINGS.md", "EVENTS.md", "COMMANDS.md", "UI_CONTRACT.md"):
+    for name in CATALOG_DOCS:
         path = root / CATALOG_DIR / name
         expected = render_markdown(cat, name)
         if not path.is_file():

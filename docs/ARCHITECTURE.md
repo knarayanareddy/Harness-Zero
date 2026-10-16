@@ -143,7 +143,7 @@ generated JSON schema (`harness events schema`).
 | event | payload class | keys |
 |---|---|---|
 | `tool.call` | `ToolCallStarted` | call_id, name, arguments, risk, plugin |
-| `tool.decision` | `ToolDecision` | call_id, action, policy, risk, reason |
+| `tool.decision` | `ToolDecision` | call_id, action, plugin, policy, risk, reason |
 | `approval.required` | `ApprovalRequired` | approval_id, call_id, kind, summary, details, timeout_s, options |
 | `approval.resolved` | `ApprovalResolved` | approval_id, approved, by, reason |
 | `tool.output.delta` | `ToolOutputDelta` | call_id, stream, text |
@@ -193,6 +193,11 @@ generated JSON schema (`harness events schema`).
   `sessions.get`, so there is no in-memory mirror of the conversation to drift from the file. Records are
   typed and versioned (`kind` ∈ `RECORD_KINDS`, `v: 2`); v1 lines are upgraded *on read* and never
   rewritten, because an appended line is the audit trail of what was recorded when.
+* The record anatomy, the invariant list, the client-side mapping and the upgrade policy are spelled out in
+  [`architecture/SESSION_LOG.md`](architecture/SESSION_LOG.md). The generated kind table — which kinds are
+  model-visible, which durable event carries them, which scenario transcripts hold one — is
+  [`catalog/RECORD_KINDS.md`](catalog/RECORD_KINDS.md), refreshed by `harness catalog gen` and checked by
+  `harness catalog --check`.
 * Policy facts are records too (WS-04b). The gate writes a `tool.decision` record for every deny / ask /
   allow and a `ui.card` record for every card a tool produced — before publishing the matching event, and
   whether or not anyone is subscribed, because the log is not the bus's copy of itself. The approval broker

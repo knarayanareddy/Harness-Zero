@@ -130,7 +130,7 @@ workstreams:
   - id: WS-04
     title: Session log as single source of truth
     doc: WS-04_session_log_single_source.md
-    status: in_progress  # WS-04a (P9) + WS-04b (P10) done; WS-04c pending: SESSION_LOG.md, client single renderer over records, reload_equals_live scenario, sessions.reindex
+    status: executed  # WS-04a (P9) records + derive_messages + fail-closed append; WS-04b (P10) durability declared, policy facts recorded, on-disk repair; WS-04c (P11) client renders records, reload_equals_live_web_dom scenario, SESSION_LOG.md + generated RECORD_KINDS.md, harness sessions reindex. Not done, with reasons in review/CONSOLIDATION_LOG.md §P11: the crash_between_call_and_result / append_failure_fails_closed scenarios (both properties pinned by kernel tests instead) and §3.6 checkpoint.created records.
     effort_days: 3
     depends_on: [WS-01]
     soft_depends_on: [WS-03]

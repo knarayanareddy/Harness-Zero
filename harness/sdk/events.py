@@ -255,6 +255,13 @@ class ToolCallStarted(EventPayload):
 @event_payload
 @dataclass(slots=True)
 class ToolDecision(EventPayload):
+    """What the policy chain decided, and who it decided it about.
+
+    The keys mirror the `tool.decision` record exactly (`plugin` included): the card subtitle a client
+    paints — `fs-tools · write` — is part of the decision, so a session reloaded from the log can render
+    the same card without a live `tool.call` event to supply it.
+    """
+
     EVENT_TYPE: ClassVar[str] = "tool.decision"
     record_kind: ClassVar[str | None] = "tool.decision"
     call_id: str
@@ -262,6 +269,7 @@ class ToolDecision(EventPayload):
     policy: str
     risk: str
     reason: str
+    plugin: str = ""  # owning plugin; "" for a decision taken before a tool was resolved
 
 
 @event_payload

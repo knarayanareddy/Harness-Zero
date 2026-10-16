@@ -112,6 +112,7 @@
     "data": {
       "action": "deny",
       "call_id": "call#1",
+      "plugin": "shell-tools",
       "policy": "tirith",
       "reason": "Command attempts SSRF access to blocked target: 169\\.254\\.\\d+\\.\\d+",
       "risk": "destructive"
@@ -123,6 +124,7 @@
       "metadata": {
         "action": "deny",
         "call_id": "call#1",
+        "plugin": "shell-tools",
         "policy": "tirith",
         "reason": "Command attempts SSRF access to blocked target: 169\\.254\\.\\d+\\.\\d+",
         "risk": "destructive"

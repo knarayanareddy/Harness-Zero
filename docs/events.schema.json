@@ -1349,6 +1349,9 @@
           },
           "reason": {
             "type": "string"
+          },
+          "plugin": {
+            "type": "string"
           }
         },
         "additionalProperties": false,
@@ -1358,7 +1361,8 @@
           "policy",
           "risk",
           "reason"
-        ]
+        ],
+        "description": "What the policy chain decided, and who it decided it about."
       },
       "tool.output.delta": {
         "title": "ToolOutputDelta",

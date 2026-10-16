@@ -15,6 +15,38 @@ from typing import Any, Literal
 logger = logging.getLogger(__name__)
 
 
+def record_row(record: dict[str, Any]) -> tuple[int, str, str, str] | None:
+    """Project one session-log record onto an FTS row: ``(step_index, source, step_type, content)``.
+
+    The session log is the source of truth (WS-04) and this table is derived from it, so the only rule is
+    what a record looks like: v2 names itself with `kind` and `role`, and the v1 fields (`type`, `source`)
+    are accepted for old workspaces. The live hook (`FTS5SearchIndex.index`) and the rebuild walk go
+    through here, so a reindexed workspace cannot end up with different rows than a session that was
+    indexed while it ran. Returns ``None`` for a record with no text to search.
+    """
+    content = record.get("content") or ""
+    if isinstance(content, list):
+        # Extract text from content blocks
+        parts = []
+        for item in content:
+            if isinstance(item, dict) and "text" in item:
+                parts.append(str(item["text"]))
+            elif isinstance(item, str):
+                parts.append(item)
+        content = " ".join(parts)
+    elif not isinstance(content, str):
+        content = str(content)
+    if not content.strip():
+        return None
+    try:
+        step_index = int(record.get("step_index", 0))
+    except (TypeError, ValueError):
+        step_index = 0
+    source = str(record.get("role") or record.get("source") or "UNKNOWN")
+    step_type = str(record.get("kind") or record.get("type") or "UNKNOWN")
+    return step_index, source, step_type, content
+
+
 def _sanitize_fts_query(query: str) -> str:
     """Escapes special characters in query string to prevent FTS5 syntax errors."""
     tokens = re.findall(r"\w+", query)
@@ -68,25 +100,10 @@ class FTS5SearchIndex:
 
     async def index(self, session_id: str, record: dict[str, Any]) -> None:
         """Indexes a transcript record into FTS5."""
-        content = record.get("content") or ""
-        if isinstance(content, list):
-            # Extract text from content blocks
-            parts = []
-            for item in content:
-                if isinstance(item, dict) and "text" in item:
-                    parts.append(str(item["text"]))
-                elif isinstance(item, str):
-                    parts.append(item)
-            content = " ".join(parts)
-        elif not isinstance(content, str):
-            content = str(content)
-
-        if not content.strip():
+        row = record_row(record)
+        if row is None:
             return
-
-        step_index = int(record.get("step_index", 0))
-        source = str(record.get("source", "UNKNOWN"))
-        step_type = str(record.get("type", "UNKNOWN"))
+        step_index, source, step_type, content = row
 
         with self.conn:
             self.conn.execute(
@@ -199,43 +216,77 @@ class FTS5SearchIndex:
         cursor = self.conn.cursor()
         cursor.execute("SELECT count(*) FROM turns_fts")
         count = cursor.fetchone()[0]
-        if count > 0 or not sessions_dir.exists():
+        if count > 0:
             return 0
+        return self.rebuild_from_sessions(sessions_dir)[1]
+
+    def rebuild_from_sessions(self, sessions_dir: Path, *, dry_run: bool = False) -> tuple[int, int]:
+        """Re-index every session transcript from scratch; returns ``(sessions, rows)``.
+
+        FTS5 is a *derived* index: the session log is the source of truth (WS-04), so throwing the table
+        away and rebuilding it from ``transcript.jsonl`` is always safe. That is what
+        ``harness sessions reindex`` does, and what to run after a crash, a partial write, or a record
+        format upgrade. Records are read as v2 (``kind``/``role``) with a fallback to the v1 fields, so an
+        old workspace rebuilds into a searchable index rather than a table of ``UNKNOWN`` rows.
+        """
+        dir_path = Path(sessions_dir)
+        if not dir_path.exists():
+            return 0, 0
+        if not dry_run:
+            with self.conn:
+                self.conn.execute("DELETE FROM turns_fts")
+                self.conn.execute("DELETE FROM conversation_summaries")
 
         indexed = 0
-        for session_folder in sessions_dir.iterdir():
+        per_session: dict[str, int] = {}
+        for session_folder in sorted(dir_path.iterdir()):
             if not session_folder.is_dir():
                 continue
-            session_id = session_folder.name
             transcript_file = session_folder / "transcript.jsonl"
             if not transcript_file.exists():
                 continue
-
+            session_id = session_folder.name
+            per_session[session_id] = 0
             try:
                 for line in transcript_file.read_text(encoding="utf-8").splitlines():
                     line = line.strip()
                     if not line:
                         continue
-                    rec = json.loads(line)
-                    content = rec.get("content") or ""
-                    if not content:
+                    row = record_row(json.loads(line))
+                    if row is None:
                         continue
-                    step_index = int(rec.get("step_index", 0))
-                    source = str(rec.get("source", "UNKNOWN"))
-                    step_type = str(rec.get("type", "UNKNOWN"))
-                    with self.conn:
-                        self.conn.execute(
-                            """
-                            INSERT INTO turns_fts (conversation_id, step_index, source, step_type, content)
-                            VALUES (?, ?, ?, ?, ?)
-                            """,
-                            (session_id, step_index, source, step_type, content),
-                        )
+                    step_index, source, step_type, content = row
+                    if not dry_run:
+                        with self.conn:
+                            self.conn.execute(
+                                """
+                                INSERT INTO turns_fts (conversation_id, step_index, source, step_type, content)
+                                VALUES (?, ?, ?, ?, ?)
+                                """,
+                                (session_id, step_index, source, step_type, content),
+                            )
+                    per_session[session_id] += 1
                     indexed += 1
             except Exception as e:
                 logger.debug("Failed re-indexing session %s: %s", session_id, e)
 
-        return indexed
+        if not dry_run:
+            # The summaries table is the session list the UI reads; rebuild it from the same walk so a
+            # reindex also repairs a count that drifted from the log.
+            now_str = datetime.now(UTC).isoformat()
+            with self.conn:
+                for session_id, count in per_session.items():
+                    self.conn.execute(
+                        """
+                        INSERT INTO conversation_summaries (conversation_id, step_count, last_modified_time)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(conversation_id) DO UPDATE SET
+                            step_count = excluded.step_count,
+                            last_modified_time = excluded.last_modified_time
+                        """,
+                        (session_id, count, now_str),
+                    )
+        return len(per_session), indexed
 
     def close(self) -> None:
         self.conn.close()

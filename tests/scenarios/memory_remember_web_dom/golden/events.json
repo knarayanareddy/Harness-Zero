@@ -121,6 +121,7 @@
     "data": {
       "action": "allow",
       "call_id": "call#1",
+      "plugin": "tool-memory",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -132,6 +133,7 @@
       "metadata": {
         "action": "allow",
         "call_id": "call#1",
+        "plugin": "tool-memory",
         "policy": "policy_gate",
         "reason": "OK",
         "risk": "read"
@@ -335,6 +337,7 @@
     "data": {
       "action": "allow",
       "call_id": "call#2",
+      "plugin": "tool-memory",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "read"
@@ -346,6 +349,7 @@
       "metadata": {
         "action": "allow",
         "call_id": "call#2",
+        "plugin": "tool-memory",
         "policy": "policy_gate",
         "reason": "OK",
         "risk": "read"
@@ -373,7 +377,7 @@
             ],
             [
               "1",
-              "UNKNOWN",
+              "user",
               "Remember the codename is [Falcon]"
             ]
           ]
@@ -404,7 +408,7 @@
               ],
               [
                 "1",
-                "UNKNOWN",
+                "user",
                 "Remember the codename is [Falcon]"
               ]
             ]
