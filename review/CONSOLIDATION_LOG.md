@@ -882,6 +882,12 @@ scenario-coverage ones); `python tests/frontends/ui_audit.py --strict` exit 0; `
 ok and `harness plugin test --all` → 220 passed; 1 new kernel test (`test_the_search_index_is_rebuildable_from_the_log`,
 verified to fail on the pre-fix projection).
 
+**Scope correction.** P9's split note promised `sessions.truncate` / `session.fork` inside 04b. Neither is in
+WS-04's spec, neither is one of the review's findings, and `sessions.get`'s `history` alias was dropped for
+the same reason (see the deviation note in the CHANGELOG). Both are dropped here rather than left quietly
+unimplemented: editing a session's history is a *checkpoint* feature and belongs with WS-07's diff view,
+where the base/head pair makes a truncate honest about what it discards.
+
 **Still open in WS-04 (with reasons).** Two of the plan's scenarios are not written:
 `crash_between_call_and_result` (needs a kill between the two appends — a mid-turn `SIGKILL` inside the
 scenario runner is not expressible in the current harness) and `append_failure_fails_closed` (needs a store
