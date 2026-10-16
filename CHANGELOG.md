@@ -9,6 +9,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — P13b / WS-05 follow-up: the Plugins & Integrations pane
+- **The Studio now lists what it actually runs.** `harness/frontends/web/ui.toml` declares a fourth panel —
+  `{ id = "plugins", command = "plugins.list", renderer = "list" }` — and `harness/frontends/web/static/panels/plugins.js`
+  paints one card per **discovered** plugin (39 today): tier, what it `provides`, its capability, how many settings
+  it brings and **which settings tab they are on**, and whether it declares panels, record renderers or a client
+  module. Cards are grouped under the family the kernel found them in — a list the client does not keep — and
+  nothing in the pane names a plugin. The pane is mounted by `PanelRegistry.mount()` from the declaration alone:
+  `index.html` was not edited, which is the WS-05 promise demonstrated rather than described.
+- **`plugins.list` grew up** (`harness/kernel/commands.py`): the row now carries `disabled`, `family`,
+  `has_settings`, `settings_count`, `settings_group`, `panels`, `record_renderers`, `client_module` alongside the
+  existing keys, so `harness plugin list`, the TUI and the browser read one answer. `loaded` stays the live truth
+  (`registry.is_loaded`) and `disabled` the user's intent for the next start — the two are deliberately not
+  collapsed into an "enabled" boolean, because nothing hot-unloads a plugin mid-session and a switch that implies
+  otherwise is a lie. `Settings` and `Configure` therefore agree with the modal by construction: both are derived
+  from `settings_owner_index` + `x-ui.group`.
+- **Two switches, zero handlers.** Enable/Disable are `data-command="plugins.disable"` / `…enable"` attributes
+  handled by `CommandBinder` (WS-05b), and `harness catalog --check --section ui` now gates them:
+  `ui.data_command_bindings` is non-empty for the first time (`plugins.enable`, `plugins.disable`, both
+  `registered: true`). The badge distinguishes `loaded` / `off next start` / `off` / `not loaded` so a pending change
+  is visible without pretending it already happened, and the restart note says what to do — `harness daemon` has no
+  `restart` subcommand, so "applies on next start" is the truth the pane tells rather than a caveat it hides.
+  `not loaded` is deliberately not spelled "on next start": a plugin whose entry point or `setup()` failed looks
+  identical in the data (see R57).
+- **The panel contract was sharpened, not weakened.** `test_panels_are_declared_backed_and_mounted` required a
+  `data-tab` in the client sources for every declared panel — a rule that contradicted runtime mounting (it failed
+  the day a panel was *only* declared). It is now
+  `test_panels_are_declared_backed_and_reachable`: declared ⇒ backed by a dispatchable command ⇒ paintable (a
+  module registered in `app.js`, or one of the generic renderers), plus the mirror rule that no module may exist
+  for an undeclared panel, plus `test_the_client_implements_exactly_the_renderers_a_manifest_may_name`, which pins
+  `registry.js:GENERIC_RENDERERS` against `harness/sdk/manifest.py:VALID_UI_RENDERERS`.
+- **Two defects found by running the DOM lane, both fixed.** The binder reported a *successful* command as failed
+  because its `dispatchEvent` sat inside the command's `try` (a repaint that detaches the control threw, and the
+  user saw a red "plugins.disable failed" notice for a write that landed); and `headless_timeline.mjs` let Node's
+  own `Event`/`CustomEvent`/`FormData` globals shadow jsdom's, so `dispatchEvent` rejected the page's events and the
+  whole announce path was untestable. See `review/CONSOLIDATION_LOG.md` (R55, R56).
+
 ### Changed — P13a / WS-05 settings surface: tabs by capability family, sections by owner
 - **A plugin's settings get a tab that means something.** `harness/kernel/settings_schema.py` now defaults a
   property's `x-ui.group` from the plugin's **capability family** (`FAMILY_TABS`: hooks → `Hooks`, bridges →

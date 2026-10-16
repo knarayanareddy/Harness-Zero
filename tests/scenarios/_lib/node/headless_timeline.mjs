@@ -23,6 +23,8 @@ const APPROVE = process.env.APPROVE === '1';
 const MODEL = process.env.MODEL || '';
 const MODEL_PROVIDER = process.env.MODEL_PROVIDER || '';
 const SETTINGS_PROBE = process.env.SETTINGS_PROBE === '1';
+const PLUGINS_PROBE = process.env.PLUGINS_PROBE === '1';
+const PLUGINS_TOGGLE = process.env.PLUGINS_TOGGLE === '1'; // opt-in: click a real switch, then click it back
 
 const consoleLog = [];
 const vc = new VirtualConsole();
@@ -40,8 +42,14 @@ const { window } = dom;
 const g = globalThis;
 g.window = window; g.document = window.document;
 try { Object.defineProperty(g, 'navigator', { value: window.navigator, configurable: true }); } catch (e) {}
-for (const k of ['HTMLElement', 'Element', 'Node', 'Event', 'CustomEvent', 'KeyboardEvent', 'MouseEvent', 'FormData', 'localStorage', 'sessionStorage', 'getComputedStyle', 'URLSearchParams', 'DOMParser']) {
-  if (window[k] !== undefined && g[k] === undefined) g[k] = window[k];
+const WINDOW_GLOBALS = ['HTMLElement', 'Element', 'Node', 'Event', 'CustomEvent', 'KeyboardEvent', 'MouseEvent', 'FormData', 'localStorage', 'sessionStorage', 'getComputedStyle', 'URLSearchParams', 'DOMParser'];
+// Node ships its own `Event`/`CustomEvent`/`FormData`, and jsdom's `dispatchEvent` rejects a foreign instance
+// ("parameter 1 is not of type 'Event'") — so the window's copies win for anything event- or DOM-shaped. A
+// global left to Node's version makes the page's real code paths untestable rather than broken.
+const FROM_WINDOW = new Set(['Event', 'CustomEvent', 'KeyboardEvent', 'MouseEvent', 'FormData', 'Element', 'Node', 'HTMLElement']);
+for (const k of WINDOW_GLOBALS) {
+  if (window[k] === undefined) continue;
+  if (FROM_WINDOW.has(k) || g[k] === undefined) g[k] = window[k];
 }
 g.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
 g.scrollTo = () => {}; window.scrollTo = () => {};
@@ -204,6 +212,62 @@ if (SETTINGS_PROBE && window.HarnessApp?.openSettings) {
   report.settings_groups = [...window.document.querySelectorAll('#settings-content [data-group]')].map((b) => b.textContent.replace(/\s+/g, ' ').trim());
   report.settings_modal_hidden = $('#settings-modal')?.classList.contains('hidden') ?? null; // stylesheets are not fetched in this lane; the cascade is covered by tests/frontends/test_ui_coherence.py
   window.HarnessApp.closeSettings?.();
+}
+if (PLUGINS_PROBE && window.HarnessApp) {
+  // The Plugins pane is the proof that `[ui].panels` is more than a declaration: the shell carries no
+  // `data-tab="plugins"` and no host in `index.html`, so if the tab and the cards appear here, they were
+  // mounted from `ui.contributions`. The static contract (tests/frontends/test_ui_contract.py) can only check
+  // that the client *could* paint the panel; this is where it checks that it does.
+  const doc = window.document;
+  const click = async (el, ms = 700) => {
+    if (!el) return;
+    el.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    await sleep(ms);
+  };
+  await click(doc.querySelector('.studio-tabs [data-tab="plugins"]'), 1500);
+  const host = doc.getElementById('panel-plugins');
+  report.tab_ids = [...doc.querySelectorAll('.studio-tabs [data-tab]')].map((el) => el.getAttribute('data-tab'));
+  report.plugins_host = !!host;
+  report.plugin_cards = host ? host.querySelectorAll('.plugin-card').length : 0;
+  report.plugin_families = host
+    ? [...host.querySelectorAll('.plugin-family-title')].map((el) => el.textContent.replace(/\s+/g, ' ').trim())
+    : [];
+  report.plugin_toggles = host
+    ? [...host.querySelectorAll('[data-command]')].slice(0, 3).map((el) => el.getAttribute('data-command'))
+    : [];
+  const configure = host ? host.querySelector('[data-configure]') : null;
+  report.plugin_configure_target = configure ? configure.getAttribute('data-configure') : null;
+  await click(configure, 1200);
+  report.settings_open_after_configure = !doc.getElementById('settings-modal')?.classList.contains('hidden');
+  report.settings_active_group = doc
+    .querySelector('#settings-content [data-group].settings-tab-active')
+    ?.textContent?.replace(/\s+/g, ' ')
+    .trim() ?? null;
+  window.HarnessApp.closeSettings?.();
+
+  if (PLUGINS_TOGGLE) {
+    // The `[data-command]` binding is this pane's only behaviour, so click one and check that the kernel's
+    // answer comes back through the re-render: `Disable` -> `Enable` means the write landed and `plugins.list`
+    // reported it. The loop clicks it back, leaving the daemon's settings as they were found.
+    const name = host.querySelector('.plugin-card [data-command="plugins.disable"]')
+      ?.closest('.plugin-card')
+      ?.getAttribute('data-plugin');
+    const stateOf = () => {
+      const card = host.querySelector(`.plugin-card[data-plugin="${name}"]`);
+      return {
+        state: card?.getAttribute('data-state'),
+        button: card?.querySelector('.plugin-toggle')?.textContent?.trim(),
+        command: card?.querySelector('.plugin-toggle')?.getAttribute('data-command'),
+      };
+    };
+    const clicked = [];
+    for (let i = 0; i < 2 && name; i += 1) {
+      const before = stateOf();
+      await click(host.querySelector(`.plugin-card[data-plugin="${name}"] .plugin-toggle`), 1400);
+      clicked.push({ before, after: stateOf() });
+    }
+    report.plugin_toggle = { name, clicked };
+  }
 }
 report.console_errors = consoleLog.filter((c) => c.startsWith('[error]') || c.startsWith('[jsdomError]')).slice(0, 10);
 report.sse_events = sseSeen;

@@ -53,6 +53,16 @@ export const renderers = {
 };
 ```
 
+Two authoring rules inside a panel module, both learned the hard way:
+
+* **Write a `data-command` value literally.** `harness catalog gen` reads bindings out of the source text, so
+  `data-command="${enabled ? 'plugins.disable' : 'plugins.enable'}"` is invisible to `--check` while
+  `data-command="plugins.disable"` on one branch and `data-command="plugins.enable"` on the other are both
+  gated. Prefer two branches with literal attributes over one interpolated name.
+* **Escape what goes in an attribute.** `escape` (textContent-based) defuses text nodes only; a `"` in
+  `data-args` ends the attribute. `ctx.escapeAttr` exists for values written into markup — pass
+  `JSON.stringify(args)` through it.
+
 A panel key with no declaration, or a renderer for a kind the kernel does not write, is a test failure, not a
 feature: the ids must match (`test_the_panel_modules_are_the_declared_panels`), and an excuse in `NO_RENDERER`
 may not coexist with a renderer. `render` may be async and may throw — the registry logs it per panel, so one

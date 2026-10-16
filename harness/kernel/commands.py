@@ -378,9 +378,35 @@ class Commands:
         }
 
     async def plugins_list(self) -> list[dict[str, Any]]:
-        """Lists all discovered plugins and their active load status."""
+        """Lists every discovered plugin with what an operator needs in order to judge it.
+
+        Three callers read this row — `harness plugin list`, the TUI, and the Studio's Plugins pane — so it
+        carries more than a name: the capability family it came from, whether the user switched it off, how
+        many settings it brings and which tab they live on, and whether it contributes any UI at all. A
+        plugin browser that cannot answer "does this one do anything I can see?" is a list of directories.
+
+        The two state flags are deliberately not collapsed. ``loaded`` is the live answer
+        (`registry.is_loaded`); ``disabled`` is the user's intent for the **next start**, because
+        `plugins.enable` / `plugins.disable` only write ``kernel.plugins.disabled`` and nothing hot-unloads a
+        plugin mid-session. Reporting one boolean would imply a restart never matters. Settings ownership and
+        the tab come from the same derivation the settings surface uses (`settings_owner_index` +
+        ``x-ui.group``), so a pane cannot disagree with the modal about where a plugin's controls are.
+        """
+        registered = self.settings.get_registered_schemas()
+        disabled = {str(name) for name in self.settings.get("kernel.plugins.disabled", []) or []}
+        owners = settings_owner_index(self.registry)
         results: list[dict[str, Any]] = []
         for name, dp in self.registry.discovered.items():
+            namespace = f"plugins.{name}"
+            meta = owners.get(namespace, {})
+            props = flatten_schema_properties(registered.get(namespace, {}).get("properties", {}))
+            group: str | None = None
+            for prop in props.values():
+                declared = with_ui_defaults(prop, namespace, **meta).get("x-ui", {}).get("group")
+                if declared:
+                    group = str(declared)
+                    break
+            ui = getattr(dp.manifest, "ui", None)
             results.append({
                 "name": name,
                 "version": dp.manifest.version,
@@ -392,6 +418,14 @@ class Commands:
                 ],
                 "tier": dp.tier.value,
                 "loaded": self.registry.is_loaded(name),
+                "disabled": name in disabled,
+                "family": meta.get("family"),
+                "has_settings": bool(props),
+                "settings_count": len(props),
+                "settings_group": group,
+                "panels": sorted(panel.id for panel in getattr(ui, "panels", None) or []),
+                "record_renderers": sorted(getattr(ui, "record_renderers", None) or []),
+                "client_module": getattr(ui, "client_module", None),
             })
         return results
 

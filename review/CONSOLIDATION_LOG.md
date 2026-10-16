@@ -686,6 +686,9 @@ Plus one that only showed up under load: a timed-out `run_command` left its chil
 | R52 | `harness/frontends/web/static/app.js` (during P12b) | The new `handlePanelSelect` called `this.selectSession(...)` — a method this client has never had (`switchSession` is the real name). Nothing static caught it; jsdom threw on the session-row click, i.e. a user clicking a session in the reloaded page would have gotten a broken pane and a console error. The class of bug the registry indirection creates, and no existing test reached it because no other test clicks a session row. | P12b: `test_the_client_only_calls_methods_it_defines` checks every `app.x()` a module calls and every `this.x()` in the app against the methods and constructor members `app.js` actually defines (shown to fail by re-introducing `selectSession`, then reverted) |
 | R53 | `harness/frontends/web/static/settings.js` | The panel's constructor seeded the open tab with the literal `'Models & Providers'` — a client deciding which of the kernel's tabs to show. A daemon with no provider plugin loaded (fresh install, all providers disabled) opened the settings modal on an empty pane reading "No settings configured in this group" while 44 settings existed; and the same literal made the client's *default* depend on a tab name the catalogue had already stopped owning. | P13a: the open tab comes from `settings.schema`'s `groups` (`groups[0]`), a remembered group is validated against the list, and `setGroup` ignores a tab that does not exist; `test_settings_js_renders_the_owner_heading_and_hardcodes_no_tab_names` bans the literal form (`activeGroup = "…"`) in the client |
 | R54 | `harness/kernel/catalog.py` (`SETTINGS.md`) | The renderer walked a literal tuple of group names when deciding which sections to emit, so the moment properties moved to tabs the tuple had not heard of (`Hooks`, `Bridges & Integrations`, `Context`) their rows vanished from the document — while `harness catalog --check` stayed green, because drift checks compare the file against a fresh build of the *same* renderer. A generator with its own copy of a fact, graded by its own copy. | P13a: sections are derived from the rows plus `ui.settings_groups` (client order first, anything unexpected after), and `test_settings_doc_has_a_section_for_every_tab` checks both directions against the committed pair — proven by putting the literal list back, which fails naming the three tabs |
+| R55 | `harness/frontends/web/static/registry.js` (`CommandBinder`) | A *successful* command could be announced as a failure: `api.command()` and the `harness:command-done` `dispatchEvent` shared one `try`, so any throw on the announce path — a listener repainting the pane and detaching the control first — landed in `catch`, which appended "`plugins.disable` failed: …" to the timeline. The kernel had already written the setting; the user was told the opposite. Found by clicking the real button in the DOM lane, which no static contract can see. | P13b: the dispatch moved outside the command's `try`, retargets to `document` when the control is no longer connected, and has its own `catch` that only logs; the lane now records the click round trip (`plugin_toggle`) and shows `Disable → off next start → Enable → loaded` |
+| R56 | `tests/scenarios/_lib/node/headless_timeline.mjs` | The lane copied window globals into `globalThis` only `if (g[k] === undefined)` — and Node 19+ ships its own `Event`, `CustomEvent` and `FormData`. jsdom's `dispatchEvent` rejects a foreign event instance ("parameter 1 is not of type 'Event'"), so every event the *page* dispatched after an `await` was silently untestable in exactly the lane built to verify client behaviour. The `if` reads as care and was a blind spot. | P13b: DOM- and event-shaped globals are always taken from the window (`FROM_WINDOW`), the rest only when absent; three existing DOM scenarios re-run green, so the change is a widening, not a re-baseline |
+| R57 | `harness/kernel/registry.py` → `plugins.list` | A plugin that fails at `setup()` leaves no trace a frontend can read: the registry logs it and publishes a `plugin.error` **event** (`registry.py:575`), and discovery-time failures are a `logger.warning` with no record at all. So `plugins.list` can only say `loaded: false`, and a pane cannot tell "waiting for a restart" from "broken since boot" — nor can a *reloaded* page, since the event is not a durable record. | **Not fixed in P13b** (the pane now says the one thing it knows — `not loaded` — instead of guessing). The fix belongs with the health/diagnostics workstream: keep load outcomes as a durable record kind so `plugins.list` (and a reload) can read the reason from the log the kernel already trusts |
 | R44 | `plugins/stores/fts5_search/` | Two related bugs. The row projection read v1 field names (`type`, `source`), so every row the runner indexed from a v2 record said `UNKNOWN`/`UNKNOWN` and `search_memory`'s Source column was decoration; and the only rebuild path ran when the table was empty, so a workspace whose index had gone stale had no repair — there was no CLI entry point at all. | P11: one `record_row()` shared by the live hook and the rebuild; `rebuild_from_sessions` is unconditional; new `harness sessions reindex`; `test_the_search_index_is_rebuildable_from_the_log` |
 
 ---
@@ -1048,3 +1051,53 @@ that kept a copy.
 **Gate at this point.** `pytest tests/kernel/test_settings_groups.py tests/kernel/test_catalog.py tests/frontends -q`
 → 81 passed; `harness catalog gen && harness catalog --check` drift-free; `ui_audit --strict` 0 findings. Full
 suite run after P13c.
+
+
+## P13b — WS-05 follow-up: the Plugins & Integrations pane (the client half of "show the integrations")
+
+**Why this phase exists.** P13a made a plugin's settings findable; nothing yet made the plugins themselves
+visible. The user's complaint was that the Studio looked like a chat box with a settings dialog — no integration
+surface at all. Verified before starting: 39 discovered plugins, 0 client calls to `plugins.*`, 3 declared panels,
+`ui.contributions.client_modules: []`, and one catch-all settings tab holding half the properties.
+
+**Built.** `plugins.list` rows gained `disabled`, `family`, `has_settings`, `settings_count`, `settings_group`,
+`panels`, `record_renderers`, `client_module` (additive: `harness plugin list` and the TUI keep their columns, and
+`catalog.py`'s `plugin_info` reads named keys, so nothing had to change there); `harness/frontends/web/ui.toml`
+declared `{ id = "plugins", command = "plugins.list", renderer = "list" }`;
+`harness/frontends/web/static/panels/plugins.js` renders the cards (family sections, per-card state badge,
+settings count with its tab, UI-contribution summary) with Enable/Disable as plain `data-command` attributes and
+`Configure` routed through `ctx.select(group)` → `app.handlePanelSelect('plugins', …)` → `openSettings(group)` →
+`SettingsPanel.setGroup`. `registry.js` gained `escapeAttr` (attribute values need more than a text-node escape);
+`styles.css` gained the `.plugin-*` rules.
+
+**The contract it forced.** `test_panels_are_declared_backed_and_mounted` required every declared panel to appear
+as a `data-tab` somewhere in the client sources, which made the pane impossible to add the way WS-05 says a panel
+is added — by declaration. Rather than bolt markup onto `index.html` to satisfy the check, the rule became
+*reachability*: declared ⇒ backed ⇒ paintable (registered module or generic renderer), plus no module without a
+declaration, plus `GENERIC_RENDERERS == VALID_UI_RENDERERS`. Relaxing "present in markup" to "reachable" is only
+honest if something proves mounting actually works, so the DOM lane now reports `tab_ids` (4 tabs, `plugins`
+among them, with `index.html` untouched), `plugin_cards` (39), `plugin_families` (9), and the
+`data-configure` → settings-tab jump (`Bridges & Integrations` opened, active).
+
+**Findings.** R55 (a successful command reported as failed, because the announce shared the command's `try`) and
+R56 (Node's web globals shadowing jsdom's, which made the announce path untestable in the only lane that clicks
+real controls). Both came out of *clicking in the lane* rather than reading code, which is the argument for
+keeping a DOM lane around. Also checked and cleared: the 11 `test_*` names in `docs/PORTING_RECIPES.md` that do
+not live under `tests/` are either conformance-kit methods (`harness/sdk/testing/kits.py`) or fenced examples in
+the doc itself — no prose drift, so no new gate was added for it.
+
+**Honest limits of this phase.** Enabling and disabling cannot take effect inside a running daemon —
+`harness daemon` has no `restart` subcommand and nothing hot-unloads a plugin — so the pane says "takes effect
+the next time the daemon starts" and shows `off next start` on the badge instead of faking a live toggle. And the
+pane can only report the UI plugins *declare*: still 0 of 39 declare `[ui]`, which is WS-05c's job (serving a
+plugin's `static/` and the two scenarios that prove a plugin's own panel and settings tab appear when it is
+enabled).
+
+**Gate at this point.** `pytest tests/frontends tests/kernel/test_plugins_command.py tests/kernel/test_settings_groups.py tests/kernel/test_ui_contributions.py -q`
+→ 99 passed (9 new: `tests/kernel/test_plugins_command.py`, which is the first test `plugins.list` ever had);
+`pytest tests/scenarios -k "plain_answer_web or session_reload_web_dom or approval_allow_web_dom"` → 3 passed;
+`harness catalog gen && harness catalog --check` → all `[ok]` (two pre-existing `[warn]`s: plugin README
+completeness, scenario coverage), with `ui: … mounts 4 declared panel(s)` and
+`data_command_bindings: [plugins.disable ✓, plugins.enable ✓]`; `python tests/frontends/ui_audit.py --strict` →
+0 findings (0 used-but-undefined / 0 defined-but-unused, `panels/plugins.js` 160 lines); `ruff check harness tests`
+clean. Full suite: `pytest -q` → **598 passed** (6:05), the first complete run since P13a landed.

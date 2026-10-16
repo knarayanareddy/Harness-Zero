@@ -207,6 +207,7 @@ export class PanelRegistry {
       panel,
       host: this.hostFor(panel.id),
       escape: (value) => escapeText(value),
+      escapeAttr: (value) => escapeAttr(value),
       select: (value) => this.app.handlePanelSelect?.(panel.id, value),
     };
   }
@@ -257,6 +258,19 @@ function inferColumns(rows) {
   return first ? Object.keys(first).slice(0, 6) : [];
 }
 
+/** Escape a value going into an HTML *attribute* (`escapeText` only defuses text nodes). */
+export function escapeAttr(value) {
+  // Plugin-supplied strings reach `data-args` here, and CSP has no unsafe-inline to fall back on: a bare `"`
+  // would end the attribute and turn a data value into markup. Values are usually `JSON.stringify` output, so
+  // quotes are the real risk — but nothing from a command response is trusted.
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function escapeText(value) {
   // The client sanitises its own strings before they reach `innerHTML`, and CSP has no unsafe-inline to fall
   // back on; keep the escaping here so a generic renderer never trusts a plugin command's payload.
@@ -300,14 +314,24 @@ export class CommandBinder {
       }
       if (args.session_id === '@active') args.session_id = this.app?.activeSessionId || undefined;
       control.disabled = true;
+      let result;
       try {
-        const result = await this.api.command(name, args);
-        control.dispatchEvent(new CustomEvent('harness:command-done', { bubbles: true, detail: { command: name, result } }));
+        result = await this.api.command(name, args);
       } catch (err) {
         console.warn(`[CommandBinder] ${name} failed:`, err);
         this.app?.appendNotice?.(`${name} failed: ${err.message}`, 'error');
-      } finally {
         control.disabled = false;
+        return;
+      }
+      control.disabled = false;
+      // Announce the success *outside* the command's try: a listener that throws (or a control a re-render has
+      // already detached, so the event has nowhere to bubble) must never be reported to the user as a failed
+      // command — the write went through, and saying otherwise is how a working toggle looks broken.
+      try {
+        const target = control.isConnected ? control : document;
+        target.dispatchEvent(new CustomEvent('harness:command-done', { bubbles: true, detail: { command: name, result } }));
+      } catch (err) {
+        console.warn(`[CommandBinder] could not announce ${name}:`, err);
       }
     });
   }

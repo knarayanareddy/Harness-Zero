@@ -15,6 +15,11 @@ panels = [
   { id = "artifact", title = "Artifacts", command = "sessions.get", renderer = "markdown" },
   { id = "sessions", title = "Sessions", command = "sessions.list", renderer = "list" },
   { id = "economics", title = "Spend", command = "economics", renderer = "table" },
+  # The integrations list: every plugin the kernel discovered, what it brings, and a switch that writes
+  # `kernel.plugins.disabled`. `plugins.list` is its data because the kernel — not the client — knows what is
+  # installed; the row markup and the Configure jump live in `static/panels/plugins.js`, which is mounted from
+  # this declaration rather than written into `index.html` (that is the WS-05 promise, and the pane is the proof).
+  { id = "plugins", title = "Plugins", command = "plugins.list", renderer = "list" },
 ]
 
 # The client's own renderer set is the timeline code itself (`static/renderers/*.js`, WS-05b), which the

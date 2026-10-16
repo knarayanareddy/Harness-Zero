@@ -25,6 +25,7 @@ import renderSystemNotice from './renderers/system.notice.js';
 import artifactPanel from './panels/artifact.js';
 import sessionsPanel from './panels/sessions.js';
 import economicsPanel from './panels/economics.js';
+import pluginsPanel from './panels/plugins.js';
 
 /**
  * The transcript painters, keyed by record kind (docs/catalog/RECORD_KINDS.md is the catalogue of kinds; a
@@ -548,6 +549,7 @@ export class HarnessStudioApp {
     this.panels.register('artifact', artifactPanel);
     this.panels.register('sessions', sessionsPanel);
     this.panels.register('economics', economicsPanel);
+    this.panels.register('plugins', pluginsPanel);
     await this.loadPluginModules();
     this.panels.mount();
     const gaps = this.renderers.gaps(this.ui.record_kinds || []);
@@ -585,7 +587,13 @@ export class HarnessStudioApp {
 
   /** A panel row was picked. The sessions pane switches the conversation; other panels decide for themselves. */
   async handlePanelSelect(panelId, value) {
-    if (panelId === 'sessions' && value) await this.switchSession(value);
+    if (panelId === 'sessions' && value) {
+      await this.switchSession(value);
+    } else if (panelId === 'plugins' && value) {
+      // The Plugins pane's Configure button names a settings tab; opening the modal on it belongs to the app,
+      // not to a panel module that has no business knowing about the settings markup.
+      await this.openSettings(value);
+    }
   }
 
   /**
@@ -1217,12 +1225,16 @@ export class HarnessStudioApp {
     this.renderers.render(this, rec);
   }
 
-  openSettings() {
+  async openSettings(initialGroup = null) {
     const modal = document.getElementById('settings-modal');
-    if (modal) {
-      modal.classList.remove('hidden');
-      this.settingsPanel?.load();
-    }
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    if (!this.settingsPanel) return;
+    await this.settingsPanel.load();
+    // The Plugins pane jumps here naming the tab a plugin's settings live on. The kernel chooses that tab
+    // (`x-ui.group`, derived from the plugin's capability family), and `setGroup` ignores a name no schema
+    // declares — so this stays a hint, never a claim about a tab that might not exist.
+    if (initialGroup) this.settingsPanel.setGroup(initialGroup);
   }
 
   closeSettings() {

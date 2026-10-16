@@ -35,6 +35,8 @@ _TAB_RE = re.compile("""data-tab=["']([^"'`]+)["']""")
 _DATA_COMMAND_RE = re.compile("""data-command=["']([^"'`]+)["']""")
 _API_COMMAND_RE = re.compile("""command\\(\\s*["']([a-zA-Z_][\\w.]*)["']""")
 _RENDER_CASE_RE = re.compile("""case ["']([a-z_][a-z0-9_.]*)["']:""")
+_PANEL_REGISTER_RE = re.compile(r'''this\.panels\.register\(\s*['"]([\w-]+)['"]''')
+_GENERIC_RENDERER_RE = re.compile(r"^  (\w+): \(", re.M)
 _STUDIO_PANE_RE = re.compile(r'<section class="studio-pane">.*?</section>', re.S)
 
 
@@ -116,19 +118,64 @@ async def test_every_command_the_client_binds_is_dispatchable(kernel):
 # ---------------------------------------------------------------- panels: declared, backed, present
 
 
-async def test_panels_are_declared_backed_and_mounted(kernel):
+async def test_panels_are_declared_backed_and_reachable(kernel):
+    """A declared panel must be paintable by the client, and the client may not paint an undeclared one.
+
+    This rule used to require a `data-tab` for every declared panel in the shell markup, which contradicted the
+    feature it governed: `PanelRegistry.mount()` creates the tab and the host for anything the kernel declares,
+    and that is how a plugin — and, since P13b, the Plugins pane itself — gets a real pane without a pull
+    request against `index.html`. Reachability is the fact worth pinning, and it has two honest arms: either the
+    client registers a module for the panel id, or the panel names a generic renderer that exists.
+    """
     contributions = await kernel.commands.ui_contributions()
-    declared = {panel["id"] for panel in contributions["panels"]}
+    panels = {panel["id"]: panel for panel in contributions["panels"]}
     in_markup = set(_literal_values(_TAB_RE.findall(_markup_text())))
     assert not contributions["unbacked_panels"], (
         "a panel whose command is not dispatchable is a tab that shows an error: "
         + ", ".join(f"{p['id']} → {p['command']}" for p in contributions["unbacked_panels"])
     )
-    assert not in_markup - declared, (
-        f"`data-tab` with no `[ui]` declaration: {sorted(in_markup - declared)} — delete the pane or declare "
+    assert not in_markup - set(panels), (
+        f"`data-tab` with no `[ui]` declaration: {sorted(in_markup - set(panels))} — delete the pane or declare "
         "it in `harness/frontends/web/ui.toml` (or the plugin's manifest)"
     )
-    assert not declared - in_markup, f"declared panels the client never renders: {sorted(declared - in_markup)}"
+    unreachable = sorted(
+        pid
+        for pid, panel in panels.items()
+        if pid not in _registered_panel_modules() and panel["renderer"] not in _generic_renderers()
+    )
+    assert not unreachable, (
+        f"declared panels nothing can paint: {unreachable} — needs a module under `static/panels/` registered "
+        "in `app.js`, or one of the generic renderers"
+    )
+    orphan = sorted(_registered_panel_modules() - set(panels))
+    assert not orphan, f"panel modules with no `[ui]` declaration: {orphan} — the shell may not claim UI no feature owns"
+
+
+def _registered_panel_modules() -> set[str]:
+    """The panel ids `app.js` hands a module for (`this.panels.register('<id>', …)`)."""
+    return set(_PANEL_REGISTER_RE.findall(_sources()["app.js"]))
+
+
+def _generic_renderers() -> set[str]:
+    """The renderer names `static/registry.js` implements for a panel that ships no module."""
+    src = _sources()["registry.js"]
+    start = src.index("export const GENERIC_RENDERERS = {")
+    body = src[start : src.index("\n};", start)]
+    return set(_GENERIC_RENDERER_RE.findall(body))
+
+
+def test_the_client_implements_exactly_the_renderers_a_manifest_may_name():
+    """`VALID_UI_RENDERERS` is the load-time allow-list; `GENERIC_RENDERERS` is the runtime table.
+
+    A plugin panel that passes validation and then falls through to `GENERIC_RENDERERS.list` would render a
+    list where its author declared a table — silently, on the user's screen. Checking the two sets against
+    each other means the allow-list can only grow by writing the renderer, never by editing one list.
+    """
+    from harness.sdk.manifest import VALID_UI_RENDERERS
+
+    assert _generic_renderers() == set(VALID_UI_RENDERERS), (
+        f"client renderers {sorted(_generic_renderers())} != manifest-allowed {sorted(VALID_UI_RENDERERS)}"
+    )
 
 
 def test_the_studio_pane_holds_hosts_not_feature_markup():

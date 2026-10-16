@@ -250,9 +250,10 @@ generated JSON schema (`harness events schema`).
   (artifacts also into the Artifacts tab), economics from `cost.updated` / `economics`, and the model picker
   from `models.list` grouped by `status`.
 * Which **panels** exist is not client knowledge: `ui.contributions` returns the panels declared in a manifest's
-  `[ui]` block — the shipped client's three are in `harness/frontends/web/ui.toml` — each backed by a command in
-  `commands.list`. A feature that is disabled contributes nothing, so its tab goes with it; a panel whose command
-  is not dispatchable is reported in `unbacked_panels` and not served. Timeline rendering dispatches on
+  `[ui]` block — the shipped client's four are in `harness/frontends/web/ui.toml`, one of them (`plugins`, the
+  integrations list) existing purely as a declaration: `index.html` names no such tab or host. Each is backed by a
+  command in `commands.list`. A feature that is disabled contributes nothing, so its tab goes with it; a panel
+  whose command is not dispatchable is reported in `unbacked_panels` and not served. Timeline rendering dispatches on
   `record.kind` through `static/registry.js`: one module per kind under `static/renderers/`, and
   `NO_RENDERER` for the kinds the timeline deliberately does not paint — each with its reason, each checked
   against the record contract in `tests/frontends/test_ui_contract.py` (generated table:
@@ -260,12 +261,18 @@ generated JSON schema (`harness events schema`).
 * Which **pane** is visible is the same registry's answer, not a chain of branches: `PanelRegistry.activate(id)`
   shows the panel's host and runs its module (`static/panels/<id>.js`), and a declared panel with no module gets
   the generic renderer its `[ui]` block names. So `index.html` needs no edit to gain a tab, and the client
-  cannot mount a panel the kernel never declared (`test_the_panel_modules_are_the_declared_panels`).
+  cannot mount a panel the kernel never declared (`test_the_panel_modules_are_the_declared_panels`, and
+  `test_panels_are_declared_backed_and_reachable`, whose other arm is that every declared panel is paintable —
+  a registered module or one of the four generic renderers, which `registry.js` must implement exactly:
+  `test_the_client_implements_exactly_the_renderers_a_manifest_may_name`).
   The **settings tabs** are derived the same way: a property's `x-ui.group` chooses its tab, an unnamed one takes
   the tab of its plugin's family directory, and `x-ui.owner` names the section it renders under — the client
   holds no tab list, not even for the tab it opens on (P13a). Controls
   that merely call a command use `data-command` + `CommandBinder`; controls needing a runtime id or local side
-  effects keep their handler in `app.js`, and the catalogue lists the bindings either way.
+  effects keep their handler in `app.js`, and the catalogue lists the bindings either way — `harness catalog
+  --check --section ui` fails on a `data-command` no dispatcher has, which is what keeps the Plugins pane's
+  Enable/Disable switches honest. The binder announces success on `harness:command-done` *outside* the command's
+  `try`, so a repaint that detaches the control can never be reported to the user as a failed write.
 
 ## 7. Where the tests live
 

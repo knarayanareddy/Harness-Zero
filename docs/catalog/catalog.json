@@ -340,7 +340,7 @@
       "called_by_web_client": false,
       "handler": "harness/kernel/commands.py:plugins_list",
       "name": "plugins.list",
-      "summary": "Lists all discovered plugins and their active load status."
+      "summary": "Lists every discovered plugin with what an operator needs in order to judge it."
     },
     {
       "alias": false,
@@ -3644,9 +3644,22 @@
         "index.html:send",
         "index.html:stop",
         "settings.js:save-secret"
+      ],
+      "command": [
+        "panels/plugins.js:plugins.disable",
+        "panels/plugins.js:plugins.enable"
       ]
     },
-    "data_command_bindings": [],
+    "data_command_bindings": [
+      {
+        "command": "plugins.disable",
+        "registered": true
+      },
+      {
+        "command": "plugins.enable",
+        "registered": true
+      }
+    ],
     "durable_kinds": [
       "approval.requested",
       "approval.resolved",
@@ -3690,6 +3703,14 @@
         "plugin": "web",
         "renderer": "table",
         "title": "Spend"
+      },
+      {
+        "command": "plugins.list",
+        "id": "plugins",
+        "in_client_markup": false,
+        "plugin": "web",
+        "renderer": "list",
+        "title": "Plugins"
       },
       {
         "command": "sessions.list",

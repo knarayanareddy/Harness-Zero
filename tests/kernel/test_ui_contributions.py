@@ -98,7 +98,9 @@ def test_the_web_frontend_declares_its_panels_in_a_file_not_in_kernel_code():
     assert UI_TOML.is_file(), "the built-in UI declaration is missing"
     ui = UiContribution.from_dict(tomllib.loads(UI_TOML.read_text(encoding="utf-8"))["ui"], plugin="web")
     declared = {panel.id: panel for panel in ui.panels}
-    assert set(declared) == {"artifact", "sessions", "economics"}, declared
+    # The set is the shipped client: three panes over session data plus the integrations list. Adding one here
+    # is the whole contract a plugin follows — declare it, back it with a command, and the shell mounts it.
+    assert set(declared) == {"artifact", "sessions", "economics", "plugins"}, declared
     for panel in ui.panels:
         # Every panel is backed by a command a frontend can dispatch today: a tab with no command behind it is
         # how `data-notice` placeholders were born.

@@ -42,6 +42,7 @@ Parsed statically from `harness/frontends/web/static/` and the daemon's route ta
 ## `data-*` bindings in the client
 
 - `data-action`: `cards.js:approve-approval`, `cards.js:deny-approval`, `index.html:new-session`, `index.html:send`, `index.html:stop`, `settings.js:save-secret`
+- `data-command`: `panels/plugins.js:plugins.disable`, `panels/plugins.js:plugins.enable`
 
 ## Panels the client mounts
 
@@ -51,6 +52,7 @@ From `ui.contributions`: a panel is a declaration in a manifest's `[ui]` block (
 |---|---|---|---|---|---|
 | `artifact` | Artifacts | `sessions.get` | markdown | web | yes |
 | `economics` | Spend | `economics` | table | web | yes |
+| `plugins` | Plugins | `plugins.list` | list | web | **no** |
 | `sessions` | Sessions | `sessions.list` | list | web | yes |
 
 ## Record kinds and their renderers
@@ -60,7 +62,12 @@ Durable kinds — records a session log keeps and a reloaded page must show — 
 - modules under `static/renderers/`: `approval.requested.js`, `approval.resolved.js`, `assistant.message.js`, `compaction.summary.js`, `system.notice.js`, `tool.decision.js`, `tool.result.js`, `turn.cancelled.js`, `turn.error.js`, `ui.card.js`, `user.message.js`
 - **no renderer**: `turn.completed` (of 11 durable kinds)
 
-No `data-command` bindings: every control the shipped client owns either needs a runtime id (an approval's, a session's) or has local side effects (the composer clears itself, Stop resets the streaming block), so those name their command in JS. A control that needs neither — a declared panel's refresh — is wired by `data-command` and dispatched by `CommandBinder` in `static/registry.js`; that split is deliberate, and the table above is what makes a binding to a command the kernel does not expose is a review finding instead of a dead button — enforced by `harness catalog --check --section ui`, which fails on a binding to an unregistered command.
+## `data-command` bindings
+
+| Command | Registered |
+|---|---|
+| `plugins.disable` | yes |
+| `plugins.enable` | yes |
 
 ## Settings tabs
 
