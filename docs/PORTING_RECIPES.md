@@ -30,8 +30,33 @@ panels = [
 # Record kinds this plugin's *client module* paints, so the timeline can show them after a reload too.
 record_renderers = ["ui.card"]
 # Optional, and only for a built-in or config-dir plugin (workspace plugins may not run code in the browser).
-client_module = "static/plugins/obsidian.js"   # served at /static/plugins/obsidian.js
+client_module = "static/plugins/obsidian.js"   # mounted at /static/plugins/obsidian.js (WS-05c serves plugin
+# static dirs; until then the client logs the failed import and the panel keeps its generic renderer)
 ```
+
+The client module exports two maps, and `app.js` reads them by name after importing the URL the kernel reported:
+
+```js
+// static/plugins/obsidian.js — the shape `HarnessStudioApp.loadPluginModules()` expects
+export const panels = {
+  vault: {
+    host: 'panel-vault',                     // optional: defaults to the host the shell creates for the id
+    async render({ api, host, escape, select, app }) {
+      const rows = (await api.command('obsidian.search', { query: '' })).rows || [];
+      host.innerHTML = rows.map((r) => `<div class="panel-item">${escape(r.title)}</div>`).join('');
+    },
+  },
+};
+export const renderers = {
+  // kind -> (app, record) => void; `app` owns the shared painters (appendNotice, appendCard, appendToolCall, …)
+  'obsidian.note': (app, rec) => app.appendNotice(rec.content || '', 'info'),
+};
+```
+
+A panel key with no declaration, or a renderer for a kind the kernel does not write, is a test failure, not a
+feature: the ids must match (`test_the_panel_modules_are_the_declared_panels`), and an excuse in `NO_RENDERER`
+may not coexist with a renderer. `render` may be async and may throw — the registry logs it per panel, so one
+broken pane never takes the page down.
 
 The parser (`harness/sdk/manifest.py`) refuses an unknown `renderer` (the built-ins are
 `table | tree | markdown | list`), a malformed or duplicate panel id, an empty `command`, an unknown `[ui]` key,

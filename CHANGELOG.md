@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — P12 / WS-05b the client reads the registry, not a switch
+- **Record painting is a registry, one module per kind.** `harness/frontends/web/static/registry.js` owns
+  `RendererRegistry` (register / has / gaps / render), the eleven painters now in `static/renderers/*.js` —
+  `user.message`, `assistant.message`, `tool.result`, `tool.decision`, `ui.card`, `approval.requested`,
+  `approval.resolved`, `compaction.summary`, `turn.error`, `turn.cancelled`, `system.notice` — and
+  `NO_RENDERER`, where a kind the timeline deliberately does not paint is excused *with a reason*.
+  `renderRecord` is now a dispatch, so a plugin's kind is painted by the module that shipped with it instead of
+  by a branch added to the app; a kind with neither renderer nor excuse prints
+  `Unrendered record: <kind>` rather than disappearing. The switch it replaces was 88 lines of `case` bodies;
+  the move is behaviour-preserving, which `reload_equals_live_web_dom` and `dom_equals_kernel_transcript` are
+  the ones to prove it (both pass unchanged).
+- **Panels are mounted from declarations.** `PanelRegistry` takes the `panels` from `ui.contributions`, keeps
+  the host of each one (`static/panels/{artifact,sessions,economics}.js` for the built-ins, `panel-<id>`
+  otherwise), creates the tab and host a *plugin* panel lacks, and gives a panel with no module of its own the
+  generic renderer named in its declaration (`table | list | markdown | tree`). `switchStudioTab` asks the
+  registry which tabs exist; the sessions pane's rows and the Spend pane's markup live in their own modules and
+  the app keeps only what is cross-cutting (`noteSessionRows` adopts the active id, then the header updates).
+- **`[data-command]` is dispatched by `CommandBinder`** — one delegated click listener, `data-args` as JSON,
+  `@active` resolved to the session id — for controls with no runtime id and no local side effect; the shipped
+  controls keep their handlers, and `harness catalog --check --section ui` fails a binding to a command the
+  kernel does not expose. A declared panel's refresh button is the first user of the generic path.
+- **The tests read the same source the client does** (see `review/CONSOLIDATION_LOG.md` §P12b for the four
+  findings this phase produced, including `ui_audit.py`/`test_static_contract.py` quietly losing coverage the
+  moment bodies moved out of `app.js`, and the catalogue counting a `data-command` example written in a doc
+  comment). New pins: `NO_RENDERER` is parsed out of `registry.js` rather than kept twice, `RECORD_RENDERERS`,
+  its imports and the files on disk must be one set, `static/panels/<id>.js` must be a *declared* panel, the
+  client may only call methods it defines, and a crashed reload lane now fails as itself instead of as an empty
+  timeline. 581 passed; four mutations were shown to fail the new tests before being reverted.
+
 ### Added — P12 / WS-05a feature-owned UI, kernel side
 - **A plugin can declare UI** — `[ui]` in `harness_plugin.toml`: `panels` (`{id, title, command, renderer}`),
   `record_renderers` (the record kinds *this plugin's client module* paints) and an optional `client_module`.

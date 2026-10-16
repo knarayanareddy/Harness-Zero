@@ -85,33 +85,40 @@ def commands(
     )
 
 
+def _client_js() -> dict[str, str]:
+    """Every client module the page loads or imports — including the feature-owned ones in subdirectories.
+
+    WS-05b moved painters and panels into `static/renderers/` and `static/panels/`, so a check that read only
+    `app.js` would quietly stop covering the code it was written about. `vendor/` is third-party.
+    """
+    files = sorted(p for p in STATIC_DIR.rglob("*.js") if "vendor" not in p.relative_to(STATIC_DIR).parts)
+    return {str(p.relative_to(STATIC_DIR)): p.read_text(encoding="utf-8") for p in files}
+
+
 def test_element_ids_contract():
-    """All DOM element IDs queried by app.js must exist in index.html."""
-    app_js_path = STATIC_DIR / "app.js"
+    """All DOM element IDs queried by any client module must exist in index.html."""
+    sources = _client_js()
     index_html_path = STATIC_DIR / "index.html"
-
-    assert app_js_path.exists(), f"Missing {app_js_path}"
     assert index_html_path.exists(), f"Missing {index_html_path}"
+    assert "app.js" in sources, "no client modules found — this test would pass on an empty set"
 
-    app_content = app_js_path.read_text(encoding="utf-8")
     index_content = index_html_path.read_text(encoding="utf-8")
-
-    # Extract all getElementById calls
-    id_matches = re.findall(r"getElementById\(['\"]([^'\"]+)['\"]\)", app_content)
-    assert len(id_matches) > 0, "No getElementById found in app.js"
+    id_matches = [(name, m) for name, src in sources.items() for m in re.findall(r"getElementById\(['\"]([^'\"]+)['\"]\)", src)]
+    assert len(id_matches) > 0, "No getElementById found in the client"
 
     missing_ids = []
-    for elem_id in set(id_matches):
+    for name, elem_id in id_matches:
         # Look for id="elem_id" or id='elem_id'
         if f'id="{elem_id}"' not in index_content and f"id='{elem_id}'" not in index_content:
-            missing_ids.append(elem_id)
+            missing_ids.append(f"{name}: {elem_id}")
 
-    assert not missing_ids, f"DOM element IDs referenced in app.js missing from index.html: {missing_ids}"
+    assert not missing_ids, f"DOM element IDs referenced by the client but missing from index.html: {missing_ids}"
 
 
 def test_no_alert_calls_in_frontend():
     """Frontend files must have zero alert() calls (use dynamic UI notices instead)."""
-    frontend_files = list(STATIC_DIR.glob("*.js")) + list(STATIC_DIR.glob("*.html"))
+    frontend_files = list(STATIC_DIR.rglob("*.js")) + list(STATIC_DIR.rglob("*.html"))
+    frontend_files = [p for p in frontend_files if "vendor" not in p.relative_to(STATIC_DIR).parts]
     assert len(frontend_files) > 0
 
     violations = []
@@ -241,13 +248,55 @@ def test_events_subscription_contract():
         assert app_type in schema_types, f"app.js listens to unknown event type '{app_type}' not in schema"
 
 
+def test_the_client_only_calls_methods_it_defines():
+    """Every `app.x()` a module calls, and every `this.x()` in the app, must exist (WS-05b).
+
+    Lifting bodies out of `app.js` turns direct calls into indirect ones: a row in the sessions pane calls
+    `ctx.select(...)`, which reaches `app.handlePanelSelect`, which calls `this.switchSession(...)`. A name in
+    that chain that does not exist is a `TypeError` when a user clicks — invisible to every static check, and
+    to any test that never clicks. The DOM lane found exactly that here (`this.selectSession`, a method this
+    client never had), so the chain is now pinned without a browser.
+    """
+    sources = _client_js()
+    app = sources["app.js"]
+    defined = set(re.findall(r"^  (?:async |get |set )?([A-Za-z_$][\w$]*)\(", app, re.M))
+    defined |= set(re.findall(r"this\.([A-Za-z_$][\w$]*) = ", app))  # collaborators assigned in the constructor
+    offenders = []
+    for name, src in sources.items():
+        if name == "app.js":
+            continue
+        for called in sorted(set(re.findall(r"\bapp\.([A-Za-z_$][\w$]*)\s*(?:\?\.)?\(", src))):
+            if called not in defined:
+                offenders.append(f"{name}: app.{called}()")
+        for called in sorted(set(re.findall(r"\bctx\.app\.([A-Za-z_$][\w$]*)\s*(?:\?\.)?\(", src))):
+            if called not in defined:
+                offenders.append(f"{name}: ctx.app.{called}()")
+    for called in sorted(set(re.findall(r"\bthis\.([A-Za-z_$][\w$]*)\s*\(", app))):
+        if called not in defined:
+            offenders.append(f"app.js: this.{called}()")
+    assert not offenders, f"the client calls methods it does not define: {sorted(offenders)}"
+
+
 def _js_function_body(source: str, name: str) -> str:
-    """Returns the text of the first class method ``name(...) {`` up to the next method at the same indent."""
-    m = re.search(rf"^  (?:async )?{re.escape(name)}\([^)]*\)\s*\{{", source, re.M)
+    """Returns the text of the function or method ``name``, without its header.
+
+    Three shapes have to work, because WS-05b moved bodies out of ``app.js``: a class method (``  renderRecord(rec)
+    {``), a module-level function (``export default function render(ctx) {``) and an object member (``  async
+    render(ctx) {`` inside ``export default { ... }``). The body ends at the closing brace on the definition's own
+    indent, which is why the search is anchored to that indent rather than to a fixed two spaces — and it is why
+    a body that moved to a module still has teeth in these assertions instead of passing on an empty string.
+    """
+    m = re.search(
+        rf"^([ \t]*)(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function\s+)?{re.escape(name)}\s*\([^)]*\)\s*\{{",
+        source,
+        re.M,
+    )
     assert m, f"{name} not found"
     rest = source[m.end():]
-    nxt = re.search(r"^  (?:async )?[A-Za-z_]\w*\([^)]*\)\s*\{", rest, re.M)
-    return rest[: nxt.start()] if nxt else rest
+    # The block ends at the brace that sits at the definition's own indent: nested blocks are deeper, so this is
+    # the method's real end for all three shapes (class method, module function, object member).
+    close = re.search(rf"^{m.group(1)}\}}", rest, re.M)
+    return rest[: close.start()] if close else rest
 
 
 def _js_method_params(source: str, name: str) -> list[str]:
@@ -402,7 +451,13 @@ async def test_economics_payload_keys_match_app_js(commands: Commands):
     usage_keys = set(Usage().to_dict())
 
     app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
-    tab = _js_function_body(app_js, "renderEconomicsTab")
+    # WS-05b: the Spend pane's markup lives in `static/panels/economics.js`; `app.js` keeps only the delegation.
+    panel_js = (STATIC_DIR / "panels" / "economics.js").read_text(encoding="utf-8")
+    tab = _js_function_body(panel_js, "render")
+    assert "refresh('economics')" in _js_function_body(app_js, "renderEconomicsTab"), (
+        "renderEconomicsTab must stay a delegation to the economics panel, not a second copy of the markup"
+    )
+    assert "economics(ctx.app.activeSessionId)" in tab, "the panel must read the snapshot from `economics` for the active session, not a second source"
     assert _member_refs(tab, "data") <= snapshot_keys, f"renderEconomicsTab reads {sorted(_member_refs(tab, 'data') - snapshot_keys)}"
     assert _member_refs(tab, "usage") <= usage_keys, f"renderEconomicsTab reads usage.{sorted(_member_refs(tab, 'usage') - usage_keys)}"
     assert "token_usage" not in tab and "total_cost_usd" not in tab and "totals" not in tab
@@ -422,10 +477,16 @@ def test_session_picker_reads_session_row_fields_and_boot_creates_no_session():
     from harness.sdk.types import SessionRow
 
     app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
-    picker = _js_function_body(app_js, "loadSessions")
+    # WS-05b: the rows are painted by `static/panels/sessions.js`, so that is where the row shape is asserted;
+    # `loadSessions` must stay a delegation to that panel rather than growing a second copy of the markup.
+    panel_js = (STATIC_DIR / "panels" / "sessions.js").read_text(encoding="utf-8")
+    picker = _js_function_body(panel_js, "render")
     row_keys = {f.name for f in fields(SessionRow)}
-    assert _member_refs(picker, "s") <= row_keys, f"loadSessions reads s.{sorted(_member_refs(picker, 's') - row_keys)}"
+    assert _member_refs(picker, "s") <= row_keys, f"the sessions panel reads s.{sorted(_member_refs(picker, 's') - row_keys)}"
     assert "s.title" in picker and "s.turns" in picker, "the picker must show a human-readable title and turn count"
+    assert "getSessions" in picker, "the panel must read the kernel's session rows, not a cached copy"
+    assert "noteSessionRows" in picker, "the app has to learn the rows: the active id and the header come from them"
+    assert _member_refs(_js_function_body(app_js, "noteSessionRows"), "row") <= row_keys | {"session_id"}
 
     init = _js_function_body(app_js, "init")
     assert "createNewSession" not in init, "init() must not create a session; the kernel resumes or creates lazily"

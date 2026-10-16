@@ -10,6 +10,44 @@ import { cardRenderer, escapeHtml } from './cards.js';
 /** Quotes a value for use inside a CSS attribute selector ([data-x=...]); works without CSS.escape (jsdom). */
 const cssString = (value) => JSON.stringify(String(value ?? ''));
 import { SettingsPanel } from './settings.js';
+import { RendererRegistry, PanelRegistry, CommandBinder } from './registry.js';
+import renderUserMessage from './renderers/user.message.js';
+import renderAssistantMessage from './renderers/assistant.message.js';
+import renderToolResult from './renderers/tool.result.js';
+import renderToolDecision from './renderers/tool.decision.js';
+import renderUiCard from './renderers/ui.card.js';
+import renderApprovalRequested from './renderers/approval.requested.js';
+import renderApprovalResolved from './renderers/approval.resolved.js';
+import renderCompactionSummary from './renderers/compaction.summary.js';
+import renderTurnError from './renderers/turn.error.js';
+import renderTurnCancelled from './renderers/turn.cancelled.js';
+import renderSystemNotice from './renderers/system.notice.js';
+import artifactPanel from './panels/artifact.js';
+import sessionsPanel from './panels/sessions.js';
+import economicsPanel from './panels/economics.js';
+
+/**
+ * The transcript painters, keyed by record kind (docs/catalog/RECORD_KINDS.md is the catalogue of kinds; a
+ * plugin adds `[ui].record_renderers` and ships the module it names).
+ *
+ * This map — not a `switch` inside the transcript loop — is the client half of the record contract: `renderRecord`
+ * is a dispatch, the kernel declares which kinds exist, and the gap between the two is checked at boot and by
+ * `harness catalog --check --section ui` offline.
+ */
+const RECORD_RENDERERS = {
+  'user.message': renderUserMessage,
+  'assistant.message': renderAssistantMessage,
+  'tool.result': renderToolResult,
+  'tool.decision': renderToolDecision,
+  'ui.card': renderUiCard,
+  'approval.requested': renderApprovalRequested,
+  'approval.resolved': renderApprovalResolved,
+  'compaction.summary': renderCompactionSummary,
+  'turn.error': renderTurnError,
+  'turn.cancelled': renderTurnCancelled,
+  'system.notice': renderSystemNotice,
+};
+
 
 export class HarnessStudioApp {
   constructor() {
@@ -19,6 +57,13 @@ export class HarnessStudioApp {
     this.isBusy = false;
     this.settingsPanel = null;
     this.sandboxOrigin = '';
+
+    // The UI registries are built in `setupRegistries()`, once `/api/commands` has answered: which kinds have a
+    // painter, which panels exist, and how `[data-command]` is answered all come from the kernel's declarations.
+    this.renderers = null;
+    this.panels = null;
+    this.commands = null;
+    this.ui = null;
 
     // Active streaming elements
     this.currentAssistantBlock = null;
@@ -49,7 +94,11 @@ export class HarnessStudioApp {
       this.settingsPanel = new SettingsPanel(this.api, settingsContainer);
     }
 
-    // 3. Setup Models & Strategy Pickers
+    // 3. The UI registry: record painters, panels, and the `[data-command]` binder. Gaps (a kind nothing
+    //    paints, a panel with no tab) are reported here rather than being silently invisible.
+    await this.setupRegistries();
+
+    // 4. Setup Models & Strategy Pickers
     await this.populateModels();
     await this.populateStrategies();
 
@@ -472,78 +521,89 @@ export class HarnessStudioApp {
     }
   }
 
-  async switchStudioTab(tabName) {
-    document.querySelectorAll('.studio-tab').forEach((t) => t.classList.remove('active'));
-    const activeTab = document.querySelector(`.studio-tab[data-tab="${tabName}"]`);
-    if (activeTab) activeTab.classList.add('active');
-
-    const artifactView = document.getElementById('studio-content-area');
-    const sessionList = document.getElementById('session-list');
-    const economicsView = document.getElementById('economics-view');
-
-    if (tabName === 'sessions') {
-      if (sessionList) sessionList.classList.remove('hidden');
-      if (artifactView) artifactView.classList.add('hidden');
-      if (economicsView) economicsView.classList.add('hidden');
-      await this.loadSessions();
-    } else if (tabName === 'economics') {
-      if (economicsView) {
-        economicsView.classList.remove('hidden');
-        await this.renderEconomicsTab();
-      }
-      if (artifactView) artifactView.classList.add('hidden');
-      if (sessionList) sessionList.classList.add('hidden');
-    } else {
-      if (artifactView) artifactView.classList.remove('hidden');
-      if (sessionList) sessionList.classList.add('hidden');
-      if (economicsView) economicsView.classList.add('hidden');
+  /**
+   * Wire the client to the kernel's UI declarations (WS-05).
+   *
+   * `ui.contributions` is the source of truth for which panels exist and which record kinds the kernel can
+   * produce; `RECORD_RENDERERS` and `static/panels/*` are this client's contributions. Two gaps are reported:
+   * a kind with no painter (its records would vanish on reload) and a contributed renderer path (which a
+   * strict CSP would not let us fetch).
+   */
+  async setupRegistries() {
+    this.renderers = new RendererRegistry();
+    for (const [kind, render] of Object.entries(RECORD_RENDERERS)) {
+      this.renderers.register(kind, render);
     }
-  }
-
-  async renderEconomicsTab() {
-    const container = document.getElementById('economics-view');
-    if (!container) return;
+    this.commands = new CommandBinder({ api: this.api, app: this });
     try {
-      // EconomicsSnapshot (harness/sdk/types.py): {turn_usd, session_usd, lifetime_usd, cap_usd,
-      // unknown_pricing, usage: Usage.to_dict()} — the same shape as the `cost.updated` event.
-      const data = await this.api.economics(this.activeSessionId);
-      const usage = data.usage || {};
-      const capUsd = data.cap_usd != null ? `$${Number(data.cap_usd).toFixed(2)}` : '—';
-      const inputTok = usage.input_tokens || 0;
-      const outputTok = usage.output_tokens || 0;
-      const totalTok = inputTok + outputTok;
-      const sessionUsd = `$${Number(data.session_usd || 0).toFixed(4)}`;
-      const totalSpend = `$${Number(data.lifetime_usd || 0).toFixed(4)}`;
-      const unknown = data.unknown_pricing
-        ? '<div class="economics-stat-label mb-3">Some calls used a model without known pricing — spend is a lower bound.</div>'
-        : '';
-
-      container.innerHTML = `
-        <div class="economics-card">
-          <h3 class="economics-title">Spend &amp; Token Economics</h3>
-          <div class="economics-grid">
-            <div class="economics-stat">
-              <div class="economics-stat-label">Session Spend / Turn Cap</div>
-              <div class="economics-stat-value" data-accent="${data.unknown_pricing ? 'false' : 'true'}" data-warn="${data.unknown_pricing ? 'true' : 'false'}">${escapeHtml(sessionUsd)} / ${escapeHtml(capUsd)}</div>
-            </div>
-            <div class="economics-stat">
-              <div class="economics-stat-label">Workspace Lifetime Cost</div>
-              <div class="economics-stat-value">${escapeHtml(totalSpend)}</div>
-            </div>
-          </div>
-          ${unknown}
-          <div class="economics-stat-label mb-2">Session Token Consumption</div>
-          <div class="economics-rows">
-            <div class="economics-row"><span>Input Tokens</span><span class="economics-row-value">${escapeHtml(String(inputTok))}</span></div>
-            <div class="economics-row"><span>Output Tokens</span><span class="economics-row-value">${escapeHtml(String(outputTok))}</span></div>
-            <div class="economics-row" data-total="true"><span>Total Tokens</span><span class="economics-row-value">${escapeHtml(String(totalTok))}</span></div>
-          </div>
-        </div>
-      `;
+      this.ui = await this.api.command('ui.contributions');
     } catch (err) {
-      container.innerHTML = `<div class="economics-card text-red-400">Failed to load economics: ${escapeHtml(err.message)}</div>`;
+      console.warn('[ui] `ui.contributions` unavailable; using this client\'s map alone:', err);
+      this.ui = { panels: [], record_renderers: {}, record_kinds: [], client_modules: [] };
+    }
+    for (const [kind, path] of Object.entries(this.ui.record_renderers || {})) {
+      if (!this.renderers.has(kind)) console.warn(`[ui] ${kind} is rendered by ${path} (a plugin module)`);
+    }
+    this.panels = new PanelRegistry({ app: this, panels: this.ui.panels || [] });
+    this.panels.register('artifact', artifactPanel);
+    this.panels.register('sessions', sessionsPanel);
+    this.panels.register('economics', economicsPanel);
+    await this.loadPluginModules();
+    this.panels.mount();
+    const gaps = this.renderers.gaps(this.ui.record_kinds || []);
+    if (gaps.length) console.warn(`[ui] record kinds with no renderer: ${gaps.join(', ')}`);
+    this.bindCommands();
+  }
+
+  /** `[data-command]` → `api.command(name, args)`, for controls that exist now and ones a panel creates later. */
+  bindCommands() {
+    this.commands.bind(document);
+  }
+
+  /**
+   * A plugin's own panels, from the module the kernel listed (paths under the plugin's `static/`, served by
+   * the web front end and validated at load time — see `harness/sdk/manifest.py`).
+   *
+   * A failure is not fatal: the panel still gets its generic renderer from `[ui].panels[].renderer`, which is
+   * why the generic path exists at all.
+   */
+  async loadPluginModules() {
+    for (const entry of this.ui.client_modules || []) {
+      try {
+        const mod = await import(entry.url);
+        const panels = mod.panels || mod.default?.panels || {};
+        for (const [id, panel] of Object.entries(panels)) this.panels.register(id, panel);
+        const renderers = mod.renderers || mod.default?.renderers || {};
+        for (const [kind, render] of Object.entries(renderers)) {
+          if (!this.renderers.has(kind)) this.renderers.register(kind, render);
+        }
+      } catch (err) {
+        console.warn(`[ui] ${entry.plugin}: client module ${entry.url} did not load; its panels use the generic renderer`, err);
+      }
     }
   }
+
+  /** A panel row was picked. The sessions pane switches the conversation; other panels decide for themselves. */
+  async handlePanelSelect(panelId, value) {
+    if (panelId === 'sessions' && value) await this.switchSession(value);
+  }
+
+  /**
+   * Switch between Studio sub-tabs (Artifacts, Sessions, Economics).
+   *
+   * Which tabs exist, and what paints each one, comes from the panel registry — so a plugin panel gets its tab
+   * without an `index.html` edit, and the built-in three are just three entries in the same list.
+   */
+  async switchStudioTab(tabName) {
+    const ok = await this.panels.activate(tabName);
+    if (!ok) await this.panels.activate('artifact');
+  }
+
+  /** The Spend pane is painted by `static/panels/economics.js`; this is the app-side entry point. */
+  async renderEconomicsTab() {
+    await this.panels?.refresh('economics');
+  }
+
 
   switchActivity(actName) {
     document.querySelectorAll('.activity-item').forEach((a) => a.classList.remove('active'));
@@ -1063,46 +1123,24 @@ export class HarnessStudioApp {
     }
   }
 
+  /**
+   * Refresh the Sessions pane. Its rows are painted by `static/panels/sessions.js`; what stays here is the
+   * part that is not about that pane — which session is active, and the header that reads it.
+   */
   async loadSessions() {
-    const list = document.getElementById('session-list');
-    if (!list) return;
-    try {
-      // Rows are SessionRow (harness/sdk/types.py): {session_id, workspace, created_at, updated_at,
-      // title, turns, message_count, active, busy}; the kernel marks the active one.
-      const sessions = await this.api.getSessions();
-      if (!this.activeSessionId) {
-        const active = (sessions || []).find((s) => s.active);
-        if (active) this.activeSessionId = active.session_id;
-      }
-      this._sessionRows = sessions || [];
-      this.updateSessionDisplay(this._sessionRows);
-      list.innerHTML = '';
-      if (!sessions || sessions.length === 0) {
-        list.innerHTML = '<div class="session-empty text-xs">No sessions yet — your first message starts one.</div>';
-        return;
-      }
-      for (const s of sessions) {
-        const item = document.createElement('div');
-        const isActive = s.session_id === this.activeSessionId;
-        item.className = `session-item ${isActive ? 'active' : ''}`;
-        item.dataset.sessionId = s.session_id;
-        const when = s.updated_at ? new Date(s.updated_at * 1000).toLocaleString() : '';
-        const turns = `${s.turns || 0} turn${s.turns === 1 ? '' : 's'}`;
-        item.innerHTML = `
-          <div class="session-title truncate">${escapeHtml(s.title || 'New session')}</div>
-          <div class="session-meta text-xs">
-            <span class="session-id font-mono">${escapeHtml(s.session_id)}</span>
-            <span class="session-turns">${escapeHtml(turns)}</span>
-            <span class="session-when">${escapeHtml(when)}</span>
-            <span class="session-busy">${s.busy ? '⏳' : ''}</span>
-          </div>
-        `;
-        item.addEventListener('click', () => this.switchSession(s.session_id));
-        list.appendChild(item);
-      }
-    } catch (err) {
-      console.warn('Failed to load sessions:', err);
+    await this.panels?.refresh('sessions');
+  }
+
+  /** Called by the sessions panel with the rows it is about to paint (SessionRow dicts, harness/sdk/types.py). */
+  noteSessionRows(rows) {
+    rows = rows || [];
+    this._sessionRows = rows;
+    // The kernel's active session, not the first row: that is what `active: true` means and what
+    // `switch_session` makes true. A session that disappeared falls back to the active row, else the newest.
+    if (!this.activeSessionId || !rows.some((row) => row.session_id === this.activeSessionId)) {
+      this.activeSessionId = (rows.find((row) => row.active) || rows[0])?.session_id || null;
     }
+    this.updateSessionDisplay(this._sessionRows);
   }
 
   showEmptyTimelineHint() {
@@ -1168,97 +1206,15 @@ export class HarnessStudioApp {
   // thinner summary of the conversation. Dispatching on `rec.kind` rather than `rec.role` is what makes
   // that possible: a decision, a tool result and a system notice are all `system`/`user`-role records and
   // roles cannot tell them apart (that is exactly why the old role-based loop dropped them).
+  /**
+   * Paint one transcript record.
+   *
+   * `kind` alone determines the element (WS-04), and the painter is looked up in the renderer registry, so a
+   * plugin's kind is painted by the module that shipped with it instead of by a branch added here. A kind with
+   * no painter and no written excuse is visible in the console, not silently absent.
+   */
   renderRecord(rec) {
-    if (!rec) return;
-    const meta = rec.metadata || {};
-    const textOf = (blocks) =>
-      (blocks || []).filter((b) => b && b.type === 'text').map((b) => b.text).join('');
-
-    switch (rec.kind) {
-      case 'user.message': {
-        if (rec.content) this.appendUserTurn(rec.content);
-        // A legacy record can carry its results inline; render them like any other tool result.
-        for (const tr of rec.tool_results || []) {
-          this.updateToolResult({ call_id: tr.tool_use_id, is_error: !!tr.is_error, preview: textOf(tr.content) });
-        }
-        break;
-      }
-      case 'assistant.message': {
-        if (rec.content) {
-          this.appendTurnBlock('assistant');
-          this.streamAssistantText(rec.content);
-          this.finalizeStreamingBlock();
-        }
-        for (const tc of rec.tool_calls || []) {
-          // 'running', not 'completed': the verdict is the next records' job, exactly as it is live. A
-          // call whose result never arrived then correctly stays open instead of claiming success.
-          this.appendToolCall({ call_id: tc.id, name: tc.name, arguments: tc.arguments || {}, status: 'running' });
-        }
-        break;
-      }
-      case 'tool.result': {
-        for (const tr of rec.tool_results || []) {
-          this.updateToolResult({ call_id: tr.tool_use_id, is_error: !!tr.is_error, preview: textOf(tr.content) });
-        }
-        break;
-      }
-      case 'tool.decision': {
-        this.updateToolDecision({
-          call_id: meta.call_id,
-          action: meta.action,
-          policy: meta.policy,
-          reason: meta.reason,
-          plugin: meta.plugin,
-          risk: meta.risk,
-        });
-        break;
-      }
-      case 'ui.card': {
-        if (meta.card) this.appendCard(meta.card);
-        break;
-      }
-      case 'approval.requested': {
-        this.showApproval({
-          approval_id: meta.approval_id,
-          call_id: meta.call_id,
-          kind: meta.approval_kind,
-          summary: rec.content,
-          details: meta.details || {},
-          timeout_s: meta.timeout_s,
-          options: meta.options || ['approve', 'deny'],
-        });
-        break;
-      }
-      case 'approval.resolved': {
-        this.resolveApprovalUI({
-          approval_id: meta.approval_id,
-          approved: !!meta.approved,
-          by: meta.by,
-          reason: meta.reason,
-        });
-        break;
-      }
-      case 'compaction.summary': {
-        // The live view gets a `compaction.completed` card (token counts); the log holds the summary text
-        // itself, which is the thing worth re-reading, so the reloaded session shows that.
-        this.appendCard({ kind: 'markdown', title: 'Context compacted', data: { body: rec.content || '' } });
-        break;
-      }
-      case 'turn.error':
-        this.appendNotice(rec.content || 'Turn failed.', 'error');
-        break;
-      case 'turn.cancelled':
-        this.appendNotice(rec.content || 'Turn cancelled.', 'warn');
-        break;
-      case 'system.notice':
-        if (rec.content) this.appendNotice(rec.content, meta.level || 'info');
-        break;
-      default:
-        // turn.started / turn.completed / checkpoint.created / job.* are history the timeline does not
-        // paint. They stay in the log — `derive_messages` ignores them too, so neither the model nor the
-        // transcript view is polluted by a bookkeeping row.
-        break;
-    }
+    this.renderers.render(this, rec);
   }
 
   openSettings() {

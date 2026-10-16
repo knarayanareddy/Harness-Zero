@@ -45,7 +45,10 @@ def _repo_root(start: Path) -> Path:
 ROOT = _repo_root(Path(__file__).resolve())
 STATIC = ROOT / "harness" / "frontends" / "web" / "static"
 
-_JS_FILES = sorted(p for p in STATIC.glob("*.js"))
+# Every client module, including the feature-owned ones under `renderers/` and `panels/` (WS-05): an id or a
+# class touched only from `static/panels/sessions.js` is still the page's id and the stylesheet's class, so the
+# audit that claims to catch dead ids has to read those files too. `vendor/` is third-party and excluded.
+_JS_FILES = sorted(p for p in STATIC.rglob("*.js") if "vendor" not in p.relative_to(STATIC).parts)
 _HTML = STATIC / "index.html"
 _CSS = STATIC / "styles.css"
 _EXPECTED_STYLESHEETS = ["/static/styles.css", "/static/vendor/tw.css"]
@@ -81,7 +84,7 @@ def _template_prefixes(src: str) -> set[str]:
 def audit() -> dict:
     html = _HTML.read_text(encoding="utf-8")
     css = _CSS.read_text(encoding="utf-8") if _CSS.exists() else ""
-    js = {p.name: p.read_text(encoding="utf-8") for p in _JS_FILES}
+    js = {str(p.relative_to(STATIC)): p.read_text(encoding="utf-8") for p in _JS_FILES}
     stylesheets = re.findall(r'<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"', html)
     sheets: dict[str, str] = {}
     for href in stylesheets:
@@ -118,9 +121,13 @@ def audit() -> dict:
         s: set[str] = set()
         for m in re.findall(r"class(?:Name)?\s*=\s*[`\"']([^`\"']*)[`\"']", src):
             s |= _classes_in_attr(m)
-        for m in re.findall(r"classList\.(?:add|remove|toggle)\(([^)]*)\)", src):
+        # `add`/`remove` take a class list; `toggle(class, force)` takes one class and a second argument that
+        # is not a class — reading the whole call would score `getAttribute('data-tab')` as a class name.
+        for m in re.findall(r"classList\.(?:add|remove)\(([^)]*)\)", src):
             for c in re.findall(r"['\"]([^'\"]+)['\"]", m):
                 s |= _classes_in_attr(c)
+        for m in re.findall(r"classList\.toggle\(\s*['\"]([^'\"]+)['\"]", src):
+            s |= _classes_in_attr(m)
         used_js[name] = s
         prefixes |= _template_prefixes(src)
     used_all = used_html | set().union(*used_js.values()) if used_js else used_html

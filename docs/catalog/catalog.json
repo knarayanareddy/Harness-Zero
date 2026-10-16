@@ -3700,7 +3700,19 @@
         "title": "Sessions"
       }
     ],
-    "renderer_modules": [],
+    "renderer_modules": [
+      "approval.requested",
+      "approval.resolved",
+      "assistant.message",
+      "compaction.summary",
+      "system.notice",
+      "tool.decision",
+      "tool.result",
+      "turn.cancelled",
+      "turn.error",
+      "ui.card",
+      "user.message"
+    ],
     "routes": [
       "/",
       "/artifacts/{filename}",

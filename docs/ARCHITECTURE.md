@@ -253,8 +253,16 @@ generated JSON schema (`harness events schema`).
   `[ui]` block — the shipped client's three are in `harness/frontends/web/ui.toml` — each backed by a command in
   `commands.list`. A feature that is disabled contributes nothing, so its tab goes with it; a panel whose command
   is not dispatchable is reported in `unbacked_panels` and not served. Timeline rendering dispatches on
-  `record.kind`, and every durable kind is painted or excused in
-  `tests/frontends/test_ui_contract.py` (generated table: `docs/catalog/UI_CONTRACT.md`).
+  `record.kind` through `static/registry.js`: one module per kind under `static/renderers/`, and
+  `NO_RENDERER` for the kinds the timeline deliberately does not paint — each with its reason, each checked
+  against the record contract in `tests/frontends/test_ui_contract.py` (generated table:
+  `docs/catalog/UI_CONTRACT.md`).
+* Which **pane** is visible is the same registry's answer, not a chain of branches: `PanelRegistry.activate(id)`
+  shows the panel's host and runs its module (`static/panels/<id>.js`), and a declared panel with no module gets
+  the generic renderer its `[ui]` block names. So `index.html` needs no edit to gain a tab, and the client
+  cannot mount a panel the kernel never declared (`test_the_panel_modules_are_the_declared_panels`). Controls
+  that merely call a command use `data-command` + `CommandBinder`; controls needing a runtime id or local side
+  effects keep their handler in `app.js`, and the catalogue lists the bindings either way.
 
 ## 7. Where the tests live
 

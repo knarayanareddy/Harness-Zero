@@ -49,6 +49,19 @@ def _subset(want, have) -> bool:
     return want == have
 
 
+def _reload_report(result) -> dict:
+    """The refreshed page's DOM report, or a failure that names the lane instead of blaming the client.
+
+    An errored reload run (node crashed, a module 404s) used to read as an empty timeline: every
+    `reload_timeline_contains` assertion then pointed at the client, and `reload_timeline_not_contains` passed
+    vacuously. Both directions fail here, with the probe's stderr in the message.
+    """
+    rep = (result.dom or {}).get("reload") or {}
+    assert "error" not in rep, f"the reload DOM lane did not report: {rep.get('error')}\n{(rep.get('stderr') or '')[-1200:]}"
+    assert "timeline_text_on_load" in rep, f"the reload DOM lane ran without a reload report: keys={sorted(rep)}"
+    return rep
+
+
 def _check_expectations(sc, result) -> None:
     exp = sc.expect
     if "tools_called" in exp:
@@ -133,7 +146,7 @@ def _check_expectations(sc, result) -> None:
         for needle in exp["timeline_not_contains"]:
             assert needle not in text, f"timeline shows {needle!r}"
     if "reload_timeline_contains" in exp:
-        rep = (result.dom or {}).get("reload") or {}
+        rep = _reload_report(result)
         text = rep.get("timeline_text_on_load") or ""
         for needle in exp["reload_timeline_contains"]:
             assert needle in text, (
@@ -144,7 +157,7 @@ def _check_expectations(sc, result) -> None:
             )
         assert not rep.get("empty_user_bubbles"), f"page refresh rendered {rep.get('empty_user_bubbles')} empty user bubbles (tool-result records)"
     if "reload_timeline_not_contains" in exp:
-        rep = (result.dom or {}).get("reload") or {}
+        rep = _reload_report(result)
         text = rep.get("timeline_text_on_load") or ""
         for needle in exp["reload_timeline_not_contains"]:
             assert needle not in text, f"after a page refresh the timeline shows {needle!r}"

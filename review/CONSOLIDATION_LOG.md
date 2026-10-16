@@ -680,6 +680,10 @@ Plus one that only showed up under load: a timed-out `run_command` left its chil
 | R46 | `tests/scenarios/_lib/node/headless_timeline.mjs` | The model chip was selected by **id** alone. A recorded fixture's id (`mock-v1`) is also served by the built-in mock, so the browser lane replayed against the plugin rather than the fixture: `turn.started` said `provider: "mock"` where the kernel lane said `"replay"`, and the two runs' goldens could never agree. Selecting by `sel.value = id` compounds it — jsdom takes the first option with that value, i.e. option order decides what a test means. | P11b: `MODEL_PROVIDER` scopes the selection to the fixture's provider (only when several providers list the id), the chosen option's provider is reported as `model_selected_provider`, and the sidecar's model id is what replay pins (`scenario_model`) |
 | R47 | `kernel/commands.py` → `settings_schema` | `groups = [g for g in SETTINGS_GROUPS if g in present]` filtered the settings surface through a hand-kept list of tab names, so a plugin that declared `x-ui.group: Obsidian` in its own `settings.schema.json` got its properties into the response but **no tab** — the one mechanism WS-05 needs (disable a feature, its tab goes) was unreachable without editing kernel code, and no test noticed because every built-in plugin reused a kernel label. | P12a: `order_groups()` derives membership from the aggregated properties and order from `x-ui.order` (built-in sequence as fallback), pinned by `test_a_plugin_settings_group_is_a_tab_the_kernel_never_mentioned` |
 | R48 | `kernel/catalog.py` (the new static parse) | Reading `data-tab`/`data-command` attributes out of JS *and* HTML counted `document.querySelector('.studio-tab[data-tab="${tabName}"]')` as a declared tab named `${tabName}` — a static check that invents requirements teaches people to ignore it, and its "fix" is a fake declaration in the source. | P12a: `_static_values()` filters template-literal placeholders in both the catalogue and `test_ui_contract.py`, and the same rule is stated once in each place it is needed |
+| R49 | `tests/frontends/ui_audit.py`, `tests/frontends/test_static_contract.py` | Both graders of the client read **one file**: the audit scanned `static/*.js` (not subdirectories) and `_js_function_body` matched only a 2-space-indented class method. The moment a body moved into `static/panels/…`, the id/class checks silently covered less, and the assertions that read `renderEconomicsTab` scored an empty string — a `_member_refs(body) <= keys` check on `""` always passes. The refactor looked *safer* than the code was. | P12b: both scan `static/**/*.js` (excluding `vendor/`), `_js_function_body` finds a class method, a module function or an object member and cuts at the brace on the definition's own indent, and the row-shape assertions were repointed at the files that now own the markup — where they keep their teeth (verified by mutation, not by trust) |
+| R50 | `kernel/catalog.py` (the UI section) | The static parse read `data-*` attributes out of the whole file text, so a doc comment *giving an example* (`data-command="sessions.create"`) was catalogued as a real binding — and, because `sessions.create` happens to exist, nothing failed. A generated table that reports documentation as wiring trains reviewers to distrust the table. | P12b: `_code_only()` drops whole-line comments before the binding/tab/case scan (trailing comments and `//` inside strings survive), the `data-*` scan became recursive like the audit's, and a `renderers/_name.js` helper is no longer counted as a painted kind |
+| R51 | `tests/scenarios/test_scenarios.py` | When the reload DOM lane crashed (node exited, no JSON), `(result.dom or {}).get("reload") or {}` read as *an empty timeline*: `reload_timeline_contains` blamed the client, and `reload_timeline_not_contains` passed vacuously — the failure mode was a wrong diagnosis for a real bug and a silent pass for its mirror image. | P12b: `_reload_report()` fails on the lane's own `error`/`stderr` and requires `timeline_text_on_load` to be present, so a missing run is never read as an empty page |
+| R52 | `harness/frontends/web/static/app.js` (during P12b) | The new `handlePanelSelect` called `this.selectSession(...)` — a method this client has never had (`switchSession` is the real name). Nothing static caught it; jsdom threw on the session-row click, i.e. a user clicking a session in the reloaded page would have gotten a broken pane and a console error. The class of bug the registry indirection creates, and no existing test reached it because no other test clicks a session row. | P12b: `test_the_client_only_calls_methods_it_defines` checks every `app.x()` a module calls and every `this.x()` in the app against the methods and constructor members `app.js` actually defines (shown to fail by re-introducing `selectSession`, then reverted) |
 | R44 | `plugins/stores/fts5_search/` | Two related bugs. The row projection read v1 field names (`type`, `source`), so every row the runner indexed from a v2 record said `UNKNOWN`/`UNKNOWN` and `search_memory`'s Source column was decoration; and the only rebuild path ran when the table was empty, so a workspace whose index had gone stale had no repair — there was no CLI entry point at all. | P11: one `record_row()` shared by the live hook and the rebuild; `rebuild_from_sessions` is unconditional; new `harness sessions reindex`; `test_the_search_index_is_rebuildable_from_the_log` |
 
 ---
@@ -979,3 +983,40 @@ legitimately has no renderer, and the list of such kinds — with a reason each 
 author reads (`UNPAINTED_KINDS`), not to a build gate that would be bypassed by someone adding a bogus
 declaration to `ui.toml`.
 
+## P12b — WS-05b: the client reads the registry
+
+**Built.** `harness/frontends/web/static/registry.js` (`RendererRegistry`, `PanelRegistry`, `CommandBinder`,
+`GENERIC_RENDERERS`, `NO_RENDERER`, `textContentOf`), eleven painters in `static/renderers/*.js` — one file per
+durable record kind, named for it — and three panel modules in `static/panels/{artifact,sessions,economics}.js`.
+`app.js` shrank from 1285 to 1242 lines while *gaining* the wiring and its documentation: `renderRecord` is a
+one-line dispatch, `switchStudioTab` asks the registry, `loadSessions` refreshes the sessions pane and keeps only
+`noteSessionRows` (the cross-cutting part: adopt the active id, update the header), and `setupRegistries` boots
+`ui.contributions`, imports the plugin modules the kernel lists, and reports both gap directions.
+
+**Behaviour preserved, on purpose and by test.** Each renderer body is a transcription of the `case` it replaces
+— same app methods, same arguments, same comments about *why* (`tool.call`s are appended with status `running`,
+`ui.card` reads `metadata.card`, `turn.error` falls back to `'Turn failed.'`) — so the goldens did not move: the
+5 DOM lanes, `reload_equals_live_web_dom` and `dom_equals_kernel_transcript` pass against the unchanged
+recordings, and the `artifact` panel's `render` is a documented no-op because `showArtifact` pushes into that host
+from the card painter rather than polling a command.
+
+**Teeth (four mutations, all reverted).** Removing `static/renderers/tool.result.js` fails
+`test_the_renderer_map_is_the_modules_on_disk` *and* `test_every_durable_record_kind_is_painted_or_excused`;
+deleting `turn.completed` from `NO_RENDERER` fails the coverage test naming that kind; adding an orphan
+`static/panels/vault.js` fails the panel-declaration test with the three sets printed side by side; using
+`panel-bogus` in `registry.js` fails `ui_audit --strict` ("classes used but defined in no stylesheet"). A fifth
+mutation — the `selectSession` bug actually made during the move — is what produced R52's test.
+
+**Deviation.** The spec's 05b line says "interactive elements move from hand-written handlers to
+`data-command`". The binder exists and the generic panel path uses it, but the shipped controls were left
+alone: every one of them either needs a runtime id (`approve-approval`/`deny-approval` in a card, the session
+chips, `save-secret` for a named key) or has a local side effect (the composer clears itself and re-enables,
+Stop closes the thinking block, New Session prompts for a title first). A `data-command` on those would be a
+second path around the same command with the ordering in JS anyway, and half a binding is worse than none. The
+catalogue therefore reports "no `data-command` bindings" *with the reason*, and `--check --section ui` fails
+the moment one appears that names an unregistered command.
+
+**Gate.** `pytest -q` 581 passed; `ruff check .` clean; `harness catalog gen && harness catalog --check`
+drift-clean (UI_CONTRACT.md regenerated: renderer modules listed, comment-derived binding gone);
+`python tests/frontends/ui_audit.py --strict` 0 findings (0 used-but-undefined, 0 defined-but-unused);
+`harness plugin doctor --all` clean.

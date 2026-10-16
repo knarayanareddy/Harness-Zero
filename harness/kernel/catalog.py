@@ -449,9 +449,13 @@ async def build_catalog(runtime: Any = None, repo_root: Path | None = None) -> d
     server_py = (root / "harness" / "frontends" / "web" / "server.py").read_text(encoding="utf-8")
     routes = sorted({m for m in _ROUTE_RE.findall(server_py)})
     ui_attrs: dict[str, list[str]] = {}
-    for js in sorted(client.glob("*.js")) + [client / "index.html"]:
-        for kind, value in _DATA_ATTR_RE.findall(js.read_text(encoding="utf-8")):
-            ui_attrs.setdefault(kind, []).append(f"{js.name}:{value}")
+    # Recursive, so a feature-owned module under `static/panels/` counts: an attribute only a moved body sets is
+    # still an attribute the page uses, and a catalogue that read only the top level would understate the client.
+    for js in sorted(client.rglob("*.js")) + sorted(client.rglob("*.html")):
+        if "vendor" in js.relative_to(client).parts:
+            continue
+        for kind, value in _DATA_ATTR_RE.findall(_code_only(js.read_text(encoding="utf-8"))):
+            ui_attrs.setdefault(kind, []).append(f"{js.relative_to(client)}:{value}")
     builtins = set(BUILTIN_COMMANDS)
 
     # ---- UI contributions (WS-05): what the client mounts, and whether the markup agrees ----
@@ -462,16 +466,23 @@ async def build_catalog(runtime: Any = None, repo_root: Path | None = None) -> d
     contributions = await commands.ui_contributions()
     commands_exposed = {row["name"] for row in await commands.commands_list() if row["exposed"]}
     html_text = (client / "index.html").read_text(encoding="utf-8")
-    js_text = "\n".join(js.read_text(encoding="utf-8") for js in sorted(client.rglob("*.js")))
-    markup = html_text + js_text
+    js_text = "\n".join(
+        js.read_text(encoding="utf-8") for js in sorted(client.rglob("*.js")) if "vendor" not in js.relative_to(client).parts
+    )
+    markup = _code_only(html_text + js_text)
     tabs_in_html = _static_values(re.findall(_TAB_RE, markup))
     declared_panels = {panel["id"]: panel for panel in contributions["panels"]}
     bound = _static_values(re.findall(_DATA_COMMAND_RE, markup))
     # Kinds the client has a case for: the `renderRecord` switch today, one module per kind after WS-05b — both
     # shapes are read, so the count does not move when the code moves.
+    # `_name.js` in the renderers directory is a shared helper, not a record kind (a kind cannot start with `_`).
     painted = set(re.findall(_RENDER_CASE_RE, js_text))
     renderer_dir = client / "renderers"
-    renderer_modules = sorted(f.stem for f in renderer_dir.glob("*.js")) if renderer_dir.is_dir() else []
+    renderer_modules = (
+        sorted(f.stem for f in renderer_dir.glob("*.js") if not f.stem.startswith("_"))
+        if renderer_dir.is_dir()
+        else []
+    )
     painted |= set(renderer_modules)
     declared_renderers = {r["kind"] for r in contributions["record_renderers"]}
     durable = [r["kind"] for r in record_kinds if r["durable_events"]]
@@ -563,6 +574,22 @@ def _version() -> str:
 _TAB_RE = re.compile("""data-tab=["']([^"'`]+)["']""")
 _DATA_COMMAND_RE = re.compile("""data-command=["']([^"'`]+)["']""")
 _RENDER_CASE_RE = re.compile("""case ["']([a-z_][a-z0-9_.]*)["']:""")
+
+
+def _code_only(text: str) -> str:
+    """Whole-line comments removed.
+
+    Prose in a doc comment that shows an example — `data-command="sessions.create"`, a `case 'tool.result':` in
+    a sentence — is documentation, not wiring. Cataloguing it would let the client look more honest than it is:
+    the table would claim a binding the page never renders, and a checker would grade a comment. Only lines that
+    *start* with a comment marker are dropped, so a trailing comment after code keeps its code, and a string
+    containing `//` (a URL in `api.js`) is never mistaken for one.
+    """
+    return "\n".join(
+        line
+        for line in text.splitlines()
+        if not line.lstrip().startswith(("//", "/*", "*", "*/", "<!--", "-->", "/*!"))
+    )
 
 
 def _static_values(matches) -> list[str]:
@@ -801,9 +828,11 @@ def render_markdown(cat: dict[str, Any], name: str) -> str:
             )
         body.append("\n## Record kinds and their renderers\n")
         body.append(
-            "Durable kinds — records a session log keeps and a reloaded page must show — are painted by a `case` in "
-            "the client's record switch, by a module under `static/renderers/`, or by a plugin module named in "
-            "`[ui].record_renderers`.\n"
+            "Durable kinds — records a session log keeps and a reloaded page must show — are painted by a module "
+            "under `static/renderers/` (one file per kind, named for it), by a plugin module named in "
+            "`[ui].record_renderers`, or by a `case` in a record switch (read for a client that still keeps one). "
+            "A kind with neither a renderer nor an excuse in `NO_RENDERER` prints a notice in the timeline rather "
+            "than vanishing, so the gap is visible in the page and not only here.\n"
         )
         body.append(
             "- modules under `static/renderers/`: " + (", ".join(f"`{m}.js`" for m in ui["renderer_modules"]) or "none yet")
@@ -822,8 +851,13 @@ def render_markdown(cat: dict[str, Any], name: str) -> str:
             )
         else:
             body.append(
-                "\nNo `data-command` bindings exist yet: interactive elements name their command in JS, so the "
-                "table above is the whole contract until WS-05b moves them into markup."
+                "\nNo `data-command` bindings: every control the shipped client owns either needs a runtime id "
+                "(an approval's, a session's) or has local side effects (the composer clears itself, Stop resets "
+                "the streaming block), so those name their command in JS. A control that needs neither — a "
+                "declared panel's refresh — is wired by `data-command` and dispatched by `CommandBinder` in "
+                "`static/registry.js`; that split is deliberate, and the table above is what makes a binding to a "
+                "command the kernel does not expose is a review finding instead of a dead button — enforced by "
+                "`harness catalog --check --section ui`, which fails on a binding to an unregistered command."
             )
         if ui["client_modules"]:
             body.append("\n## Plugin client modules\n")

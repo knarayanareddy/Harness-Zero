@@ -24,14 +24,11 @@ from harness.kernel.bootstrap import bootstrap_kernel
 REPO = Path(__file__).resolve().parents[2]
 STATIC = REPO / "harness" / "frontends" / "web" / "static"
 
-#: Durable record kinds the client has no renderer for, and the reason each one needs none. Add a kind to the
-#: log without painting it and this test fails — a record nobody renders is invisible after a reload, which is
-#: the bug class WS-04c closed. Keep an excuse that is no longer needed and it fails the other way, so the
-#: list cannot quietly become a hiding place.
-UNPAINTED_KINDS = {
-    "turn.completed": "the turn marker `appendTurnBlock`/`finalizeStreamingBlock` already place it; a reloaded "
-    "page shows the assistant record itself, so painting the marker too would duplicate the turn",
-}
+# The list of kinds the timeline deliberately does not paint lives in the client, so this file reads it rather
+# than keeping a second copy — a list kept twice is a list that lies. `NO_RENDERER` in `static/registry.js` maps
+# each such kind to the reason it needs no painter; a kind that is neither painted nor excused is a coverage
+# hole, and `RendererRegistry.render` makes it visible in the page instead of silently dropping the record.
+_EXCUSE_RE = re.compile(r"^  '([a-z_][a-z0-9_.]*)':\s*\n?\s*'([^']+)'", re.M)
 
 _PLACEHOLDER_RE = re.compile(r"data-notice|noop\(|coming soon|\bTODO\b", re.I)
 _TAB_RE = re.compile("""data-tab=["']([^"'`]+)["']""")
@@ -58,6 +55,14 @@ def _literal_values(matches) -> list[str]:
     return sorted({m for m in matches if m and not any(c in m for c in "${} \t")})
 
 
+def _excuses() -> dict[str, str]:
+    """`NO_RENDERER` from ``static/registry.js``: kind -> the reason it has no painter."""
+    src = _sources()["registry.js"]
+    start = src.index("export const NO_RENDERER = {")
+    body = src[start : src.index("\n};", start)]
+    return {kind: " ".join(reason.split()) for kind, reason in _EXCUSE_RE.findall(body)}
+
+
 def _durable_kinds() -> list[str]:
     """Record kinds a session log keeps *and* a reloaded page must show — derived, never hand-listed."""
     from harness.sdk.events import EVENT_PAYLOADS
@@ -76,7 +81,7 @@ def _painted_kinds() -> set[str]:
     painted = set(_RENDER_CASE_RE.findall(_markup_text()))
     renderer_dir = STATIC / "renderers"
     if renderer_dir.is_dir():
-        painted |= {p.stem for p in renderer_dir.glob("*.js")}
+        painted |= {p.stem for p in renderer_dir.glob("*.js") if not p.stem.startswith("_")}
     return painted
 
 
@@ -143,15 +148,64 @@ def test_the_studio_pane_holds_hosts_not_feature_markup():
 
 
 def test_every_durable_record_kind_is_painted_or_excused():
+    """The kind set is closed by the client's own two lists, checked against the kernel's contract."""
     painted = _painted_kinds()
-    missing = sorted(k for k in _durable_kinds() if k not in painted)
-    assert missing == sorted(UNPAINTED_KINDS), (
-        f"durable kinds with no renderer: {missing}, excused: {sorted(UNPAINTED_KINDS)} — a new kind needs a "
-        "case in the record switch, a module under static/renderers/, or an entry in UNPAINTED_KINDS with a "
-        "reason that says why the timeline does not show it"
+    excuses = _excuses()
+    assert excuses, "NO_RENDERER could not be parsed out of static/registry.js — the test lost its subject"
+    missing = sorted(k for k in set(_durable_kinds()) - painted if k not in excuses)
+    assert not missing, (
+        f"durable kinds with no renderer and no excuse: {missing} — a new kind needs a module under "
+        "static/renderers/ plus a line in `RECORD_RENDERERS`, or an entry in `NO_RENDERER` saying why the "
+        "timeline does not show it"
     )
-    for kind, reason in UNPAINTED_KINDS.items():
-        assert len(reason.split()) >= 5, f"{kind}: an excuse has to be a sentence, not a shrug"
+    for kind, reason in excuses.items():
+        assert len(reason.split()) >= 5, f"{kind}: an excuse has to be a sentence, not a shrug ({reason!r})"
+    # An excuse is not a hiding place: it must name a kind the kernel writes, and it must be needed.
+    assert not set(excuses) & painted, f"both painted and excused: {sorted(set(excuses) & painted)}"
+    from harness.sdk.types import RECORD_KINDS
+
+    stale = sorted(k for k in excuses if k not in RECORD_KINDS)
+    assert not stale, f"excuses for kinds the kernel does not write: {stale}"
+
+
+def test_the_renderer_map_is_the_modules_on_disk():
+    """`RECORD_RENDERERS` in app.js, its imports, and `static/renderers/*.js` must agree.
+
+    A renderer module that nothing imports, or an import with no file behind it, is the same defect seen from
+    two ends: the file and the wiring disagree about what the client can paint.
+    """
+    app = _sources()["app.js"]
+    start = app.index("const RECORD_RENDERERS = {")
+    block = app[start : app.index("\n};", start)]
+    wired = set(re.findall(r"'([a-z_][a-z0-9_.]*)':\s*render", block))
+    imports = set(re.findall(r"from '\./renderers/([a-z_][a-z0-9_.]*)\.js'", app))
+    on_disk = {p.stem for p in (STATIC / "renderers").glob("*.js") if not p.stem.startswith("_")}
+    assert wired == on_disk, f"map {sorted(wired)} != modules {sorted(on_disk)}"
+    assert imports == on_disk, f"imports {sorted(imports)} != modules {sorted(on_disk)}"
+
+
+def test_the_panel_modules_are_the_declared_panels():
+    """One name, three places: the declared panel id, `static/panels/<id>.js`, the registration in app.js.
+
+    A panel gets its tab because a manifest declared it (WS-05); the client module is wired by id. So a file
+    named for a panel nobody declared is dead code that *looks* like a feature, and a declaration with no module
+    is fine only because the generic renderer covers it — which is what `panels[].renderer` records.
+    """
+    app = _sources()["app.js"]
+    registered = set(re.findall(r"this\.panels\.register\('([a-z][a-z0-9_-]+)'", app))
+    modules = {p.stem for p in (STATIC / "panels").glob("*.js") if not p.stem.startswith("_")}
+    import tomllib
+
+    with (REPO / "harness" / "frontends" / "web" / "ui.toml").open("rb") as fh:
+        declared = {panel["id"] for panel in tomllib.load(fh)["ui"]["panels"]}
+    assert declared, "harness/frontends/web/ui.toml declares no panels — the built-in client has no tab to show"
+    assert modules == registered == declared, (
+        f"modules {sorted(modules)} != registered {sorted(registered)} != declared {sorted(declared)}"
+    )
+    # and each registered id must be imported from the file that bears its name
+    assert all(f"'./panels/{pid}.js'" in app for pid in registered), "a registered panel has no module import"
+
+
 
 
 async def test_the_generated_contract_agrees_with_this_test():

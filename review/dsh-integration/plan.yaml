@@ -160,8 +160,13 @@ workstreams:
   - id: WS-05
     title: Feature-owned UI
     doc: WS-05_feature_owned_ui.md
-    status: in_progress  # WS-05a (P12a) executed: manifest [ui] + ui.toml + ui.contributions + commands.list + order_groups + UI_CONTRACT.md + strengthened --section ui gate. Left: 05b client restructure (registry.js, renderers/, panels/, data-command bindings), 05c served plugin modules + the two scenarios. §2's fallback-schema / data-notice / 10-panel claims were already fixed upstream, so those tests are regression pins (see CONSOLIDATION_LOG §P12a).
-    effort_days: 2.5  # 1.0 spent on 05a
+    status: in_progress  # WS-05a (P12a) + WS-05b (P12b) executed: manifest [ui] + ui.toml + ui.contributions +
+    #   commands.list + order_groups + UI_CONTRACT.md, then the client restructure (registry.js,
+    #   renderers/ one module per kind, panels/, CommandBinder, catalogue/test coverage follow-ups R49-R52).
+    #   Left: 05c — serve a plugin's static/ dir, `plugin_panel_appears_when_enabled` +
+    #   `settings_tab_from_plugin_schema` scenarios. §2's fallback-schema / data-notice / 10-panel claims
+    #   were already fixed upstream, so those tests are regression pins (CONSOLIDATION_LOG §P12a, §P12b).
+    effort_days: 2.5  # 2.0 spent: 05a 1.0, 05b 1.0; 05c (serving + 2 scenarios) remains
     depends_on: [P0, WS-02, WS-04]
     principles: [P2, P4, P6]
     dsh_refs: [client/features/ui-settings-*, client/core/conversation, client/core/plugin-host, scripts/verify-client-settings-tabs.ts, scripts/verify-client-event-renderers.ts]
