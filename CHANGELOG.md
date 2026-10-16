@@ -35,6 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tests/kernel/test_replay_provider.py` (10) pins the strictness split, the credential refusal, and the codec
   as a fixed point of a committed `provider.jsonl`; `tests/scenarios/test_normalize.py` (6) pins the
   stabiliser, including that an id in prose and the same id under `call_id` normalise to one token.
+- **Recording cannot clobber the corpus**: `HARNESS_REPLAY=record` refuses to overwrite an existing
+  `provider.jsonl` unless `HARNESS_RECORD_OVERWRITE=1` (`-k <name>` selects a scenario, not an intention to
+  re-record the fixture every golden was derived from), and it says so before the run rather than after.
+- **`make_recordings.py` is now the corpus's source**: it covers all 25 synthetic fixtures (`daemon_restart_web_dom`
+  had only ever been written by hand), fails when a `recorded_from: synthetic` scenario has no entry, and
+  `tests/scenarios/test_make_recordings.py` (4) proves regeneration is byte-identical and that the generator
+  never touches a real recording.
 - **pytest markers** `scenario` and `web` (`-m web` selects the 11 browser-lane cases); a scenario whose first
   run created goldens no longer has to be guessed at — `tests/scenarios/_lib/scenario.py:kind_of` reads the
   `kind` for collection without validating the file, so a half-written scenario fails its own test.

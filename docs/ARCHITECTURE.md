@@ -256,7 +256,7 @@ generated JSON schema (`harness events schema`).
 | `tests/plugins/` | one file per plugin family incl. provider readiness; also `harness plugin test --all` | `pytest tests/plugins -q` |
 | `tests/frontends/` | web server (auth, SSE, commands), static contract tests (handlers/cards/pickers read only contract keys), UI coherence (`ui_audit.py` + jsdom cascade), CLI | `pytest tests/frontends -q` |
 | `tests/e2e/` | S2–S6 acceptance scenarios on a bootstrapped kernel | `pytest tests/e2e -q` |
-| `tests/scenarios/` | 24 record/replay **flow-of-information** scenarios: real kernel → real daemon → the shipped client in jsdom, provider replayed from `provider.jsonl`, goldens for transcript / events / requests / http / timeline | `SCENARIO_DOM_WAIT_MS=6000 pytest tests/scenarios -q` (needs `npm ci`) |
+| `tests/scenarios/` | record/replay **flow-of-information** scenarios, one case per `scenario.yaml`: real kernel → real daemon → the shipped client in jsdom, provider replayed from `provider.jsonl`, goldens for transcript / events / requests / http / timeline, and a record mode that writes a fixture from a live provider (`HARNESS_REPLAY=record\|replay\|update`) | `SCENARIO_DOM_WAIT_MS=6000 pytest tests/scenarios -q` (needs `npm ci`); how-to in [`docs/testing/SCENARIOS.md`](testing/SCENARIOS.md) |
 | `tests/test_docs_and_versions.py` | this document and the CHANGELOG stay true to the code | `pytest tests/test_docs_and_versions.py -q` |
 
 Plain `pytest -q` (hermetic: `export HOME=$(mktemp -d); export HARNESS_CONFIG_DIR=$HOME/.harness`) runs all

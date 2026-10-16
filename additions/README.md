@@ -28,12 +28,18 @@ web lanes caught the gap: without it the picker lost `replay-v1` and the DOM lan
 `tests/frontends/ui_audit.py` (next to `test_ui_coherence.py`, still a CLI). This folder keeps the documents
 (`FLOW_TEST_FINDINGS.md`) and the portable patch; the paths below are historical.
 
+**Update after P11b — WS-01 is closed.** The suite is 25 scenarios in three lanes with
+`HARNESS_REPLAY=record|replay|update`, and the replay machinery moved up into the SDK
+(`harness/sdk/testing/replay.py`: `ReplayProvider`, `RecordingProvider`, the JSONL codec,
+`ScriptedProvider(strict_exhaustion=…)`), so a plugin can record and replay without importing the suite. The
+contributor how-to is `docs/testing/SCENARIOS.md`; `tests/scenarios/README.md` keeps the schema and inventory.
+
 ## Contents
 
 | path | what it is | use it for |
 |---|---|---|
 | `FLOW_TEST_FINDINGS.md` | The executed test's findings F-1 … F-12: symptom, evidence, root cause, fix location, regression test, status. §3 lists every `harness/` file touched. §4 corrects the integration pack. **§5 is the per-subsystem matrix** (plugins, skills, memory, diff/checkpoints, auth, guardrails, sessions, MCP, providers) of what is proven and what is not. | Knowing what is fixed, what is left, and how much to trust each subsystem. |
-| `scenarios/` → **now `tests/scenarios/`** | 21 record/replay scenarios: real kernel → real web daemon → the shipped `app.js`/`events.js`/`cards.js` in jsdom, model replayed from `provider.jsonl`, goldens per scenario. `scenarios/README.md` documents the schema, the three lanes, how to record from a real provider, and how to move it into `tests/`. | Regression gate for every later change (`pytest additions/scenarios -q`). WS-01 of the integration pack in working form. |
+| `scenarios/` → **now `tests/scenarios/`** | 25 record/replay scenarios: real kernel → real web daemon → the shipped `app.js`/`events.js`/`cards.js` in jsdom, model replayed from `provider.jsonl`, goldens per scenario. `scenarios/README.md` documents the schema, the three lanes, how to record from a real provider, and how to move it into `tests/`. | Regression gate for every later change (`pytest tests/scenarios -q`). WS-01 of the integration pack, executed in full at P11b. |
 | `tools/ui_audit.py` → **now `tests/frontends/ui_audit.py`** | Static coherence audit of the shipped web UI: ids referenced by JS vs `index.html`, CSS classes used but undefined / defined but unused, inline `style=` counts, loaded scripts. `--json` for machines, `--strict` as an acceptance gate (0 missing ids, 0 undefined classes). Added by the `158c836` review (`review/CODE_REVIEW_158c836.md` §4.2, plan P3). | Measuring the styling/facade consolidation; run it before and after UI changes. |
 | `patches/runtime-fixes-vs-main-f32faf1.patch` | `git diff f32faf1 -- harness tests`: all runtime changes of PR #4 (memory/MCP fixes of Addendum A + flow-test fixes F-1…F-12 + the 4 new kernel tests). 22 files, +677/−96. | Porting the fixes onto another checkout: `git apply additions/patches/runtime-fixes-vs-main-f32faf1.patch`. Redundant once PR #4 is merged — kept for reuse elsewhere. |
 
@@ -41,7 +47,7 @@ Related material that stays where the review convention puts it:
 
 | path | what it is |
 |---|---|
-| `review/dsh-integration/` | The integration pack for the build agent: `00_PRINCIPLES.md`, `plan.yaml` (P0 marked landed, WS-01 in progress → `additions/scenarios`), `templates/PLUGIN_TEMPLATE.md`, specs WS-01 … WS-11. |
+| `review/dsh-integration/` | The integration pack for the build agent: `00_PRINCIPLES.md`, `plan.yaml` (P0 landed; WS-01 … WS-04 executed), `templates/PLUGIN_TEMPLATE.md`, specs WS-01 … WS-11. |
 | `review/RESEARCH_DEEPSEEK_HARNESS.md` | Source-level comparison with DeepSeek Harness (`dsh`) and the ranked adoption list the pack is derived from. |
 | `review/CODE_REVIEW_v0.2.1.md` (Addendum A) | Memory round-trip and MCP-through-the-kernel findings and fixes (first part of PR #4). |
 | `tests/kernel/test_bus_delta_fanout.py`, `tests/kernel/test_thinking_block_roundtrip.py`, `tests/kernel/test_memory_roundtrip.py`, `tests/kernel/test_mcp_tool_through_kernel.py` | Kernel-level regression tests that fail on `f32faf1` and pass now. |

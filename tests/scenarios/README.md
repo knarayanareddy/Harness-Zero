@@ -135,6 +135,9 @@ registered and the request resolves past it — a run then records nothing and s
 `RecordingProvider` refuses to write a stream containing the value of any `*_API_KEY` / `*_TOKEN`, and
 `ProviderHandle.finish()` runs before any restart or reload lane.
 
+A committed `provider.jsonl` is not overwritten unless `HARNESS_RECORD_OVERWRITE=1`: `-k <name>` selects a
+scenario, not an intention to re-record the corpus it belongs to.
+
 The built-in recordings are synthetic (`make_recordings.py`), because this sandbox has no model access; the
 codec is identical, so the kernel cannot tell the difference, and `recorded_from` says which is which.
 `test_record_replay.py` records into a scratch copy and asserts record and replay agree — in the kernel

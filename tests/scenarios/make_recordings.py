@@ -130,6 +130,9 @@ RECORDINGS: dict[str, list[list]] = {
     ],
     # 14. Two turns through the real client, then a page refresh: the history must be visible again.
     "session_reload_web_dom": [text("Answer one: Amsterdam."), text("Answer two: Rotterdam.")],
+    # 14b. The same two turns, but the *daemon* restarts before the page reloads: one session row, full
+    # history, no click. The client must not need the process that wrote the records.
+    "daemon_restart_web_dom": [text("Answer one: Amsterdam."), text("Answer two: Rotterdam.")],
     # 15. Secrets: a stored secret and a well-known key pattern inside a file must never reach the model.
     "secret_redacted_from_model_kernel": [
         tool("c1", "view_file", {"file_path": ".env"}),
@@ -181,6 +184,23 @@ RECORDINGS: dict[str, list[list]] = {
 
 
 def main() -> None:
+    """Writes every synthetic fixture — and refuses to run if the corpus is only partly reproducible.
+
+    A fixture nobody can regenerate is a fixture nobody can review, so the generator and the corpus are kept
+    in step by `test_make_recordings.py`. Streams recorded from a real provider (`recorded_from: <name>`) are
+    deliberately not part of this file: they are written by ``HARNESS_REPLAY=record``.
+    """
+    synthetic = {
+        d.name
+        for d in HERE.iterdir()
+        if (d / "scenario.yaml").exists() and "recorded_from: synthetic" in (d / "scenario.yaml").read_text()
+    }
+    unaccounted = sorted(synthetic - set(RECORDINGS))
+    if unaccounted:
+        raise SystemExit(
+            "no generator entry for synthetic scenario(s): " + ", ".join(unaccounted) + " — add the stream to "
+            "RECORDINGS (or mark the scenario `recorded_from: <provider>/<model>` if it came from a real one)"
+        )
     for name, streams in RECORDINGS.items():
         d = HERE / name
         if not d.exists():

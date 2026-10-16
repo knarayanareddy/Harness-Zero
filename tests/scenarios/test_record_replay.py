@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from _lib import record
@@ -135,6 +136,28 @@ async def test_record_then_replay_in_the_web_lane(tmp_path: Path, hermetic_env: 
 
 
 @pytest.mark.asyncio
+async def test_record_mode_refuses_to_rewrite_a_committed_recording(tmp_path: Path, monkeypatch):
+    """The corpus is 25 fixtures; `HARNESS_REPLAY=record -k anything` used to overwrite one silently.
+
+    The guard fires before the registry is consulted, because the expensive part of a record boot is the run
+    itself: discovering at minute two that you clobbered the fixture every golden came from is too late.
+    """
+    d = _scenario_dir(tmp_path, kind="kernel")
+    (d / "provider.jsonl").write_text('{"t": "Done", "stop_reason": "end_turn"}\n', encoding="utf-8")
+    monkeypatch.setenv("HARNESS_REPLAY", "record")
+    monkeypatch.delenv("HARNESS_RECORD_OVERWRITE", raising=False)
+    sc = load_scenario(d)
+    runtime = SimpleNamespace(registry=SimpleNamespace(providers={}))
+    with pytest.raises(RuntimeError, match="HARNESS_RECORD_OVERWRITE") as exc:
+        record.install_provider(sc, runtime)
+    committed = str(d / "provider.jsonl")
+    assert committed in str(exc.value), "the message says which file it is protecting"
+
+    monkeypatch.setenv("HARNESS_RECORD_OVERWRITE", "1")
+    with pytest.raises(RuntimeError, match="is not loaded"):
+        record.install_provider(sc, runtime)  # past the guard: now it fails for the ordinary reason
+
+
 async def test_record_mode_names_the_providers_when_one_is_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """A typo in `HARNESS_RECORD_PROVIDER` is an error that lists what *is* loaded, never a silent fallback.
 

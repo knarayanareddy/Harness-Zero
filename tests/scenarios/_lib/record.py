@@ -103,6 +103,17 @@ def install_provider(sc: Scenario, runtime: Any) -> ProviderHandle:
         runtime.registry.register_provider(provider, plugin_name="scenario")
         return ProviderHandle(active=provider)
 
+    target = sc.provider_file
+    if target.exists() and os.environ.get("HARNESS_RECORD_OVERWRITE") not in ("1", "true", "yes"):
+        # Refuse *before* the run, not after: a record boot costs a real turn, and the file it would replace
+        # is the one every golden in that directory was derived from.
+        raise RuntimeError(
+            f"HARNESS_REPLAY=record would rewrite the committed recording {target}. Re-recording replaces the "
+            f"fixture that scenario's goldens describe, so it is a deliberate act: set "
+            f"HARNESS_RECORD_OVERWRITE=1 to go ahead, or point the run at a scratch copy of the scenario "
+            f"directory (which is what tests/scenarios/test_record_replay.py does) to exercise the record "
+            f"path without touching the corpus."
+        )
     name = record_provider_name()
     entry = runtime.registry.providers.get(name)
     if entry is None:

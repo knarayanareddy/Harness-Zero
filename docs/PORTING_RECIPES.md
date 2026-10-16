@@ -342,6 +342,24 @@ harness plugin test --all
 harness plugin test ./my_provider --live
 ```
 
+### Replaying and Recording Model Streams
+A provider plugin's own tests should not need a key, and a golden test should not need a live model either.
+Both are in the SDK (`harness.sdk.testing`), which is where the scenario suite's fixtures live now:
+
+```python
+from harness.sdk.testing import RecordingProvider, ReplayProvider, ScriptedProvider, load_streams
+
+provider = ReplayProvider.from_file(scenario_dir / "provider.jsonl")   # strict: a 6th request is a failure
+lenient = ScriptedProvider([[TextDelta(text="hi"), Done(stop_reason="end_turn")]])   # polite by default
+strict = ScriptedProvider([...], strict_exhaustion=True)               # same strictness, hand-written script
+
+# To make a fixture: wrap the real provider, run the flow, flush.
+tee = RecordingProvider(real_provider, out_dir)      # refuses to write a stream containing $*_API_KEY
+```
+
+`provider.jsonl` is one JSON object per `ModelEvent` (tagged `"t"`), a blank line between requests — readable
+in a diff and appendable by hand. See [`testing/SCENARIOS.md`](testing/SCENARIOS.md) for the end-to-end loop.
+
 ### Running Doctor Diagnostics
 ```bash
 # Inspect a single plugin

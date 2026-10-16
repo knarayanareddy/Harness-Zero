@@ -920,6 +920,15 @@ stopped trying to be more explicit than the client. Teeth checks: removing `stri
 `test_exhaustion_is_an_error_when_the_script_is_strict`; removing `_HEX_ID` normalisation fails
 `test_an_id_in_prose_is_relabelled_exactly_like_the_key_version`; both restored.
 
+**Tidy pass (same commit series).** Four loose ends that made the suite lie about itself: record mode wrote
+straight over a committed `provider.jsonl` (now guarded by `HARNESS_RECORD_OVERWRITE`, checked before the run
+starts, `test_record_mode_refuses_to_rewrite_a_committed_recording`); `make_recordings.py` covered 24 of 25
+fixtures so one recording had no reproducible source (now 25, plus a fixed-point test and a completeness
+check that fails for a new synthetic scenario with no entry); `docs/ARCHITECTURE.md` claimed 24 scenarios and
+`additions/README.md` still described the suite as `additions/scenarios`, in progress, with a stale run
+command; and the SDK-side utilities were undiscoverable from the plugin-authoring docs (now a
+`docs/PORTING_RECIPES.md` §2 recipe). Nothing else in the corpus moved.
+
 **Deviations, with reasons.**
 1. `ReplayProvider.name` is `replay`, not the spec's `scenario`. Every scenario already pins
    `kernel.provider: replay`; one key for both modes means a recording and its replay produce the same goldens,
