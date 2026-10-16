@@ -722,6 +722,13 @@ class TurnRunner:
         turn_options = dict(options or {})
         turn_options["prompt"] = prompt
         turn_options["media"] = media or []
+        # Kernel-level defaults for the knobs the settings panel owns. A caller may still override
+        # per turn (`options={"max_iterations": 3}`); otherwise `kernel.max_tool_iterations` decides
+        # — until now the strategies' own literal of 20 always won and the setting did nothing (R38).
+        if "max_iterations" not in turn_options and self.settings is not None:
+            configured = self.settings.get("kernel.max_tool_iterations")
+            if configured is not None:
+                turn_options["max_iterations"] = int(configured)
 
         cancel = cancel_event or asyncio.Event()
         self._active_cancels[session.session_id] = cancel

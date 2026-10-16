@@ -6,3 +6,6 @@ summary = "Deterministic ScriptedProvider for hermetic tests and offline executi
 provides = ["provider"]
 capabilities = []
 entry = "harness.plugins.providers.mock.plugin:MockProviderPlugin"
+
+[settings]
+schema = "settings.schema.json"

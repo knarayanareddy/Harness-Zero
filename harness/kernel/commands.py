@@ -17,11 +17,17 @@ from typing import Any
 from harness.kernel.bus import EventBus
 from harness.kernel.economics import economics_snapshot
 from harness.kernel.gate import PolicyGate
+from harness.kernel.plugin_paths import plugin_dir
 from harness.kernel.registry import PluginRegistry
 from harness.kernel.runner import TurnRunner
 from harness.kernel.secrets import Secrets
 from harness.kernel.session import SessionManager
 from harness.kernel.settings import SettingsStore
+from harness.kernel.settings_schema import (
+    SETTINGS_GROUPS,
+    flatten_schema_properties,
+    with_ui_defaults,
+)
 from harness.kernel.validators import validate_session_id
 from harness.sdk.cards import Card
 from harness.sdk.contracts import Provider
@@ -236,79 +242,46 @@ class Commands:
             self.bus.publish(Event(type="settings.changed", data=SettingsChanged(paths=paths)))
 
     async def settings_schema(self) -> dict[str, Any]:
-        """Returns consolidated schema with x-ui groups and widgets (§11, WEB-05)."""
+        """``settings.schema`` → the settings surface aggregated from the *registered* schemas.
+
+        Every property here comes from a JSON Schema the loader actually registered: the kernel's
+        ``KERNEL_SCHEMA`` (only properties carrying ``x-ui``, so internal flags such as
+        ``kernel.plugins.disabled`` stay out of the panel), each plugin's ``settings.schema.json``
+        (WS-02), and the union of secret keys the plugins declared they read. Nothing is a
+        hand-kept list, so a setting cannot appear in the UI without a reader — and the provider
+        and strategy enums are the components that actually loaded, not a literal.
+
+        Response shape (the client's contract): ``{"groups": [...], "properties": {key: schema}}``
+        with ``x-ui.group`` choosing the tab and ``x-ui.widget`` the control.
+        """
         registered = self.settings.get_registered_schemas()
-        kernel_props = registered.get("kernel", {}).get("properties", {})
-        return {
-            "groups": [
-                "Models & Providers",
-                "Security & Sandboxing",
-                "Execution & Strategies",
-                "Economics & Spend",
-                "Secrets",
-            ],
-            "properties": {
-                "kernel.provider": {
-                    "title": "Default Provider",
-                    "type": "string",
-                    "enum": ["openai_compat", "anthropic", "gemini", "ollama", "mock"],
-                    "default": kernel_props.get("provider", {}).get("default", "openai_compat"),
-                    "x-ui": {"group": "Models & Providers", "widget": "select"},
-                },
-                "kernel.model": {
-                    "title": "Default Model",
-                    "type": "string",
-                    "default": kernel_props.get("model", {}).get("default", "gpt-4o"),
-                    "x-ui": {"group": "Models & Providers", "widget": "text"},
-                },
-                "kernel.strategy": {
-                    "title": "Turn Strategy",
-                    "type": "string",
-                    "enum": ["single_loop", "architect_editor"],
-                    "default": kernel_props.get("strategy", {}).get("default", "single_loop"),
-                    "x-ui": {"group": "Execution & Strategies", "widget": "select"},
-                },
-                "kernel.max_tool_iterations": {
-                    "title": "Max Tool Iterations",
-                    "type": "integer",
-                    "default": kernel_props.get("max_tool_iterations", {}).get("default", 20),
-                    "x-ui": {"group": "Execution & Strategies", "widget": "number"},
-                },
-                "kernel.security.spend_cap_usd": {
-                    "title": "Spend Cap (USD)",
-                    "type": "number",
-                    "default": 5.0,
-                    "minimum": 0.0,
-                    "x-ui": {"group": "Economics & Spend", "widget": "number"},
-                },
-                "kernel.security.jail_enabled": {
-                    "title": "Workspace Jail Enforcement",
-                    "type": "boolean",
-                    "default": True,
-                    "x-ui": {"group": "Security & Sandboxing", "widget": "boolean"},
-                },
-                "secrets.OPENAI_API_KEY": {
-                    "title": "OpenAI API Key",
-                    "type": "string",
-                    "x-ui": {"group": "Secrets", "widget": "secret"},
-                },
-                "secrets.ANTHROPIC_API_KEY": {
-                    "title": "Anthropic API Key",
-                    "type": "string",
-                    "x-ui": {"group": "Secrets", "widget": "secret"},
-                },
-                "secrets.GEMINI_API_KEY": {
-                    "title": "Gemini API Key",
-                    "type": "string",
-                    "x-ui": {"group": "Secrets", "widget": "secret"},
-                },
-                "secrets.TIRITH_API_KEY": {
-                    "title": "Tirith Security Key",
-                    "type": "string",
-                    "x-ui": {"group": "Secrets", "widget": "secret"},
-                },
-            },
-        }
+        alias_namespaces = getattr(self.registry, "alias_namespaces", frozenset())
+
+        props: dict[str, Any] = {}
+        for namespace in sorted(registered):
+            if namespace in alias_namespaces or namespace == "secrets":
+                continue  # aliases duplicate a shown key; secrets are appended as one group
+            flat = flatten_schema_properties(registered[namespace].get("properties", {}))
+            for key, prop in flat.items():
+                if namespace == "kernel" and "x-ui" not in prop:
+                    continue
+                props[f"{namespace}.{key}"] = with_ui_defaults(prop, namespace)
+
+        for key, prop in registered.get("secrets", {}).get("properties", {}).items():
+            props[f"secrets.{key}"] = with_ui_defaults(prop, "secrets")
+
+        providers = sorted({prov.name for prov in self.registry.get_all_providers()})
+        if providers and "kernel.provider" in props:
+            props["kernel.provider"] = {**props["kernel.provider"], "enum": providers}
+        strategies = self.registry.strategy_names()
+        if strategies and "kernel.strategy" in props:
+            props["kernel.strategy"] = {**props["kernel.strategy"], "enum": strategies}
+
+        present = {prop.get("x-ui", {}).get("group") for prop in props.values()}
+        if "secrets" in registered:
+            present.add("Secrets")
+        groups = [g for g in SETTINGS_GROUPS if g in present]
+        return {"groups": groups, "properties": props}
 
     async def models_list(self) -> list[dict[str, Any]]:
         """``models.list`` → ``ModelRow`` dicts for every model every provider knows about.
@@ -418,7 +391,8 @@ class Commands:
             ],
             "tier": dp.tier.value,
             "loaded": self.registry.is_loaded(name),
-            "path": str(dp.path),
+            "path": str(plugin_dir(dp)),
+            "settings_schema": dp.manifest.settings_schema,
         }
 
     async def plugins_enable(self, name: str) -> bool:

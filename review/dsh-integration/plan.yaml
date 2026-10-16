@@ -57,7 +57,7 @@ workstreams:
   - id: WS-02
     title: Generated catalogs and freshness gates
     doc: WS-02_generated_catalogs_gates.md
-    status: specified
+    status: executed        # consolidation P7; readmes + scenarios checks warn, scaffold kinds deferred
     effort_days: 1.5
     depends_on: [P0]
     soft_depends_on: [WS-01]

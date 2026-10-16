@@ -106,3 +106,32 @@ def test_frontends_allowed_imports():
         "Frontend boundary violation: frontends restricted to sdk, bus, commands:\n"
         + "\n".join(violations)
     )
+
+def test_plugins_do_not_import_sibling_plugins():
+    """No plugin imports another plugin's modules (WS-02 `boundaries`).
+
+    Plugins compose through the registry — a tool, a policy, a store — never by importing a sibling.
+    A sibling import means the two can no longer be enabled, disabled or shipped independently, which
+    is the entire point of the plugin tree.
+    """
+    root = Path(__file__).resolve().parents[2]
+    plugins_dir = root / "harness" / "plugins"
+    assert plugins_dir.exists()
+
+    packages = set()
+    for toml in plugins_dir.glob("*/*/harness_plugin.toml"):
+        rel = toml.parent.relative_to(plugins_dir)
+        packages.add("harness.plugins." + ".".join(rel.parts))
+
+    offenders: list[str] = []
+    for py_file in sorted(plugins_dir.rglob("*.py")):
+        if "__pycache__" in py_file.parts:
+            continue
+        rel = py_file.relative_to(plugins_dir)
+        own = "harness.plugins." + ".".join(rel.parts[:-1])
+        for lineno, mod in _get_imports(py_file):
+            target = ".".join(mod.split(".")[:4])
+            if target in packages and target != own:
+                offenders.append(f"{py_file.name}:{lineno} -> {mod} (plugin {'.'.join(Path(target).parts[2:4])})")
+
+    assert not offenders, "plugin-to-plugin import (compose through the registry instead):\n" + "\n".join(sorted(set(offenders)))

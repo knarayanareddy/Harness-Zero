@@ -6,3 +6,6 @@ summary = "Local Ollama provider with native tool calling and XML fallback proto
 provides = ["provider"]
 capabilities = ["net"]
 entry = "harness.plugins.providers.ollama.plugin:OllamaProviderPlugin"
+
+[settings]
+schema = "settings.schema.json"

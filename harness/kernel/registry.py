@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.metadata
+import json
 import logging
 import re
 from dataclasses import dataclass
@@ -198,6 +199,14 @@ class PluginRegistry:
         # Discovered and loaded plugins
         self._discovered: dict[str, DiscoveredPlugin] = {}
         self._loaded: dict[str, LoadedPlugin] = {}
+
+        # Secrets namespaces contributed by plugin settings schemas (WS-02): a plugin declares
+        # the secret keys it reads, so the settings UI never has to guess a list by hand.
+        self._secret_props: dict[str, dict[str, Any]] = {}
+        self.settings_namespaces: dict[str, str] = {"kernel": "kernel"}
+        # Settings namespaces registered only so old spellings keep resolving; they are excluded
+        # from the generated catalog and the settings UI so a key is never listed twice.
+        self._alias_namespaces: set[str] = set()
 
         # Component collections: item -> (component, plugin_name)
         self.tools: dict[str, tuple[ToolSpec, ToolHandler, str]] = {}
@@ -506,6 +515,10 @@ class PluginRegistry:
                     override=frozenset(Capability(c) for c in overrides) if overrides else None,
                 )
 
+                # Declare settings/secret surface *before* setup(), so ctx.settings.get() during
+                # setup resolves the schema default instead of silently returning None.
+                self._register_settings_schema(dp)
+
                 # Instantiate
                 instance = self._instantiate_plugin(dp)
 
@@ -563,6 +576,97 @@ class PluginRegistry:
                     )
                     self.bus.publish(evt)
                 # Continue boot! Do not raise or abort.
+
+        self._register_secrets_schema()
+
+    def _register_settings_schema(self, dp: DiscoveredPlugin) -> None:
+        """Registers a plugin's ``settings.schema.json`` with the settings store (WS-02).
+
+        The file is the single declaration of what a plugin reads: its own namespace
+        (``plugins.<name>`` unless ``x-namespace`` says otherwise), optional compatibility
+        namespaces (``x-alias-namespaces``) and the secret keys it asks for (``x-secrets``).
+        ``Commands.settings_schema`` and ``harness catalog`` aggregate exactly these, so a
+        setting cannot exist in the UI without a reader and vice versa.
+        """
+        rel = dp.manifest.settings_schema
+        if not rel:
+            return
+        base = dp.manifest.dir_path or (Path(dp.origin).parent if dp.origin else None)
+        if base is None:
+            raise PluginLoadError(f"Plugin '{dp.manifest.name}' declares settings_schema without a plugin directory")
+        path = Path(base) / rel
+        if not path.is_file():
+            raise PluginLoadError(f"Plugin '{dp.manifest.name}' declares settings_schema '{rel}' which does not exist")
+        try:
+            doc = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as err:
+            raise PluginLoadError(f"Plugin '{dp.manifest.name}' settings_schema is not valid JSON: {err}") from err
+        if not isinstance(doc, dict) or not isinstance(doc.get("properties"), dict):
+            raise PluginLoadError(
+                f"Plugin '{dp.manifest.name}' settings_schema must be an object with a 'properties' map"
+            )
+
+        props = doc["properties"]
+        name = dp.manifest.name
+        namespace = doc.get("x-namespace") or f"plugins.{name}"
+        self.settings.register_schema(namespace, {"type": "object", "additionalProperties": False, "properties": props})
+
+        self.settings_namespaces[namespace] = dp.manifest.name
+        for alias, mapping in (doc.get("x-alias-namespaces") or {}).items():
+            # ``{"<alias key>": "<property name>"}``: a compatibility spelling may rename the leaf
+            # (legacy ``extensions.mcp_servers`` for ``servers``). Aliases stay open — they exist so
+            # old files keep working, not to police writes — and never show in the UI a second time.
+            self.settings.register_schema(
+                alias,
+                {
+                    "type": "object",
+                    "additionalProperties": True,
+                    "properties": {
+                        alias_key: props[src] for alias_key, src in mapping.items() if src in props
+                    },
+                },
+            )
+            self._alias_namespaces.add(alias)
+            self.settings_namespaces.setdefault(alias, dp.manifest.name)
+
+        for key, meta in (doc.get("x-secrets") or {}).items():
+            prop = {"type": "string", "x-ui": {"group": "Secrets", "widget": "secret"}}
+            prop.update(meta if isinstance(meta, dict) else {"title": str(meta)})
+            self._secret_props[key] = prop
+
+        # A plugin that declares its keys at a root namespace (providers.anthropic) is still
+        # readable through its own view prefix, so mirror the types there as an alias.
+        if namespace != f"plugins.{name}":
+            self.settings.register_schema(
+                f"plugins.{name}",
+                {"type": "object", "additionalProperties": True, "properties": dict(props)},
+            )
+            self._alias_namespaces.add(f"plugins.{name}")
+            self.settings_namespaces.setdefault(f"plugins.{name}", name)
+
+    @property
+    def alias_namespaces(self) -> frozenset[str]:
+        """Settings namespaces kept only for compatibility (never rendered twice)."""
+        return frozenset(self._alias_namespaces)
+
+    def settings_owner(self, namespace: str) -> str | None:
+        """Which plugin registered ``namespace`` (the owner column of the generated catalog)."""
+        return self.settings_namespaces.get(namespace)
+
+    def _register_secrets_schema(self) -> None:
+        """Merges every plugin's declared secret keys into the ``secrets`` UI namespace."""
+        self.settings_namespaces["secrets"] = "kernel"
+        existing = self.settings.get_registered_schemas().get("secrets", {})
+        props = dict(existing.get("properties") or {})
+        props.update(self._secret_props)
+        self.settings.register_schema(
+            "secrets",
+            {"type": "object", "additionalProperties": True, "properties": props},
+        )
+
+    def strategy_names(self) -> list[str]:
+        """Names of the registered strategies — the enum the UI offers for ``kernel.strategy``."""
+        return sorted(self.strategies)
 
     async def unload_all(self) -> None:
         """Shuts down all loaded plugins in reverse topological order."""

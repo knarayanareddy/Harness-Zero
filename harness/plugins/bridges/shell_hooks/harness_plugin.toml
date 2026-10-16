@@ -6,3 +6,6 @@ summary = "Claude Code-compatible shell hooks bridge supporting stdin JSON, exit
 provides = ["hook"]
 capabilities = ["exec"]
 entry = "harness.plugins.bridges.shell_hooks.plugin:ShellHooksBridgePlugin"
+
+[settings]
+schema = "settings.schema.json"

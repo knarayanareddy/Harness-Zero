@@ -150,7 +150,7 @@ async def _run_kernel_interactive(
             resume_session=resume,
         )
         if mock_script:
-            runtime.settings.set("providers.mock.script_file", mock_script)
+            runtime.settings.set("plugins.provider-mock.script_file", mock_script)
             if not provider:
                 provider = "mock"
 
@@ -284,6 +284,11 @@ def events_schema():
     """Output JSON schema for Harness-Zero event envelopes."""
     from harness.sdk.events import schema
     click.echo(json.dumps(schema(), indent=2))
+
+
+from harness.cli_catalog import catalog as _catalog_group  # noqa: E402  (WS-02)
+
+main.add_command(_catalog_group)
 
 
 @main.group()

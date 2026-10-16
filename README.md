@@ -165,10 +165,11 @@ SCENARIO_DOM_WAIT_MS=6000 pytest -q
 pytest tests/kernel -q                                   # kernel units, roundtrips, boundary enforcement
 pytest tests/scenarios -q                                # flow-of-information scenarios only (SCENARIO_DOM=0 without node)
 harness plugin test --all                                # plugin conformance (= pytest tests/plugins)
+harness catalog gen                                      # rewrite docs/catalog/* after changing a plugin, tool, setting or event
 
-# Lint, event-schema drift, compiled CSS freshness and the web UI audit (all CI gates):
+# Lint, catalog/settings/UI freshness, compiled CSS freshness and the web UI audit (all CI gates):
 ruff check .
-harness events schema | diff -u docs/events.schema.json -
+harness catalog --check --section drift --section settings --section ui   # docs/catalog/*, declared settings, client contract
 npm run build:css && git diff --exit-code -- harness/frontends/web/static/vendor/tw.css
 python tests/frontends/ui_audit.py --strict
 ```
@@ -184,12 +185,12 @@ Documents that describe **this** system, in the order to read them:
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): process model, kernel modules, the command catalogue, the event catalogue with payload keys, session lifecycle, web authentication, where the tests live (checked against the code by `tests/test_docs_and_versions.py`).
 - [`docs/architecture/CONTRACTS.md`](docs/architecture/CONTRACTS.md): the SDK protocols plugins implement (`Provider`, `ToolHandler`, `Policy`, stores, strategies, hooks), domain types and boundary invariants.
-- [`docs/PLUGIN_CATALOG.md`](docs/PLUGIN_CATALOG.md): catalogue of the 35 built-in plugins.
+- [`docs/catalog/`](docs/catalog/PLUGINS.md): the generated catalogues — plugins, tools, settings, events, commands and the web client contract (`harness catalog gen`, gated by `harness catalog --check`).
 - [`docs/PORTING_RECIPES.md`](docs/PORTING_RECIPES.md): authoring new plugins, with conformance kits.
 - [`docs/events.schema.json`](docs/events.schema.json): generated event schema (`harness events schema`); [`CHANGELOG.md`](CHANGELOG.md) for what changed when.
 
 History and background (not required to use or extend the system):
 
 - [`docs/research/`](docs/research/00_README_AND_MANIFEST.md): the 22 reverse-engineering syntheses of other agent systems that the design was derived from.
-- [`review/`](review/README.md): the four code reviews, decisions, the DeepSeek-Harness research and integration pack, and `CONSOLIDATION_LOG.md` — the per-phase record (P1–P6) of how the tree reached its current shape.
+- [`review/`](review/README.md): the four code reviews, decisions, the DeepSeek-Harness research and integration pack, and `CONSOLIDATION_LOG.md` — the per-phase record (P1–P6, then the WS phases) of how the tree reached its current shape.
 - [`additions/`](additions/README.md): the executed flow-of-information test's findings (F-1 … F-12) and a portable patch; its runnable parts now live in `tests/scenarios/` and `tests/frontends/ui_audit.py`.

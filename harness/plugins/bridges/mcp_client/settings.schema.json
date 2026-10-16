@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "MCP client bridge settings",
+  "x-namespace": "plugins.bridge-mcp-client",
+  "properties": {
+    "servers": {
+      "type": "object",
+      "default": {},
+      "title": "MCP Servers",
+      "x-ui": {
+        "group": "Plugins & Integrations",
+        "widget": "json"
+      },
+      "description": "External MCP servers, keyed by server name. Tools appear as mcp__<server>__<tool>. `plugins.mcp-client.servers` is accepted as a legacy spelling.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "env": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "command"
+        ]
+      }
+    }
+  },
+  "additionalProperties": false,
+  "x-alias-namespaces": {
+    "plugins.mcp-client": {
+      "servers": "servers"
+    }
+  }
+}

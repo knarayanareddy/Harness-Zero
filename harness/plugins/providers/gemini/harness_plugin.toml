@@ -6,3 +6,6 @@ summary = "Google Gemini generateContent and function calling provider"
 provides = ["provider"]
 capabilities = ["net", "secrets"]
 entry = "harness.plugins.providers.gemini.plugin:GeminiProviderPlugin"
+
+[settings]
+schema = "settings.schema.json"

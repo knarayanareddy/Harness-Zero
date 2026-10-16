@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Anthropic provider settings",
+  "properties": {
+    "base_url": {
+      "type": "string",
+      "default": "https://api.anthropic.com/v1",
+      "title": "Anthropic Base URL",
+      "x-ui": {
+        "group": "Models & Providers",
+        "widget": "text"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "x-secrets": {
+    "ANTHROPIC_API_KEY": {
+      "title": "Anthropic API Key"
+    }
+  }
+}

@@ -15,6 +15,7 @@ export class SettingsPanel {
     this.values = {};
     this.activeGroup = 'Models & Providers';
     this.statusMessage = null;
+    this.loadError = null;
 
     if (this.container) {
       this._bindDelegatedEvents();
@@ -61,70 +62,19 @@ export class SettingsPanel {
         const remoteSchema = await this.api.command('settings.schema');
         if (remoteSchema && remoteSchema.properties) {
           this.schema = remoteSchema;
+          this.loadError = null;
         }
       } catch (err) {
-        console.warn('[SettingsPanel] Remote schema fetch fallback:', err);
+        console.warn('[SettingsPanel] Remote schema fetch failed:', err);
       }
 
-      if (!this.schema) {
-        this.schema = {
-          groups: [
-            'Models & Providers',
-            'Security & Sandboxing',
-            'Execution & Strategies',
-            'Economics & Spend',
-            'Secrets',
-          ],
-          properties: {
-            'kernel.provider': {
-              title: 'Default Provider',
-              type: 'string',
-              enum: ['openai_compat', 'anthropic', 'gemini', 'ollama', 'mock'],
-              default: 'openai_compat',
-              'x-ui': { group: 'Models & Providers', widget: 'select' },
-            },
-            'kernel.model.default': {
-              title: 'Default Model',
-              type: 'string',
-              default: 'gpt-4o',
-              'x-ui': { group: 'Models & Providers', widget: 'text' },
-            },
-            'kernel.security.jail_enabled': {
-              title: 'Workspace Jail Boundary',
-              type: 'boolean',
-              default: true,
-              'x-ui': { group: 'Security & Sandboxing', widget: 'boolean' },
-            },
-            'kernel.security.allow_shell_execution': {
-              title: 'Allow Shell Commands',
-              type: 'boolean',
-              default: true,
-              'x-ui': { group: 'Security & Sandboxing', widget: 'boolean' },
-            },
-            'kernel.security.spend_cap_usd': {
-              title: 'Spend Cap (USD)',
-              type: 'number',
-              default: 5.0,
-              minimum: 0.0,
-              'x-ui': { group: 'Economics & Spend', widget: 'number' },
-            },
-            'secrets.OPENAI_API_KEY': {
-              title: 'OpenAI API Key',
-              type: 'string',
-              'x-ui': { group: 'Secrets', widget: 'secret' },
-            },
-            'secrets.ANTHROPIC_API_KEY': {
-              title: 'Anthropic API Key',
-              type: 'string',
-              'x-ui': { group: 'Secrets', widget: 'secret' },
-            },
-            'secrets.GEMINI_API_KEY': {
-              title: 'Gemini API Key',
-              type: 'string',
-              'x-ui': { group: 'Secrets', widget: 'secret' },
-            },
-          },
-        };
+      if (!this.schema || !this.schema.properties) {
+        // No client-side copy of the settings surface: the kernel's `settings.schema` command is the
+        // only source (WS-02). If it is unreachable the panel says so instead of rendering a stale form.
+        this.schema = { groups: [], properties: {} };
+        this.loadError = 'Settings schema unavailable — the daemon did not answer `settings.schema`.';
+        this.render();
+        return;
       }
 
       // Fetch active values
@@ -167,6 +117,11 @@ export class SettingsPanel {
 
   render() {
     if (!this.container) return;
+
+    if (this.loadError) {
+      this.container.innerHTML = `<div class="p-4 text-xs border rounded bg-red-950/80 text-red-200 border-red-800">${escapeHtml(this.loadError)}</div>`;
+      return;
+    }
 
     const groups = this.schema.groups || [];
     let tabsHtml = '';

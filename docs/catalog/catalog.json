@@ -1,0 +1,2837 @@
+{
+  "cards": {
+    "approval": [
+      "approval_id",
+      "details",
+      "options",
+      "summary"
+    ],
+    "artifact": [
+      "media_type",
+      "name",
+      "request_feedback",
+      "url"
+    ],
+    "code": [
+      "body",
+      "language",
+      "path"
+    ],
+    "diff": [
+      "path",
+      "stats",
+      "unified"
+    ],
+    "form": [
+      "form_id",
+      "schema",
+      "submit_label"
+    ],
+    "markdown": [
+      "body"
+    ],
+    "notice": [
+      "body",
+      "level"
+    ],
+    "progress": [
+      "label",
+      "value"
+    ],
+    "table": [
+      "columns",
+      "rows"
+    ],
+    "tree": [
+      "nodes"
+    ]
+  },
+  "commands": [
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": "None",
+          "name": "session_id",
+          "type": "str | None"
+        },
+        {
+          "default": "''",
+          "name": "prompt",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "media",
+          "type": "list[Any] | None"
+        },
+        {
+          "default": "None",
+          "name": "options",
+          "type": "dict[str, Any] | None"
+        },
+        {
+          "default": "None",
+          "name": "model",
+          "type": "str | None"
+        },
+        {
+          "default": "None",
+          "name": "provider",
+          "type": "str | None"
+        },
+        {
+          "default": "None",
+          "name": "strategy",
+          "type": "str | None"
+        }
+      ],
+      "called_by_web_client": true,
+      "handler": "harness/kernel/commands.py:submit_turn",
+      "name": "submit_turn",
+      "summary": "Submits a user prompt turn to a session."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "session_id",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": true,
+      "handler": "harness/kernel/commands.py:cancel_turn",
+      "name": "cancel_turn",
+      "summary": "Signals cancellation to an active turn in session."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": "None",
+          "name": "approval_id",
+          "type": "str | None"
+        },
+        {
+          "default": "None",
+          "name": "request_id",
+          "type": "str | None"
+        },
+        {
+          "default": "None",
+          "name": "approved",
+          "type": "bool | None"
+        },
+        {
+          "default": "None",
+          "name": "decision",
+          "type": "str | None"
+        },
+        {
+          "default": "'user'",
+          "name": "by",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "reason",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "feedback",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": true,
+      "handler": "harness/kernel/commands.py:resolve_approval",
+      "name": "resolve_approval",
+      "summary": "Resolves an in-flight approval request."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "form_id",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "data",
+          "type": "dict[str, Any] | None"
+        }
+      ],
+      "called_by_web_client": false,
+      "handler": "harness/kernel/commands.py:form_submit",
+      "name": "form.submit",
+      "summary": "Handles human interactive form submission from studio frontends."
+    },
+    {
+      "alias": true,
+      "args": [
+        {
+          "default": null,
+          "name": "form_id",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "data",
+          "type": "dict[str, Any] | None"
+        }
+      ],
+      "called_by_web_client": false,
+      "handler": "harness/kernel/commands.py:form_submit",
+      "name": "form_submit",
+      "summary": "Handles human interactive form submission from studio frontends."
+    },
+    {
+      "alias": false,
+      "args": [],
+      "called_by_web_client": true,
+      "handler": "harness/kernel/commands.py:sessions_list",
+      "name": "sessions.list",
+      "summary": "Lists historical and active sessions in the workspace."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": "None",
+          "name": "session_id",
+          "type": "str | None"
+        },
+        {
+          "default": "None",
+          "name": "metadata",
+          "type": "dict[str, Any] | None"
+        }
+      ],
+      "called_by_web_client": true,
+      "handler": "harness/kernel/commands.py:sessions_create",
+      "name": "sessions.create",
+      "summary": "Creates and initializes a new session."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "session_id",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": false,
+      "handler": "harness/kernel/commands.py:sessions_get",
+      "name": "sessions.get",
+      "summary": "Retrieves session details and full history trajectory."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "session_id",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": true,
+      "handler": "harness/kernel/commands.py:sessions_switch",
+      "name": "sessions.switch",
+      "summary": "Switches active session and emits session.switched."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "path",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "default",
+          "type": "Any"
+        }
+      ],
+      "called_by_web_client": true,
+      "handler": "harness/kernel/commands.py:settings_get",
+      "name": "settings.get",
+      "summary": "Reads namespaced setting value, or checks secret existence with has_secret."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "path",
+          "type": "str"
+        },
+        {
+          "default": null,
+          "name": "value",
+          "type": "Any"
+        }
+      ],
+      "called_by_web_client": true,
+      "handler": "harness/kernel/commands.py:settings_set",
+      "name": "settings.set",
+      "summary": "Updates setting value under schema validation, routing secrets to Secrets store."
+    },
+    {
+      "alias": false,
+      "args": [],
+      "called_by_web_client": false,
+      "handler": "harness/kernel/commands.py:settings_schema",
+      "name": "settings.schema",
+      "summary": "``settings.schema`` \u2192 the settings surface aggregated from the *registered* schemas."
+    },
+    {
+      "alias": false,
+      "args": [],
+      "called_by_web_client": true,
+      "handler": "harness/kernel/commands.py:models_list",
+      "name": "models.list",
+      "summary": "``models.list`` \u2192 ``ModelRow`` dicts for every model every provider knows about."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "path",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": false,
+      "handler": "harness/kernel/commands.py:files_read",
+      "name": "files.read",
+      "summary": "Reads file within workspace jail boundaries as user principal."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "path",
+          "type": "str"
+        },
+        {
+          "default": null,
+          "name": "content",
+          "type": "str"
+        },
+        {
+          "default": "False",
+          "name": "is_base64",
+          "type": "bool"
+        }
+      ],
+      "called_by_web_client": false,
+      "handler": "harness/kernel/commands.py:files_write",
+      "name": "files.write",
+      "summary": "Writes file within workspace jail atomically as user principal."
+    },
+    {
+      "alias": false,
+      "args": [],
+      "called_by_web_client": false,
+      "handler": "harness/kernel/commands.py:plugins_list",
+      "name": "plugins.list",
+      "summary": "Lists all discovered plugins and their active load status."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "name",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": false,
+      "handler": "harness/kernel/commands.py:plugins_info",
+      "name": "plugins.info",
+      "summary": "Retrieves manifest details and capabilities for a named plugin."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "name",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": false,
+      "handler": "harness/kernel/commands.py:plugins_enable",
+      "name": "plugins.enable",
+      "summary": "Removes plugin from disabled list in settings."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "name",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": false,
+      "handler": "harness/kernel/commands.py:plugins_disable",
+      "name": "plugins.disable",
+      "summary": "Adds plugin to disabled list in settings."
+    },
+    {
+      "alias": false,
+      "args": [],
+      "called_by_web_client": false,
+      "handler": "harness/kernel/commands.py:approvals_list",
+      "name": "approvals.list",
+      "summary": "Lists pending approval requests waiting for human resolution."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": "None",
+          "name": "session_id",
+          "type": "str | None"
+        }
+      ],
+      "called_by_web_client": true,
+      "handler": "harness/kernel/commands.py:economics",
+      "name": "economics",
+      "summary": "Returns the ``EconomicsSnapshot`` for a session (defaults to the active session)."
+    }
+  ],
+  "coverage": {
+    "commands_exercised": [
+      "cancel_turn",
+      "economics",
+      "models.list",
+      "resolve_approval",
+      "sessions.create",
+      "sessions.list",
+      "sessions.switch",
+      "settings.get",
+      "settings.set",
+      "submit_turn"
+    ],
+    "commands_unexercised": [
+      "approvals.list",
+      "files.read",
+      "files.write",
+      "form.submit",
+      "form_submit",
+      "plugins.disable",
+      "plugins.enable",
+      "plugins.info",
+      "plugins.list",
+      "sessions.get",
+      "settings.schema"
+    ],
+    "tools_covered": [
+      "edit_file",
+      "remember",
+      "run_command",
+      "search_memory",
+      "view_file",
+      "view_skill",
+      "write_to_file"
+    ],
+    "tools_uncovered": [
+      "checkpoint_restore",
+      "create_artifact",
+      "manage_task",
+      "read_resource",
+      "search_codebase"
+    ]
+  },
+  "events": [
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "approval_id",
+        "call_id",
+        "details",
+        "kind",
+        "options",
+        "summary",
+        "timeout_s"
+      ],
+      "payload": "ApprovalRequired",
+      "producers": [
+        "harness/frontends/cli/app.py",
+        "harness/kernel/approvals.py",
+        "harness/plugins/bridges/acp/server.py"
+      ],
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom"
+      ],
+      "type": "approval.required"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "approval_id",
+        "approved",
+        "by",
+        "reason"
+      ],
+      "payload": "ApprovalResolved",
+      "producers": [
+        "harness/kernel/approvals.py"
+      ],
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom"
+      ],
+      "type": "approval.resolved"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "duration_ms",
+        "summary_tokens"
+      ],
+      "payload": "CompactionCompleted",
+      "producers": [
+        "harness/kernel/compaction.py"
+      ],
+      "scenarios": [],
+      "type": "compaction.completed"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "estimated_tokens"
+      ],
+      "payload": "CompactionStarted",
+      "producers": [
+        "harness/kernel/compaction.py"
+      ],
+      "scenarios": [],
+      "type": "compaction.started"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "blocks",
+        "history_messages",
+        "total_tokens"
+      ],
+      "payload": "ContextAssembled",
+      "producers": [
+        "harness/kernel/context.py"
+      ],
+      "scenarios": [],
+      "type": "context.assembled"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "cap_usd",
+        "lifetime_usd",
+        "session_usd",
+        "turn_usd",
+        "unknown_pricing",
+        "usage"
+      ],
+      "payload": "CostUpdated",
+      "producers": [
+        "harness/kernel/runner.py"
+      ],
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "daemon_restart_web_dom",
+        "jail_blocks_traversal_kernel",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "runaway_tool_loop_kernel",
+        "secret_redacted_from_model_kernel",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom"
+      ],
+      "type": "cost.updated"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "fields": [
+        "EVENT_TYPE",
+        "command",
+        "duration_ms",
+        "event",
+        "hook",
+        "outcome"
+      ],
+      "payload": "HookFired",
+      "producers": [
+        "harness/plugins/bridges/shell_hooks/hook.py"
+      ],
+      "scenarios": [],
+      "type": "hook.fired"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "fields": [
+        "EVENT_TYPE",
+        "stop_reason",
+        "usage"
+      ],
+      "payload": "ModelCompleted",
+      "producers": [
+        "harness/kernel/runner.py"
+      ],
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "daemon_restart_web_dom",
+        "jail_blocks_traversal_kernel",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "runaway_tool_loop_kernel",
+        "secret_redacted_from_model_kernel",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom"
+      ],
+      "type": "model.completed"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "fields": [
+        "EVENT_TYPE",
+        "message"
+      ],
+      "payload": "ModelNotice",
+      "producers": [
+        "harness/kernel/runner.py"
+      ],
+      "scenarios": [],
+      "type": "model.notice"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "fields": [
+        "EVENT_TYPE",
+        "model",
+        "provider",
+        "request_tokens_estimate"
+      ],
+      "payload": "ModelStarted",
+      "producers": [
+        "harness/kernel/runner.py"
+      ],
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "daemon_restart_web_dom",
+        "jail_blocks_traversal_kernel",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "runaway_tool_loop_kernel",
+        "secret_redacted_from_model_kernel",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom"
+      ],
+      "type": "model.started"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "text"
+      ],
+      "payload": "ModelTextDelta",
+      "producers": [
+        "harness/kernel/bus.py",
+        "harness/kernel/runner.py",
+        "harness/plugins/bridges/acp/server.py"
+      ],
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "daemon_restart_web_dom",
+        "jail_blocks_traversal_kernel",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "secret_redacted_from_model_kernel",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom"
+      ],
+      "type": "model.text.delta"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "text"
+      ],
+      "payload": "ModelThinkingDelta",
+      "producers": [
+        "harness/kernel/bus.py",
+        "harness/kernel/runner.py",
+        "harness/plugins/bridges/acp/server.py"
+      ],
+      "scenarios": [
+        "thinking_then_answer_web"
+      ],
+      "type": "model.thinking.delta"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "fields": [
+        "EVENT_TYPE",
+        "arguments",
+        "call_id",
+        "name"
+      ],
+      "payload": "ModelToolCall",
+      "producers": [
+        "harness/kernel/runner.py"
+      ],
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "jail_blocks_traversal_kernel",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "runaway_tool_loop_kernel",
+        "secret_redacted_from_model_kernel",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom"
+      ],
+      "type": "model.tool_call"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "fields": [
+        "EVENT_TYPE",
+        "error",
+        "name"
+      ],
+      "payload": "PluginError",
+      "producers": [
+        "harness/kernel/registry.py"
+      ],
+      "scenarios": [],
+      "type": "plugin.error"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "fields": [
+        "EVENT_TYPE",
+        "capabilities",
+        "name",
+        "provides",
+        "trust",
+        "version"
+      ],
+      "payload": "PluginLoaded",
+      "producers": [
+        "harness/kernel/registry.py"
+      ],
+      "scenarios": [],
+      "type": "plugin.loaded"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "model",
+        "provider",
+        "session_id",
+        "strategy",
+        "workspace"
+      ],
+      "payload": "SessionStarted",
+      "producers": [
+        "harness/kernel/session.py"
+      ],
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "daemon_restart_web_dom",
+        "jail_blocks_traversal_kernel",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "runaway_tool_loop_kernel",
+        "secret_redacted_from_model_kernel",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom"
+      ],
+      "type": "session.started"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "session_id",
+        "workspace"
+      ],
+      "payload": "SessionSwitched",
+      "producers": [
+        "harness/kernel/session.py"
+      ],
+      "scenarios": [],
+      "type": "session.switched"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "paths"
+      ],
+      "payload": "SettingsChanged",
+      "producers": [
+        "harness/kernel/commands.py"
+      ],
+      "scenarios": [],
+      "type": "settings.changed"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "exit_code",
+        "label",
+        "tail",
+        "task_id"
+      ],
+      "payload": "TaskCompleted",
+      "producers": [
+        "harness/kernel/inbox.py"
+      ],
+      "scenarios": [],
+      "type": "task.completed"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "label",
+        "task_id"
+      ],
+      "payload": "TaskStarted",
+      "producers": [
+        "harness/kernel/inbox.py"
+      ],
+      "scenarios": [],
+      "type": "task.started"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "arguments",
+        "call_id",
+        "name",
+        "plugin",
+        "risk"
+      ],
+      "payload": "ToolCallStarted",
+      "producers": [
+        "harness/kernel/gate.py",
+        "harness/plugins/bridges/acp/server.py"
+      ],
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "jail_blocks_traversal_kernel",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "runaway_tool_loop_kernel",
+        "secret_redacted_from_model_kernel",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom"
+      ],
+      "type": "tool.call"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "action",
+        "call_id",
+        "policy",
+        "reason",
+        "risk"
+      ],
+      "payload": "ToolDecision",
+      "producers": [
+        "harness/kernel/gate.py"
+      ],
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "jail_blocks_traversal_kernel",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "runaway_tool_loop_kernel",
+        "secret_redacted_from_model_kernel",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom"
+      ],
+      "type": "tool.decision"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "call_id",
+        "stream",
+        "text"
+      ],
+      "payload": "ToolOutputDelta",
+      "producers": [
+        "harness/kernel/bus.py",
+        "harness/kernel/gate.py"
+      ],
+      "scenarios": [],
+      "type": "tool.output.delta"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "call_id",
+        "duration_ms",
+        "is_error",
+        "metadata",
+        "name",
+        "preview"
+      ],
+      "payload": "ToolCallResult",
+      "producers": [
+        "harness/kernel/gate.py",
+        "harness/plugins/bridges/acp/server.py"
+      ],
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "jail_blocks_traversal_kernel",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "runaway_tool_loop_kernel",
+        "secret_redacted_from_model_kernel",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom"
+      ],
+      "type": "tool.result"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "reason"
+      ],
+      "payload": "TurnCancelled",
+      "producers": [
+        "harness/kernel/runner.py"
+      ],
+      "scenarios": [],
+      "type": "turn.cancelled"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "duration_ms",
+        "stop_reason",
+        "tool_calls",
+        "usage"
+      ],
+      "payload": "TurnCompleted",
+      "producers": [
+        "harness/kernel/runner.py",
+        "harness/plugins/bridges/acp/server.py"
+      ],
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "daemon_restart_web_dom",
+        "jail_blocks_traversal_kernel",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "runaway_tool_loop_kernel",
+        "secret_redacted_from_model_kernel",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom"
+      ],
+      "type": "turn.completed"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "kind",
+        "message",
+        "retryable"
+      ],
+      "payload": "TurnError",
+      "producers": [
+        "harness/kernel/runner.py"
+      ],
+      "scenarios": [],
+      "type": "turn.error"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "model",
+        "options",
+        "prompt_preview",
+        "provider",
+        "strategy"
+      ],
+      "payload": "TurnStarted",
+      "producers": [
+        "harness/kernel/runner.py"
+      ],
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "daemon_restart_web_dom",
+        "jail_blocks_traversal_kernel",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "runaway_tool_loop_kernel",
+        "secret_redacted_from_model_kernel",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom"
+      ],
+      "type": "turn.started"
+    },
+    {
+      "client_renderer": "app.js",
+      "fields": [
+        "EVENT_TYPE",
+        "card"
+      ],
+      "payload": "UiCard",
+      "producers": [
+        "harness/kernel/commands.py",
+        "harness/kernel/gate.py",
+        "harness/plugins/bridges/shell_hooks/hook.py"
+      ],
+      "scenarios": [
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "skills_view_kernel"
+      ],
+      "type": "ui.card"
+    }
+  ],
+  "generated_by": "harness catalog gen",
+  "plugins": [
+    {
+      "capabilities": [
+        "exec"
+      ],
+      "entry": "harness.plugins.bridges.acp.plugin:ACPBridgePlugin",
+      "family": "bridges",
+      "loaded": true,
+      "name": "bridge-acp",
+      "path": "harness/plugins/bridges/acp",
+      "provides": [
+        "bridge"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Agent Client Protocol frontend bridge over stdio for IDE and editor integrations",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "exec",
+        "net"
+      ],
+      "entry": "harness.plugins.bridges.mcp_client.plugin:MCPClientBridgePlugin",
+      "family": "bridges",
+      "loaded": true,
+      "name": "bridge-mcp-client",
+      "path": "harness/plugins/bridges/mcp_client",
+      "provides": [
+        "tool"
+      ],
+      "readme": "harness/plugins/bridges/mcp_client/README.md",
+      "readme_sections": [
+        "Summary",
+        "Configuration",
+        "Extension points",
+        "Model experience",
+        "Known limitations"
+      ],
+      "requires": [],
+      "settings_schema": "harness/plugins/bridges/mcp_client/settings.schema.json",
+      "summary": "Model Context Protocol stdio client bridge connecting external MCP servers as tools and resources",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "exec"
+      ],
+      "entry": "harness.plugins.bridges.mcp_server.plugin:MCPServerBridgePlugin",
+      "family": "bridges",
+      "loaded": true,
+      "name": "bridge-mcp-server",
+      "path": "harness/plugins/bridges/mcp_server",
+      "provides": [
+        "bridge"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": "harness/plugins/bridges/mcp_server/settings.schema.json",
+      "summary": "Model Context Protocol stdio server bridge exposing Harness tools to external hosts",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "exec"
+      ],
+      "entry": "harness.plugins.bridges.shell_hooks.plugin:ShellHooksBridgePlugin",
+      "family": "bridges",
+      "loaded": true,
+      "name": "bridge-shell-hooks",
+      "path": "harness/plugins/bridges/shell_hooks",
+      "provides": [
+        "hook"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": "harness/plugins/bridges/shell_hooks/settings.schema.json",
+      "summary": "Claude Code-compatible shell hooks bridge supporting stdin JSON, exit codes, and matcher aliases",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.context.identity.plugin:IdentityContextPlugin",
+      "family": "context",
+      "loaded": true,
+      "name": "context-identity",
+      "path": "harness/plugins/context/identity",
+      "provides": [
+        "context"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Core identity context source for Harness-Zero",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read"
+      ],
+      "entry": "harness.plugins.context.instructions_files.plugin:InstructionsFilesPlugin",
+      "family": "context",
+      "loaded": true,
+      "name": "context-instructions",
+      "path": "harness/plugins/context/instructions_files",
+      "provides": [
+        "context"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Project instruction files reader (AGENTS.md, CLAUDE.md, .harness/INSTRUCTIONS.md)",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.context.memories.plugin:MemoriesContextPlugin",
+      "family": "context",
+      "loaded": true,
+      "name": "context-memories",
+      "path": "harness/plugins/context/memories",
+      "provides": [
+        "context"
+      ],
+      "readme": "harness/plugins/context/memories/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Context source injecting remembered facts and architectural decisions into session prompt",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read"
+      ],
+      "entry": "harness.plugins.context.repo_map.plugin:RepoMapContextPlugin",
+      "family": "context",
+      "loaded": true,
+      "name": "context-repo-map",
+      "path": "harness/plugins/context/repo_map",
+      "provides": [
+        "context"
+      ],
+      "readme": "harness/plugins/context/repo_map/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": "harness/plugins/context/repo_map/settings.schema.json",
+      "summary": "Whole-codebase AST symbol mapping and dense architectural context",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.context.skills_catalog.plugin:SkillsCatalogPlugin",
+      "family": "context",
+      "loaded": true,
+      "name": "context-skills-catalog",
+      "path": "harness/plugins/context/skills_catalog",
+      "provides": [
+        "context"
+      ],
+      "readme": "harness/plugins/context/skills_catalog/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Progressive skills catalog context source for prompt assembly",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.context.tool_guidance.plugin:ToolGuidancePlugin",
+      "family": "context",
+      "loaded": true,
+      "name": "context-tool-guidance",
+      "path": "harness/plugins/context/tool_guidance",
+      "provides": [
+        "context"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Tool usage and execution guidance context source",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "exec"
+      ],
+      "entry": "harness.plugins.executors.worktree.plugin:WorktreeExecutorPlugin",
+      "family": "executors",
+      "loaded": true,
+      "name": "executor-worktree",
+      "path": "harness/plugins/executors/worktree",
+      "provides": [
+        "executor"
+      ],
+      "readme": "harness/plugins/executors/worktree/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Async git worktree process executor with isolated branching and base commit tracking",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read",
+        "fs:write"
+      ],
+      "entry": "harness.plugins.tools.fs.plugin:FsToolsPlugin",
+      "family": "tools",
+      "loaded": true,
+      "name": "fs-tools",
+      "path": "harness/plugins/tools/fs",
+      "provides": [
+        "tool"
+      ],
+      "readme": "harness/plugins/tools/fs/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Filesystem inspection, write, and surgical search/replace editing tools",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:write",
+        "exec"
+      ],
+      "entry": "harness.plugins.hooks.checkpoints.plugin:CheckpointsPlugin",
+      "family": "hooks",
+      "loaded": true,
+      "name": "hook-checkpoints",
+      "path": "harness/plugins/hooks/checkpoints",
+      "provides": [
+        "hook",
+        "tool"
+      ],
+      "readme": "harness/plugins/hooks/checkpoints/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Cline-style shadow git repo snapshots before mutating tools with checkpoint_restore tool",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "exec"
+      ],
+      "entry": "harness.plugins.executors.local.plugin:LocalExecutorPlugin",
+      "family": "executors",
+      "loaded": true,
+      "name": "local-executor",
+      "path": "harness/plugins/executors/local",
+      "provides": [
+        "executor"
+      ],
+      "readme": "harness/plugins/executors/local/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Local process executor with output streaming, process management, and cancellation",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "net",
+        "secrets"
+      ],
+      "entry": "harness.plugins.providers.openai_compat.plugin:OpenAICompatPlugin",
+      "family": "providers",
+      "loaded": true,
+      "name": "openai-compat",
+      "path": "harness/plugins/providers/openai_compat",
+      "provides": [
+        "provider"
+      ],
+      "readme": "harness/plugins/providers/openai_compat/README.md",
+      "readme_sections": [
+        "Configuration"
+      ],
+      "requires": [],
+      "settings_schema": "harness/plugins/providers/openai_compat/settings.schema.json",
+      "summary": "Universal OpenAI-compatible LLM Provider (OpenAI, OpenRouter, DeepSeek, Ollama, vLLM)",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.policy.permission_modes.plugin:PermissionModesPlugin",
+      "family": "policy",
+      "loaded": true,
+      "name": "policy-permission-modes",
+      "path": "harness/plugins/policy/permission_modes",
+      "provides": [
+        "policy"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Permission modes policy implementing plan, ask, allow, and bypass modes",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.policy.risk_classifier.plugin:RiskClassifierPlugin",
+      "family": "policy",
+      "loaded": true,
+      "name": "policy-risk-classifier",
+      "path": "harness/plugins/policy/risk_classifier",
+      "provides": [
+        "policy"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Risk classifier policy raising risk level for dangerous and destructive commands",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.policy.tirith.plugin:TirithPolicyPlugin",
+      "family": "policy",
+      "loaded": true,
+      "name": "policy-tirith",
+      "path": "harness/plugins/policy/tirith",
+      "provides": [
+        "policy"
+      ],
+      "readme": "harness/plugins/policy/tirith/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Tirith security capsule policy auditing secret leaks, SSRF network targets, and blast-radius commands",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read"
+      ],
+      "entry": "harness.plugins.policy.workspace_jail.plugin:WorkspaceJailPlugin",
+      "family": "policy",
+      "loaded": true,
+      "name": "policy-workspace-jail",
+      "path": "harness/plugins/policy/workspace_jail",
+      "provides": [
+        "policy"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Workspace jail policy denying path traversal outside the active workspace",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "net",
+        "secrets"
+      ],
+      "entry": "harness.plugins.providers.anthropic.plugin:AnthropicProviderPlugin",
+      "family": "providers",
+      "loaded": true,
+      "name": "provider-anthropic",
+      "path": "harness/plugins/providers/anthropic",
+      "provides": [
+        "provider"
+      ],
+      "readme": "harness/plugins/providers/anthropic/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": "harness/plugins/providers/anthropic/settings.schema.json",
+      "summary": "Anthropic Messages API provider with prompt caching, thinking blocks, and native tool calling",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "net",
+        "secrets"
+      ],
+      "entry": "harness.plugins.providers.gemini.plugin:GeminiProviderPlugin",
+      "family": "providers",
+      "loaded": true,
+      "name": "provider-gemini",
+      "path": "harness/plugins/providers/gemini",
+      "provides": [
+        "provider"
+      ],
+      "readme": "harness/plugins/providers/gemini/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": "harness/plugins/providers/gemini/settings.schema.json",
+      "summary": "Google Gemini generateContent and function calling provider",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.providers.mock.plugin:MockProviderPlugin",
+      "family": "providers",
+      "loaded": true,
+      "name": "provider-mock",
+      "path": "harness/plugins/providers/mock",
+      "provides": [
+        "provider"
+      ],
+      "readme": "harness/plugins/providers/mock/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": "harness/plugins/providers/mock/settings.schema.json",
+      "summary": "Deterministic ScriptedProvider for hermetic tests and offline execution",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "net"
+      ],
+      "entry": "harness.plugins.providers.ollama.plugin:OllamaProviderPlugin",
+      "family": "providers",
+      "loaded": true,
+      "name": "provider-ollama",
+      "path": "harness/plugins/providers/ollama",
+      "provides": [
+        "provider"
+      ],
+      "readme": "harness/plugins/providers/ollama/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": "harness/plugins/providers/ollama/settings.schema.json",
+      "summary": "Local Ollama provider with native tool calling and XML fallback protocol",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read",
+        "exec"
+      ],
+      "entry": "harness.plugins.tools.search.plugin:SearchToolsPlugin",
+      "family": "tools",
+      "loaded": true,
+      "name": "search-tools",
+      "path": "harness/plugins/tools/search",
+      "provides": [
+        "tool"
+      ],
+      "readme": "harness/plugins/tools/search/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "High-performance codebase regex search tool with ripgrep and Python fallback",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "exec"
+      ],
+      "entry": "harness.plugins.tools.shell.plugin:ShellToolsPlugin",
+      "family": "tools",
+      "loaded": true,
+      "name": "shell-tools",
+      "path": "harness/plugins/tools/shell",
+      "provides": [
+        "tool"
+      ],
+      "readme": "harness/plugins/tools/shell/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Shell command execution and background task management tools",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read",
+        "fs:write"
+      ],
+      "entry": "harness.plugins.stores.cost_ledger.plugin:CostLedgerPlugin",
+      "family": "stores",
+      "loaded": true,
+      "name": "store-cost-ledger",
+      "path": "harness/plugins/stores/cost_ledger",
+      "provides": [
+        "store"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Token economics and persistent cost ledger with per-provider pricing tables",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.stores.fs_artifacts.plugin:FsArtifactsPlugin",
+      "family": "stores",
+      "loaded": true,
+      "name": "store-fs-artifacts",
+      "path": "harness/plugins/stores/fs_artifacts",
+      "provides": [
+        "store"
+      ],
+      "readme": "harness/plugins/stores/fs_artifacts/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Filesystem-backed artifact storage with traversal protection and manifest tracking",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.stores.fts5_search.plugin:Fts5SearchPlugin",
+      "family": "stores",
+      "loaded": true,
+      "name": "store-fts5-search",
+      "path": "harness/plugins/stores/fts5_search",
+      "provides": [
+        "store"
+      ],
+      "readme": "harness/plugins/stores/fts5_search/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "SQLite FTS5 full-text search index and persistent memory store",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read",
+        "fs:write"
+      ],
+      "entry": "harness.plugins.stores.jsonl_transcript.plugin:JsonlTranscriptPlugin",
+      "family": "stores",
+      "loaded": true,
+      "name": "store-jsonl-transcript",
+      "path": "harness/plugins/stores/jsonl_transcript",
+      "provides": [
+        "store"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Append-only dual-log JSONL transcript store with tolerant reads and byte offsets",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read",
+        "fs:write",
+        "exec"
+      ],
+      "entry": "harness.plugins.strategies.architect_editor.plugin:ArchitectEditorStrategyPlugin",
+      "family": "strategies",
+      "loaded": true,
+      "name": "strategy-architect-editor",
+      "path": "harness/plugins/strategies/architect_editor",
+      "provides": [
+        "strategy"
+      ],
+      "readme": "harness/plugins/strategies/architect_editor/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Two-phase Architect/Editor coding strategy with surgical SEARCH/REPLACE diffs and verified testing",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.strategies.single_loop.plugin:SingleLoopStrategyPlugin",
+      "family": "strategies",
+      "loaded": true,
+      "name": "strategy-single-loop",
+      "path": "harness/plugins/strategies/single_loop",
+      "provides": [
+        "strategy"
+      ],
+      "readme": "harness/plugins/strategies/single_loop/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Default single loop agent strategy with reactive background wakeups and STOP hook re-entry",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:write"
+      ],
+      "entry": "harness.plugins.tools.artifacts.plugin:ArtifactsToolPlugin",
+      "family": "tools",
+      "loaded": true,
+      "name": "tool-artifacts",
+      "path": "harness/plugins/tools/artifacts",
+      "provides": [
+        "tool"
+      ],
+      "readme": "harness/plugins/tools/artifacts/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Tools for creating markdown and HTML artifacts with manifest tracking and card generation",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.tools.memory.plugin:MemoryToolsPlugin",
+      "family": "tools",
+      "loaded": true,
+      "name": "tool-memory",
+      "path": "harness/plugins/tools/memory",
+      "provides": [
+        "tool"
+      ],
+      "readme": "harness/plugins/tools/memory/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Memory tools for cross-session recall and explicit facts storage",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read",
+        "exec"
+      ],
+      "entry": "harness.plugins.tools.screenshot_macos.plugin:ScreenshotMacosPlugin",
+      "family": "tools",
+      "loaded": true,
+      "name": "tool-screenshot-macos",
+      "path": "harness/plugins/tools/screenshot_macos",
+      "provides": [
+        "tool"
+      ],
+      "readme": "harness/plugins/tools/screenshot_macos/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "macOS desktop screen capture tool returning ImageBlock",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.tools.skills.plugin:SkillsToolPlugin",
+      "family": "tools",
+      "loaded": true,
+      "name": "tool-skills",
+      "path": "harness/plugins/tools/skills",
+      "provides": [
+        "tool"
+      ],
+      "readme": "harness/plugins/tools/skills/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Tool to inspect progressive skill playbooks on demand",
+      "tier": "builtin",
+      "version": "1.0.0"
+    }
+  ],
+  "provenance": {
+    "commands": "harness.kernel.commands.BUILTIN_COMMANDS",
+    "events": "harness.sdk.events.EVENT_PAYLOADS; producers are a heuristic source scan",
+    "plugins": "registry.discovered of a booted kernel",
+    "scenarios": "tests/scenarios/*/scenario.yaml + golden/events.json",
+    "settings": "registered JSON Schemas (kernel + plugin settings.schema.json)",
+    "tools": "registry.get_all_tool_specs()",
+    "ui": "static parse of the shipped client and the aiohttp route table"
+  },
+  "scenarios": [
+    {
+      "kind": "kernel",
+      "name": "approval_allow_kernel",
+      "summary": "A WRITE tool in `ask` mode; a scripted human approves via Commands.resolve_approval; the write happens.",
+      "tools_called": [
+        "write_to_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "approval_allow_web_dom",
+      "summary": "Approval flow through the real UI \u2014 the jsdom client receives approval.required, clicks the approve button, the write lands, the turn completes.",
+      "tools_called": [
+        "write_to_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "approval_deny_no_approver_kernel",
+      "summary": "Same WRITE in `ask` mode with no interactive subscriber on the bus \u2014 must be denied immediately (fail closed) and the model told.",
+      "tools_called": [
+        "write_to_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "daemon_restart_web_dom",
+      "summary": "Two turns through the real client, then the daemon is stopped and started again on the same workspace \u2014 the client must land on the same conversation without any click, and no empty session may be created by the restart or the page load.",
+      "tools_called": [],
+      "turns": 2
+    },
+    {
+      "kind": "kernel",
+      "name": "jail_blocks_traversal_kernel",
+      "summary": "Workspace jail \u2014 a read and a write outside the workspace are denied by policy even in allow mode; nothing is read or written; the model is told why.",
+      "tools_called": [
+        "view_file",
+        "write_to_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "mcp_echo_kernel",
+      "summary": "An MCP tool (stdio echo fixture) executes through the gate; regression for review Addendum A.2 as a scenario.",
+      "tools_called": [
+        "mcp__echo__echo"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "memory_remember_search_kernel",
+      "summary": "remember \u2192 (same session) search_memory finds the fact; regression for review Addendum A.1 as a scenario.",
+      "tools_called": [
+        "remember",
+        "search_memory"
+      ],
+      "turns": 2
+    },
+    {
+      "kind": "web",
+      "name": "memory_remember_web_dom",
+      "summary": "Memory through the real client \u2014 remember in turn one, search_memory in turn two; both tool cards render and the found fact is shown.",
+      "tools_called": [
+        "remember",
+        "search_memory"
+      ],
+      "turns": 2
+    },
+    {
+      "kind": "kernel",
+      "name": "plain_answer_kernel",
+      "summary": "A streamed text answer through Commands.submit_turn; transcript persisted and identical after a restart.",
+      "tools_called": [],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "plain_answer_web",
+      "summary": "The shipped browser client (jsdom) sends a prompt, receives the kernel's named SSE events and renders the answer.",
+      "tools_called": [],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "read_then_edit_kernel",
+      "summary": "view_file then edit_file (SEARCH/REPLACE); the file changes on disk, the model sees the tool results, a diff card is emitted.",
+      "tools_called": [
+        "edit_file",
+        "view_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "read_then_edit_web_dom",
+      "summary": "Edit through the real client \u2014 view_file then edit_file; the diff card renders in the timeline, the file changes on disk, and the conversation survives a page refresh.",
+      "tools_called": [
+        "edit_file",
+        "view_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "runaway_tool_loop_kernel",
+      "summary": "The model keeps calling the same tool; the kernel's iteration guard must end the turn and say so \u2014 and the replay must not be silently padded.",
+      "tools_called": [],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "secret_redacted_from_model_kernel",
+      "summary": "Secrets guardrail \u2014 a value from the Secrets store and a well-known API-key pattern inside a file are redacted from the tool output before the model (and the transcript) sees it.",
+      "tools_called": [
+        "view_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "session_reload_web_dom",
+      "summary": "Two turns through the real client, then a page refresh \u2014 the conversation must be visible again without any further click.",
+      "tools_called": [],
+      "turns": 2
+    },
+    {
+      "kind": "web",
+      "name": "session_resume_web",
+      "summary": "Two turns over HTTP with the browser's payload shape, then sessions.get \u2014 the history a page refresh would render must contain both turns.",
+      "tools_called": [],
+      "turns": 2
+    },
+    {
+      "kind": "kernel",
+      "name": "shell_exec_denied_without_approver_kernel",
+      "summary": "run_command (EXEC) in ask mode with no approver listening \u2014 fails closed, the command never runs, the model is told.",
+      "tools_called": [
+        "run_command"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "skills_view_kernel",
+      "summary": "Progressive skills \u2014 the skills catalog is injected into the prompt and view_skill returns the full SKILL.md to the model (and a card to the UI).",
+      "tools_called": [
+        "view_skill"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "thinking_then_answer_web",
+      "summary": "Thinking deltas reach the client as model.thinking.delta; the final text is rendered; thinking is not fed back to the model as assistant text.",
+      "tools_called": [],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "tirith_blocks_ssrf_kernel",
+      "summary": "Tirith guardrail \u2014 a shell command targeting the cloud metadata endpoint is denied by policy even in allow mode; the model is told.",
+      "tools_called": [
+        "run_command"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "tirith_blocks_ssrf_web_dom",
+      "summary": "A policy denial seen through the real client \u2014 the tool card must show DENIED with the reason, and the turn completes with the model's explanation.",
+      "tools_called": [
+        "run_command"
+      ],
+      "turns": 1
+    }
+  ],
+  "settings": [
+    {
+      "alias": false,
+      "default": "600",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.background.wait_s",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "60000",
+      "group": "Execution & Strategies",
+      "in_ui": true,
+      "key": "kernel.context.budget_tokens",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Context Budget (tokens)",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "65536",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.limits.tool_result_bytes",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "26214400",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.limits.upload_bytes",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "20",
+      "group": "Execution & Strategies",
+      "in_ui": true,
+      "key": "kernel.max_tool_iterations",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Max Tool Iterations",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "false",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.migrated_from_legacy_config",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "boolean",
+      "widget": "boolean"
+    },
+    {
+      "alias": false,
+      "default": "\"\"",
+      "group": "Models & Providers",
+      "in_ui": true,
+      "key": "kernel.model",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Default Model",
+      "type": "string",
+      "widget": "text"
+    },
+    {
+      "alias": false,
+      "default": "false",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.plugins.allow_inprocess_third_party",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "boolean",
+      "widget": "boolean"
+    },
+    {
+      "alias": false,
+      "default": "{}",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.plugins.capabilities",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "object",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "[]",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.plugins.disabled",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "[]",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.plugins.enabled",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "false",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.plugins.trusted_workspace_plugins",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "boolean",
+      "widget": "boolean"
+    },
+    {
+      "alias": false,
+      "default": "\"\"",
+      "group": "Models & Providers",
+      "in_ui": true,
+      "key": "kernel.provider",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Default Provider",
+      "type": "string",
+      "widget": "select"
+    },
+    {
+      "alias": false,
+      "default": "60.0",
+      "group": "Execution & Strategies",
+      "in_ui": true,
+      "key": "kernel.request_timeout_s",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Provider Request Timeout (s)",
+      "type": "number",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "false",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.secrets.env_precedence",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "boolean",
+      "widget": "boolean"
+    },
+    {
+      "alias": false,
+      "default": "300",
+      "group": "Security & Sandboxing",
+      "in_ui": true,
+      "key": "kernel.security.approval_timeout_s",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Approval Timeout (s)",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "true",
+      "group": "Security & Sandboxing",
+      "in_ui": true,
+      "key": "kernel.security.destructive_blocking",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Block Destructive Commands",
+      "type": "boolean",
+      "widget": "boolean"
+    },
+    {
+      "alias": false,
+      "default": "\"ask\"",
+      "group": "Security & Sandboxing",
+      "in_ui": true,
+      "key": "kernel.security.permission_mode",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Permission Mode",
+      "type": "string",
+      "widget": "select"
+    },
+    {
+      "alias": false,
+      "default": "5.0",
+      "group": "Economics & Spend",
+      "in_ui": true,
+      "key": "kernel.security.spend_cap_usd",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Spend Cap (USD)",
+      "type": "number",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "\"single_loop\"",
+      "group": "Execution & Strategies",
+      "in_ui": true,
+      "key": "kernel.strategy",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Turn Strategy",
+      "type": "string",
+      "widget": "select"
+    },
+    {
+      "alias": false,
+      "default": "{}",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.bridge-mcp-client.servers",
+      "namespace": "plugins.bridge-mcp-client",
+      "owner": "bridge-mcp-client",
+      "title": "MCP Servers",
+      "type": "object",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "[]",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.bridge-mcp-server.expose",
+      "namespace": "plugins.bridge-mcp-server",
+      "owner": "bridge-mcp-server",
+      "title": "Tools Exposed Over MCP",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "{}",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.bridge-shell-hooks.hooks",
+      "namespace": "plugins.bridge-shell-hooks",
+      "owner": "bridge-shell-hooks",
+      "title": "Shell Hooks",
+      "type": "object",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "false",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.context-repo-map.context.repo_map.force",
+      "namespace": "plugins.context-repo-map",
+      "owner": "context-repo-map",
+      "title": "Always Rebuild Repo Map",
+      "type": "boolean",
+      "widget": "boolean"
+    },
+    {
+      "alias": false,
+      "default": "1024",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.context-repo-map.context.repo_map.max_tokens",
+      "namespace": "plugins.context-repo-map",
+      "owner": "context-repo-map",
+      "title": "Repo Map Budget (tokens)",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": true,
+      "default": "{}",
+      "group": "Plugins & Integrations",
+      "in_ui": false,
+      "key": "plugins.mcp-client.servers",
+      "namespace": "plugins.mcp-client",
+      "owner": "bridge-mcp-client",
+      "title": "MCP Servers",
+      "type": "object",
+      "widget": "json"
+    },
+    {
+      "alias": true,
+      "default": "[]",
+      "group": "Plugins & Integrations",
+      "in_ui": false,
+      "key": "plugins.mcp-server.expose",
+      "namespace": "plugins.mcp-server",
+      "owner": "bridge-mcp-server",
+      "title": "Tools Exposed Over MCP",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "\"https://api.openai.com/v1\"",
+      "group": "Models & Providers",
+      "in_ui": true,
+      "key": "plugins.openai-compat.base_url",
+      "namespace": "plugins.openai-compat",
+      "owner": "openai-compat",
+      "title": "OpenAI Base URL",
+      "type": "string",
+      "widget": "text"
+    },
+    {
+      "alias": false,
+      "default": "60.0",
+      "group": "Models & Providers",
+      "in_ui": true,
+      "key": "plugins.openai-compat.timeout_s",
+      "namespace": "plugins.openai-compat",
+      "owner": "openai-compat",
+      "title": "OpenAI-compatible Request Timeout (s)",
+      "type": "number",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "\"https://api.anthropic.com/v1\"",
+      "group": "Models & Providers",
+      "in_ui": true,
+      "key": "plugins.provider-anthropic.base_url",
+      "namespace": "plugins.provider-anthropic",
+      "owner": "provider-anthropic",
+      "title": "Anthropic Base URL",
+      "type": "string",
+      "widget": "text"
+    },
+    {
+      "alias": false,
+      "default": "\"https://generativelanguage.googleapis.com/v1beta\"",
+      "group": "Models & Providers",
+      "in_ui": true,
+      "key": "plugins.provider-gemini.base_url",
+      "namespace": "plugins.provider-gemini",
+      "owner": "provider-gemini",
+      "title": "Gemini Base URL",
+      "type": "string",
+      "widget": "text"
+    },
+    {
+      "alias": false,
+      "default": "\"\"",
+      "group": "Models & Providers",
+      "in_ui": true,
+      "key": "plugins.provider-mock.script_file",
+      "namespace": "plugins.provider-mock",
+      "owner": "provider-mock",
+      "title": "Mock Script File",
+      "type": "string",
+      "widget": "text"
+    },
+    {
+      "alias": false,
+      "default": "\"http://localhost:11434\"",
+      "group": "Models & Providers",
+      "in_ui": true,
+      "key": "plugins.provider-ollama.base_url",
+      "namespace": "plugins.provider-ollama",
+      "owner": "provider-ollama",
+      "title": "Ollama Base URL",
+      "type": "string",
+      "widget": "text"
+    },
+    {
+      "alias": true,
+      "default": "{}",
+      "group": "Plugins & Integrations",
+      "in_ui": false,
+      "key": "plugins.shell-hooks.hooks",
+      "namespace": "plugins.shell-hooks",
+      "owner": "bridge-shell-hooks",
+      "title": "Shell Hooks",
+      "type": "object",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "null",
+      "group": "Secrets",
+      "in_ui": true,
+      "key": "secrets.ANTHROPIC_API_KEY",
+      "namespace": "secrets",
+      "owner": "kernel",
+      "title": "Anthropic API Key",
+      "type": "string",
+      "widget": "secret"
+    },
+    {
+      "alias": false,
+      "default": "null",
+      "group": "Secrets",
+      "in_ui": true,
+      "key": "secrets.DEEPSEEK_API_KEY",
+      "namespace": "secrets",
+      "owner": "kernel",
+      "title": "DeepSeek API Key",
+      "type": "string",
+      "widget": "secret"
+    },
+    {
+      "alias": false,
+      "default": "null",
+      "group": "Secrets",
+      "in_ui": true,
+      "key": "secrets.GEMINI_API_KEY",
+      "namespace": "secrets",
+      "owner": "kernel",
+      "title": "Gemini API Key",
+      "type": "string",
+      "widget": "secret"
+    },
+    {
+      "alias": false,
+      "default": "null",
+      "group": "Secrets",
+      "in_ui": true,
+      "key": "secrets.GOOGLE_API_KEY",
+      "namespace": "secrets",
+      "owner": "kernel",
+      "title": "Google API Key (alias of GEMINI_API_KEY)",
+      "type": "string",
+      "widget": "secret"
+    },
+    {
+      "alias": false,
+      "default": "null",
+      "group": "Secrets",
+      "in_ui": true,
+      "key": "secrets.OPENAI_API_KEY",
+      "namespace": "secrets",
+      "owner": "kernel",
+      "title": "OpenAI API Key",
+      "type": "string",
+      "widget": "secret"
+    },
+    {
+      "alias": false,
+      "default": "null",
+      "group": "Secrets",
+      "in_ui": true,
+      "key": "secrets.OPENROUTER_API_KEY",
+      "namespace": "secrets",
+      "owner": "kernel",
+      "title": "OpenRouter API Key",
+      "type": "string",
+      "widget": "secret"
+    }
+  ],
+  "tools": [
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Restores the workspace to a previous checkpoint snapshot.",
+      "input_properties": [
+        "checkpoint_id"
+      ],
+      "name": "checkpoint_restore",
+      "plugin": "hook-checkpoints",
+      "required": [
+        "checkpoint_id"
+      ],
+      "risk_class": "destructive",
+      "streams_output": false,
+      "timeout_s": 600.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Creates a rich document or generative UI artifact with user-facing metadata.",
+      "input_properties": [
+        "content",
+        "media_type",
+        "name",
+        "request_feedback",
+        "summary",
+        "user_facing"
+      ],
+      "name": "create_artifact",
+      "plugin": "tool-artifacts",
+      "required": [
+        "content",
+        "name"
+      ],
+      "risk_class": "write",
+      "streams_output": false,
+      "timeout_s": 600.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Applies surgical SEARCH/REPLACE diff blocks to an existing file in the workspace.",
+      "input_properties": [
+        "diff",
+        "file_path"
+      ],
+      "name": "edit_file",
+      "plugin": "fs-tools",
+      "required": [
+        "diff",
+        "file_path"
+      ],
+      "risk_class": "write",
+      "streams_output": false,
+      "timeout_s": 600.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Manages background tasks: query status, wait for exit, kill, or send stdin input.",
+      "input_properties": [
+        "Action",
+        "Input",
+        "TaskId",
+        "TimeoutMs",
+        "action",
+        "input",
+        "task_id",
+        "timeout_ms"
+      ],
+      "name": "manage_task",
+      "plugin": "shell-tools",
+      "required": [],
+      "risk_class": "exec",
+      "streams_output": false,
+      "timeout_s": 300.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Reads content from an external Model Context Protocol resource URI.",
+      "input_properties": [
+        "server",
+        "uri"
+      ],
+      "name": "read_resource",
+      "plugin": "bridge-mcp-client",
+      "required": [
+        "uri"
+      ],
+      "risk_class": "read",
+      "streams_output": false,
+      "timeout_s": 600.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Stores a persistent fact, preference, or architectural decision across sessions.",
+      "input_properties": [
+        "key",
+        "text"
+      ],
+      "name": "remember",
+      "plugin": "tool-memory",
+      "required": [
+        "text"
+      ],
+      "risk_class": "read",
+      "streams_output": false,
+      "timeout_s": 600.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Runs a shell command in the workspace via the executor with real-time output streaming and background transition.",
+      "input_properties": [
+        "CommandLine",
+        "Cwd",
+        "WaitMsBeforeAsync",
+        "command",
+        "cwd",
+        "wait_ms_before_async"
+      ],
+      "name": "run_command",
+      "plugin": "shell-tools",
+      "required": [],
+      "risk_class": "exec",
+      "streams_output": false,
+      "timeout_s": 600.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Searches files across the workspace using regex pattern matching with ripgrep or Python fallback.",
+      "input_properties": [
+        "Query",
+        "case_sensitive",
+        "glob_filter",
+        "max_results",
+        "offset",
+        "path",
+        "query"
+      ],
+      "name": "search_codebase",
+      "plugin": "search-tools",
+      "required": [],
+      "risk_class": "read",
+      "streams_output": false,
+      "timeout_s": 60.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Searches remembered facts and previous session turns/transcripts using full-text search.",
+      "input_properties": [
+        "limit",
+        "query",
+        "scope"
+      ],
+      "name": "search_memory",
+      "plugin": "tool-memory",
+      "required": [
+        "query"
+      ],
+      "risk_class": "read",
+      "streams_output": false,
+      "timeout_s": 600.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Reads and displays the contents of a file in the workspace with optional line ranges.",
+      "input_properties": [
+        "end_line",
+        "file_path",
+        "start_line"
+      ],
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "required": [
+        "file_path"
+      ],
+      "risk_class": "read",
+      "streams_output": false,
+      "timeout_s": 600.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Loads and displays the complete playbook instructions and methodology for a specialized skill.",
+      "input_properties": [
+        "skill_name"
+      ],
+      "name": "view_skill",
+      "plugin": "tool-skills",
+      "required": [
+        "skill_name"
+      ],
+      "risk_class": "read",
+      "streams_output": false,
+      "timeout_s": 600.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Creates a new file or completely overwrites an existing file in the workspace.",
+      "input_properties": [
+        "content",
+        "file_path"
+      ],
+      "name": "write_to_file",
+      "plugin": "fs-tools",
+      "required": [
+        "content",
+        "file_path"
+      ],
+      "risk_class": "write",
+      "streams_output": false,
+      "timeout_s": 600.0
+    }
+  ],
+  "ui": {
+    "client_commands": [
+      "cancel_turn",
+      "economics",
+      "models.list",
+      "resolve_approval",
+      "sessions.create",
+      "sessions.list",
+      "sessions.switch",
+      "settings.get",
+      "settings.set",
+      "submit_turn"
+    ],
+    "data_attributes": {
+      "action": [
+        "cards.js:approve-approval",
+        "cards.js:deny-approval",
+        "index.html:new-session",
+        "index.html:send",
+        "index.html:stop",
+        "settings.js:save-secret"
+      ]
+    },
+    "events_without_renderer": [
+      "hook.fired",
+      "model.completed",
+      "model.notice",
+      "model.started",
+      "model.tool_call",
+      "plugin.error",
+      "plugin.loaded"
+    ],
+    "routes": [
+      "/",
+      "/artifacts/{filename}",
+      "/auth/ticket",
+      "/commands/{name}",
+      "/events",
+      "/health",
+      "/preview",
+      "/ui"
+    ],
+    "unknown_client_commands": []
+  },
+  "version": "0.2.1"
+}

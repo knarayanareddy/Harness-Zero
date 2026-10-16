@@ -1,0 +1,10 @@
+# Identifiers the docs may name without them being in the catalog (WS-02 refs check).
+# Every entry needs a reason on the line above it; these are all *historical* names.
+# The mock provider is configured through CLI flags; the key moved to the plugin namespace in P7.
+providers.mock.script_file
+# Removed in P7 because no code read them — CHANGELOG and review notes still name them, and a
+# removed setting is exactly the kind of thing the history has to be able to say.
+kernel.security.jail_enabled
+plugins.openai-compat.default_model
+# The unreachable legacy fallback that P7 deleted from bridge-mcp-client (R37).
+extensions.mcp_servers

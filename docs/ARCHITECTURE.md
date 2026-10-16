@@ -20,7 +20,7 @@ harness ui                       harness run / interactive
               │ Commands.dispatch / EventBus │
 ┌─────────────▼──────────────────────────────▼─────────────┐
 │ Kernel (harness/kernel, ≈5.7k lines)                      │
-│  bootstrap → registry(35 plugins) → gate → runner → bus   │
+│  bootstrap → registry(all plugins) → gate → runner → bus   │
 └───────────────────────────────────────────────────────────┘
 ```
 
@@ -58,7 +58,7 @@ worktree), `stores` (jsonl_transcript, cost_ledger, fts5_search, fs_artifacts), 
 instructions_files, memories, repo_map, skills_catalog, tool_guidance), `strategies` (single_loop,
 architect_editor), `hooks` (checkpoints), `bridges` (mcp_client, mcp_server, acp, shell_hooks). The SDK
 contracts they implement are in [`architecture/CONTRACTS.md`](architecture/CONTRACTS.md); the catalogue in
-[`PLUGIN_CATALOG.md`](PLUGIN_CATALOG.md); authoring in [`PORTING_RECIPES.md`](PORTING_RECIPES.md).
+[`docs/catalog/PLUGINS.md`](catalog/PLUGINS.md) (generated — `harness catalog gen`, gated by `harness catalog --check` and by `tests/kernel/test_catalog.py`); authoring in [`PORTING_RECIPES.md`](PORTING_RECIPES.md).
 
 ## 3. Command catalogue
 

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | specified |
+| Status | **executed** in consolidation P7 (PR #5) — `harness catalog gen \| --check \| readme`, `docs/catalog/{PLUGINS,TOOLS,SETTINGS,EVENTS,COMMANDS,UI_CONTRACT}.md` + `catalog.json`, settings ownership (`x-namespace` / `x-alias-namespaces` / `x-secrets`), `commands.settings_schema` reduced to the aggregation, CI runs `--check drift,settings,ui`. Deferred: `readmes` and `scenarios` run as warnings (`--strict` fails them), the `refs` check is scoped to namespaced setting keys, and `scaffold --kind tool/policy/hook/store` is not implemented |
 | Depends on | §8 critical path merged; WS-01 preferred first (scenario-coverage check needs scenario manifests) |
 | Effort | 1–2 days (+½ day per later WS to keep gates extended) |
 | Principles | P4 (primary), P2, P6 |

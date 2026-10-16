@@ -27,7 +27,8 @@ class MCPServerBridgePlugin:
         settings = getattr(ctx, "settings", None)
         expose_list: list[str] | None = None
         if settings:
-            expose_list = settings.get("plugins.mcp-server.expose")
+            # Own namespace first, then the pre-0.2 spelling kept in older settings files.
+            expose_list = settings.get("expose") or settings.get("plugins.mcp-server.expose")
 
         # Expose provider reading tools from registry if available
         def _get_tools():

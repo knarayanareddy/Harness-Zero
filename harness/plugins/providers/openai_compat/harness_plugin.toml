@@ -6,3 +6,6 @@ summary = "Universal OpenAI-compatible LLM Provider (OpenAI, OpenRouter, DeepSee
 provides = ["provider"]
 capabilities = ["net", "secrets"]
 entry = "harness.plugins.providers.openai_compat.plugin:OpenAICompatPlugin"
+
+[settings]
+schema = "settings.schema.json"

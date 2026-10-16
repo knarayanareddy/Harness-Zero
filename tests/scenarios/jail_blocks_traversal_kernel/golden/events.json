@@ -12,6 +12,7 @@
     "data": {
       "model": "replay-v1",
       "options": {
+        "max_iterations": 20,
         "media": [],
         "model": "replay-v1",
         "prompt": "Read /etc/hostname and write a file one level up.",

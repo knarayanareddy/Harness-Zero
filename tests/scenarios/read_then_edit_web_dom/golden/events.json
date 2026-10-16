@@ -12,6 +12,7 @@
     "data": {
       "model": "replay-v1",
       "options": {
+        "max_iterations": 20,
         "media": [],
         "model": "replay-v1",
         "prompt": "Rename greet() to hello() in app.py",

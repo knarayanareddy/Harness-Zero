@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — P7 / WS-02 generated catalogues and freshness gates
+- New `harness catalog` group: `gen` rewrites `docs/catalog/{PLUGINS,TOOLS,SETTINGS,EVENTS,COMMANDS,UI_CONTRACT}.md`
+  and `catalog.json` from a booted kernel; `--check [section]` gates them (`drift`, `settings`, `readmes`, `ui`,
+  `scenarios`, `refs`); `readme <plugin>` prints the README Configuration table. `docs/PLUGIN_CATALOG.md` is deleted
+  in favour of the generated plugin list.
+- Settings ownership moved to the plugins: nine built-in plugins now ship `settings.schema.json` (with
+  `x-namespace`, `x-alias-namespaces` for compatibility spellings and `x-secrets` for the secret keys they read), the
+  registry registers them at load, and `Commands.settings_schema` is the aggregation of registered schemas.
+  `kernel.request_timeout_s` and `kernel.plugins.capabilities` are declared; `kernel.security.jail_enabled` and
+  `plugins.openai-compat.default_model` — settings the panel offered with no reader — are gone.
+- Fixed: provider `base_url` / mock `script_file` settings could never resolve (the namespaced view prefixed the
+  absolute key the plugin read), so `harness run --mock-script` and a hand-edited `settings.json` were ignored (R36);
+  `kernel.max_tool_iterations` was shown in the panel but never applied — `TurnRunner` now seeds `max_iterations`
+  from it (R38); `harness plugin info <name>` raised `AttributeError` (R35); the web client carried a second,
+  invented copy of the settings schema that replaced the kernel's on any fetch error (R32).
+- `bridge-mcp-client` dropped its third, unreachable `extensions.mcp_servers` fallback (R37).
+- New tests: `tests/kernel/test_settings_declared.py` (every read declared; every panel setting read),
+  `tests/kernel/test_catalog.py` (catalogue = tree, commands = dispatcher, events = SDK, committed docs = fresh boot),
+  `tests/plugins/test_provider_settings.py`, and a plugin-to-plugin import guard in `tests/kernel/test_import_boundaries.py`.
+- CI runs `harness catalog --check --section drift --section settings --section ui` in place of the single-file
+  events-schema diff (the drift check covers that file too, and `pytest -q` runs it as well).
+
 ### Changed — P6 version and document hygiene
 - Released sections `[0.2.1]`, `[0.2.0]`, `[0.1.0]` below are restored byte-for-byte to their git tags; the post-tag
   edits made in `158c836` are recorded in the "`main @ 158c836` remediation" block of this `[Unreleased]` section.

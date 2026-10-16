@@ -22,7 +22,7 @@ class MockProviderPlugin:
     async def setup(self, ctx: PluginContext) -> None:
         script_file: Path | None = None
         if ctx.settings is not None and hasattr(ctx.settings, "get"):
-            sf = ctx.settings.get("providers.mock.script_file")
+            sf = ctx.settings.get("script_file")
             if sf:
                 script_file = Path(sf)
 

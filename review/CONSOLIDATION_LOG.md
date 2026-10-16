@@ -21,6 +21,7 @@ what the flow test showed, what moved in the goldens and why). §3 collects defe
 | **P3** ✔ | 4.2 two styling systems; 4.3 facade remnants | One styling system: `styles.css` rewritten (components only) + compiled Tailwind `vendor/tw.css` (CSP-safe, committed, CI-checked) · artifact cards into the Artifacts tab · `tool.output.delta` into the tool card · terminal drawer, slash menu and every static pill removed or made live · `.hidden` finally defined (R14) | `python additions/tools/ui_audit.py --strict` exit 0 · `grep -c 'style="' app.js` = 0 · `tests/frontends/test_ui_coherence.py` (audit + jsdom cascade) · 21 scenarios strict |
 | **P4** ✔ | 4.7 provider truth | `Provider.is_configured()` / `is_reachable()` in the SDK contract, implemented by all five providers + `ScriptedProvider`; `models.list` → `ModelRow` with `status` ready / needs_key / unreachable, concurrent probes, never raises, DEBUG only; Ollama 300 ms probe cached 30 s; `_is_provider_configured` deleted; registry rejects providers that skip the contract; picker groups by status | `tests/plugins/test_provider_readiness.py` (hermetic bootstrapped `models.list`) · `test_ollama.py` probe tests · contract tests · 21 scenarios strict |
 | **P5** ✔ | 4.5 tests in four places | `additions/scenarios` → `tests/scenarios` (in plain `pytest -q`); `ui_audit.py` → `tests/frontends/`; both `ui_smoke.mjs` + `test_ui_smoke.py` deleted, their unique checks absorbed by the DOM lane; vacuous S1 deleted; one `package.json` (jsdom + tailwindcss, `npm ci`); CI runs everything with `SCENARIO_DOM_WAIT_MS=6000` | `pytest -q` → 406 in one invocation (incl. 21 scenarios) · `find . -name package.json -not -path '*/node_modules/*' \| wc -l` = 1 · no `ui_smoke*` |
+| **P7** ✔ | WS-02 (dsh pack): generated catalogues + freshness gates | `harness catalog gen/--check/readme`, `docs/catalog/*` generated from a booted kernel, settings ownership moved into plugin `settings.schema.json` files, `Commands.settings_schema` reduced to an aggregation | `harness catalog --check` exit 0 · `tests/kernel/test_settings_declared.py` + `tests/kernel/test_catalog.py` in `pytest -q` · 21 scenarios strict |
 | **P6** ✔ | 4.6 version/doc drift | Released CHANGELOG sections restored to their tags and SHA-pinned; `/health.version` = `harness.__version__`; `BUILTIN_COMMANDS` as the one command catalogue; dead `sessions_index.jsonl` + `TranscriptStore.list_sessions` removed; `docs/ARCHITECTURE.md` written from the code and pinned by `tests/test_docs_and_versions.py`; the 22 research syntheses moved to `docs/research/`; README counts replaced by the real gate; `TurnInProgress` → 409 over HTTP; path-length-dependent `request_tokens_estimate` dropped from goldens (R31) | `tests/test_docs_and_versions.py` (version = pyproject = doc title; every command/event/card documented; released sections immutable) · `pytest -q` → 411 · 21 scenarios strict |
 
 Order is deliberate: P1 first because every later phase (UI, sessions, providers) needs a stable wire contract to
@@ -559,6 +560,47 @@ wrote a `sessions_index.jsonl` on every append that nothing read; the command di
 | `SCENARIO_DOM_WAIT_MS=6000 pytest -q` | **411 passed in 5:04** (406 + 4 doc/version tests + 1 HTTP 409 test) — first run showed R31 (`jail_blocks_traversal_kernel`, estimate 73 → 74), fixed, then 21/21 strict |
 | `harness plugin test --all` | 180 passed |
 
+### P7 — WS-02: generated catalogues and freshness gates — **DONE**
+
+*Why it is in this plan*: the pack's WS-02 is the mechanism that would have caught P6's and P4's
+whole class of bug — a reference document, a UI list or a settings panel keeping its own copy of a
+fact the kernel owns. The consolidation fixed the individual copies (P1 events, P3 live pills, P6 docs
+test); this phase removes the possibility of new ones by generating the reference docs from a booted
+kernel and gating them.
+
+*What was built*
+
+| Piece | Detail |
+| :-- | :-- |
+| `harness/kernel/catalog.py` | `build_catalog()` boots the kernel and reads `registry.discovered`, the tool table, the registered settings schemas, `EVENT_PAYLOADS`, `CARD_FIELDS`, `BUILTIN_COMMANDS`, a static parse of the shipped client (subscribed events, `command('…')` calls), the daemon's route table and `tests/scenarios/*/golden/events.json`. Renders the six markdown catalogues + `catalog.json`; every renderer is a pure function of that dict, so `--check drift` compares in memory without touching the tree. |
+| `harness/cli_catalog.py` | `harness catalog gen` · `harness catalog --check [--section drift\|settings\|readmes\|ui\|scenarios\|refs] [--strict] [--format json]` · `harness catalog readme <plugin>`. Wired into `harness --help`. |
+| Settings ownership | Nine plugins ship `settings.schema.json` with `x-namespace` (the plugin's own `plugins.<name>` by default), `x-alias-namespaces` (a compatibility spelling may rename the leaf: legacy `plugins.mcp-client.servers`) and `x-secrets` (the secret keys it reads). `PluginRegistry._register_settings_schema` registers them *before* `setup()` so a plugin's own default resolves during boot; `_register_secrets_schema` merges the secret keys into the `secrets` UI namespace. |
+| `Commands.settings_schema` | The hand-coded 11-property dict is gone; the response is the aggregation of registered schemas (kernel properties that carry `x-ui`, plus every plugin property), with the provider and strategy enums taken from the components that actually loaded. Same `{groups, properties}` shape, so `settings.js` renders it unchanged. |
+| `settings.js` | Its second, invented copy of the settings schema (a fallback used when the fetch failed, containing keys that never existed) is deleted; the panel now shows an explicit "Settings schema unavailable" state instead of a plausible-looking wrong form. |
+| Boundary | `tests/kernel/test_import_boundaries.py::test_plugins_do_not_import_sibling_plugins` — plugins compose through the registry, never by importing each other. |
+
+*Flow test and gate after P7*
+
+| Gate | Result |
+| :-- | :-- |
+| `harness catalog --check` | `drift` ok · `settings` ok (40 declared, all reads declared, none dead) · `ui` ok (client calls 10 registered commands) · `readmes` warn 34/35 · `scenarios` warn 7/12 tools · `refs` ok after `docs/catalog/refs.allow` |
+| `SCENARIO_DOM_WAIT_MS=6000 pytest tests/scenarios -q` | **21 passed** (goldens re-baselined for `turn.started.options.max_iterations`, see R38; the diff is that one key and nothing else) |
+| `pytest -q` | **430 passed** — one invocation, includes the 16 new catalog/settings/provider tests |
+| `ruff check .` / `ui_audit.py --strict` / `tw.css` diff | clean |
+
+*Deferred on purpose* (recorded in `review/dsh-integration/WS-02_generated_catalogs_gates.md`)
+
+- `readmes` and `scenarios` are warnings; `--strict` promotes both to failures. Closing them means writing
+  the five-section README for 34 plugins and covering 5 tools + 11 commands — real work that belongs with
+  the features that make those tools interesting (WS-03/WS-07/WS-08), not in a docs sweep. `bridge-mcp-client`
+  is the first README converted to the template, so the shape is proven.
+- `refs` is scoped to namespaced setting keys (`kernel.*`, `plugins.*`, …) plus commands and event types; a
+  general "every backticked identifier must exist" rule produced mostly noise on prose.
+- `harness catalog gen --out`, `verify-package-readmes`-style per-package README linting and the
+  `scaffold --kind tool/policy/hook/store` templates were not built; the scaffold still emits `context` only.
+- `docs/events.schema.json` stays where it is and is still produced by `harness events schema`; the drift
+  check now covers it, replacing the single-file `diff` step in CI.
+
 ---
 
 ## 3. Defects found while executing (continuing the review's numbering)
@@ -588,6 +630,14 @@ wrote a `sessions_index.jsonl` on every append that nothing read; the command di
 | R28 | `sdk/contracts.py` | `TranscriptStore.list_sessions` in the Protocol, scaffold and CONTRACTS doc with no caller; contradicted the kernel-owned lifecycle. | P6: dropped from contract, scaffold, doc |
 | R29 | `kernel/commands.py` | `dispatch` resolved any `getattr(self, name)` — no catalogue existed to document or test the command surface. | P6: `BUILTIN_COMMANDS`; doc test |
 | R30 | `README.md`, `docs/` | Hard-coded "56+ test files, 340+ tests" (stale by 70); 22 research syntheses at `docs/` root beside the three product documents; no end-to-end architecture document; `review/`, `additions/`, `docs/` with no stated relationship. | P6: counts removed; `docs/research/`; `docs/ARCHITECTURE.md`; README §5 reading order + history section |
+| R32 | `frontends/web/static/settings.js`, `kernel/commands.py` | The settings surface existed twice: the kernel hand-coded 11 properties (including `kernel.security.jail_enabled`, which no code reads) and the client hand-coded a *different* fallback list with keys that never existed (`kernel.model.default`, `kernel.security.allow_shell_execution`), which silently replaced the kernel's schema whenever the fetch failed. | P7: both deleted; the panel is the aggregation of registered schemas; a failed fetch is an explicit error state |
+| R33 | `sdk/manifest.py`, `kernel/settings.py` | `PluginManifest.settings_schema` and `SettingsStore.register_schema()` existed with **zero** users: every plugin setting (`servers`, `hooks`, `expose`, `context.repo_map.*`, provider base URLs, `script_file`) was read undeclared — no default, no validation, no UI row. | P7: nine plugins ship `settings.schema.json`; the loader registers them; `harness catalog --check settings` fails on any undeclared read |
+| R34 | `kernel/settings.py` | `kernel.request_timeout_s` (three providers) and `kernel.plugins.capabilities.<name>` (registry) were read but absent from `KERNEL_SCHEMA`. | P7: declared, with the capability container left open for its dynamic suffix |
+| R35 | `kernel/commands.py` | `plugins_info` read `dp.path`; `DiscoveredPlugin` has no such attribute, so `harness plugin info <name>` raised `AttributeError`. No test touched the command. | P7: `plugin_dir()` helper (`harness/kernel/plugin_paths.py`); covered by `test_catalog.py` |
+| R36 | `plugins/providers/*`, `harness/cli.py` | Providers read absolute keys (`providers.anthropic.base_url`, `providers.mock.script_file`) through `ctx.settings`, which is a *namespaced view*: the read became `plugins.provider-anthropic.providers.anthropic.base_url`, so the documented key — and `harness run --mock-script` — could never reach the provider. | P7: plugins read their own relative keys, schemas declare `plugins.provider-<name>.*`, the CLI writes that key; `tests/plugins/test_provider_settings.py` proves a configured value lands on the provider |
+| R37 | `plugins/bridges/mcp_client` | A third fallback, `settings.get("extensions.mcp_servers")`, was dead for the same reason (the view re-prefixed it to a key that does not exist). | P7: removed rather than declared — nothing could ever have been using it |
+| R38 | `kernel/runner.py` | `kernel.max_tool_iterations` was in the settings panel and in `KERNEL_SCHEMA`, but the strategies used their own literal `20`, so the control changed nothing. | P7: `TurnRunner.execute_turn` seeds `max_iterations` from the setting when the caller did not pass one (a per-turn override still wins); 21 goldens gained the key in `turn.started.options`, which is the point — the recorded turn now shows the cap that applied |
+| R39 | `plugins/providers/gemini` | The panel offered `secrets.GEMINI_API_KEY` only, while the provider also accepts `GOOGLE_API_KEY`. | P7: both declared via `x-secrets`, so the list is generated |
 | R31 | `tests/scenarios/_lib/normalize.py` | Goldens pinned `model.started.request_tokens_estimate` = prompt chars ÷ 4, which includes the tmp workspace path — flipped 73 → 74 when the pytest tmp counter reached three digits (the unexplained transient failure of P3). | P6: key dropped from goldens (22 files, only those lines) |
 
 ---
