@@ -17,6 +17,7 @@ from typing import Any
 from harness.kernel.bus import EventBus
 from harness.kernel.registry import PluginRegistry
 from harness.kernel.settings import SettingsStore
+from harness.kernel.transcript import TranscriptLog
 from harness.kernel.validators import validate_session_id
 from harness.sdk.errors import TurnInProgress
 from harness.sdk.events import Event, SessionStarted, SessionSwitched
@@ -133,6 +134,13 @@ class Session:
             else:
                 transcript_store = reg_store
         self.transcript = transcript_store or _NullTranscriptStore(self.session_dir)
+        # WS-04: the log is the session's single record stream, built here rather than lazily so that
+        # whoever touches it first — the runner, `sessions.get`, a test — gets *this* store instance.
+        # Two stores over one JSONL file each keep their own step counter, which is how the runner and
+        # the session came to disagree about what had been written.
+        self._log = TranscriptLog.for_session(
+            self.session_dir, session_id=self.session_id, store=self.transcript
+        )
 
         # Concurrency control: one turn per session
         self._lock = asyncio.Lock()
@@ -181,9 +189,18 @@ class Session:
             if self._lock.locked():
                 self._lock.release()
 
+    @property
+    def log(self) -> TranscriptLog:
+        """`TranscriptLog` over this session's store (WS-04)."""
+        return self._log
+
     async def get_history(self, since_step: int = 0) -> list[dict[str, Any]]:
-        """Returns transcript records for this session."""
-        return await self.transcript.read(since_step=since_step, compact=False)
+        """Returns transcript records for this session, upgraded to the current record version.
+
+        Reads through the log rather than the store so a v1 file and a freshly written v2 record are
+        indistinguishable to callers (`sessions.get`, the reload-equals-live test, the web client).
+        """
+        return await self.log.read(since_step=since_step, compact=False)
 
     def ensure_git_exclude(self) -> None:
         """Writes /.harness/ to .git/info/exclude if applicable (§5.1)."""

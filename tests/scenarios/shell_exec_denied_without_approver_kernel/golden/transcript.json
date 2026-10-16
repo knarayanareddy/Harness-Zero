@@ -1,12 +1,14 @@
 [
   {
     "content": "Create ran.txt with the shell.",
-    "metadata": {},
+    "kind": "user.message",
     "role": "user",
-    "step_index": 1
+    "step_index": 1,
+    "v": 2
   },
   {
     "content": "",
+    "kind": "assistant.message",
     "metadata": {
       "stop_reason": "tool_use",
       "usage": {
@@ -25,10 +27,12 @@
         "id": "evt#1",
         "name": "run_command"
       }
-    ]
+    ],
+    "v": 2
   },
   {
     "content": "",
+    "kind": "tool.result",
     "metadata": {
       "tool_results": true
     },
@@ -45,10 +49,12 @@
         "is_error": true,
         "tool_use_id": "call#1"
       }
-    ]
+    ],
+    "v": 2
   },
   {
     "content": "The command was not permitted, nothing was executed.",
+    "kind": "assistant.message",
     "metadata": {
       "stop_reason": "end_turn",
       "usage": {
@@ -58,6 +64,7 @@
       }
     },
     "role": "assistant",
-    "step_index": 4
+    "step_index": 4,
+    "v": 2
   }
 ]

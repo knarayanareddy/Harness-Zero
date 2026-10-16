@@ -19,6 +19,7 @@ from harness.kernel.gate import PolicyGate
 from harness.kernel.inbox import BackgroundInbox, WakeupEvent
 from harness.kernel.registry import PluginRegistry
 from harness.kernel.settings import SettingsStore
+from harness.kernel.transcript import TranscriptAppendError, TranscriptLog
 from harness.sdk.contracts import CostLedger, Provider, SearchIndex, Strategy, TranscriptStore
 from harness.sdk.errors import ProviderError, SpendCapExceeded
 from harness.sdk.events import (
@@ -207,10 +208,14 @@ class KernelServicesImpl:
         t_store = runner.transcript_store
         if t_store is None and hasattr(self.registry, "stores") and "transcript" in self.registry.stores:
             t_store = self.registry.stores["transcript"][0]
-        if t_store is not None and hasattr(t_store, "for_session"):
-            self.transcript_store = t_store.for_session(self.session_dir)
-        else:
-            self.transcript_store = t_store
+        scoped_store = t_store.for_session(self.session_dir) if t_store is not None and hasattr(t_store, "for_session") else t_store
+        # WS-04: the log is shared with the `Session` object for this directory (see
+        # `TranscriptLog.for_session`), so there is one cache, one step counter and one place that can
+        # fail — and `transcript_store` below is that same store instance rather than a second one.
+        self.log = TranscriptLog.for_session(
+            self.session_dir, session_id=self.session.session_id, store=scoped_store
+        )
+        self.transcript_store = self.log.store
 
         s_index = runner.search_index
         if s_index is None and hasattr(self.registry, "stores") and "search" in self.registry.stores:
@@ -225,7 +230,8 @@ class KernelServicesImpl:
         # Turn state
         self.turn_cost_usd: float = 0.0
         self.turn_unknown_pricing: bool = False
-        self.transcript_records: list[dict[str, Any]] = []
+        # WS-04: the transcript log is the source of truth; there is no parallel in-memory record list
+        # any more. `log.records` is the log's own read-through cache, appended to by `record()`.
         self._pricing_cache: dict[str, tuple[float, float]] = {}
 
         # Spend cap resolution
@@ -289,7 +295,7 @@ class KernelServicesImpl:
         return await self.compactor.maybe_compact(
             session_id=self.session.session_id,
             blocks=all_blocks,
-            records=self.transcript_records,
+            records=self.log.records,
             provider=provider,
             model=req.model,
             bus=self.bus,
@@ -309,7 +315,7 @@ class KernelServicesImpl:
         if self.assembler:
             return await self.assembler.assemble(
                 session_id=self.session.session_id,
-                history_records=self.transcript_records,
+                history_records=self.log.records,
                 prompt=prompt,
                 media=media,
                 tools=active_tools,
@@ -318,8 +324,8 @@ class KernelServicesImpl:
             )
 
         # Fallback simple assembly
-        from harness.kernel.context import records_to_messages
-        messages = records_to_messages(self.transcript_records)
+        from harness.kernel.context import derive_messages
+        messages = derive_messages(self.log.records)
         return ModelRequest(
             model=model_name,
             system=[],
@@ -609,16 +615,13 @@ class KernelServicesImpl:
             tool_calls=tool_calls,
             tool_results=tool_results,
             metadata=msg.metadata,
-        ).to_dict()
+        )
 
-        self.transcript_records.append(rec)
-        step_idx = len(self.transcript_records)
-
-        if self.transcript_store:
-            try:
-                step_idx = await self.transcript_store.append(rec)
-            except Exception as e:
-                logger.warning(f"Error appending transcript record: {e}")
+        # Fail closed (WS-04 §1.3): a step that cannot be logged does not happen. Continuing would let
+        # the model act on a conversation that no longer exists anywhere — and the turn would look
+        # normal until someone reloaded the session and found half of it missing.
+        step_idx = await self.log.append(rec)
+        rec = self.log.records[-1]
 
         if self.search_index:
             try:
@@ -795,20 +798,18 @@ class TurnRunner:
             depth=depth,
         )
 
-        # Load existing session transcript records into KernelServices
-        if services.transcript_store:
-            try:
-                existing = await services.transcript_store.read(compact=False)
-                services.transcript_records = list(existing or [])
-            except Exception as e:
-                logger.warning(f"Could not load session transcript history: {e}")
-                services.transcript_records = []
+        # Load the session's log for this turn. `force` because another process (or a session switch)
+        # may have appended since this session object was first read.
+        try:
+            await services.log.load(compact=False, force=True)
+        except Exception as e:
+            logger.warning(f"Could not load session transcript history: {e}")
 
         # WS-03: hooks that need session history (read-before-edit) read it from here instead of
         # keeping a private copy. `turn_state` is per turn — services are rebuilt each turn — and
         # this is the same list object the runner appends to, so the ledger a guard sees includes the
         # read that happened two steps ago in this very turn, and nothing from the next turn.
-        services.turn_state["records"] = services.transcript_records
+        services.turn_state["records"] = services.log.records
 
         turn_ctx = TurnContextImpl(
             session=session,
@@ -820,13 +821,6 @@ class TurnRunner:
             cancel=cancel,
         )
 
-        # Record user Message
-        user_blocks = [TextBlock(text=prompt)]
-        if media:
-            user_blocks.extend(media)
-        user_msg = Message(role=Role.USER, content=user_blocks)
-        await services.record(user_msg)
-
         # 4. Resolve Strategy
         strategy: Strategy
         reg_strat = self.registry.get_strategy(strat_name)
@@ -837,6 +831,14 @@ class TurnRunner:
 
         # 5. Execute Strategy
         try:
+            # Record user Message — inside the guarded region on purpose. Logging is what makes a step
+            # real, so if the prompt cannot be written the model is not called at all (WS-04 §1.3);
+            # a turn that ran but was not recorded is a turn that did not happen.
+            user_blocks = [TextBlock(text=prompt)]
+            if media:
+                user_blocks.extend(media)
+            await services.record(Message(role=Role.USER, content=user_blocks))
+
             result = await strategy.run(turn_ctx, services)
         except asyncio.CancelledError:
             if self.bus:
@@ -879,6 +881,30 @@ class TurnRunner:
                     )
                 )
             return TurnResult(output="", error=str(e), stop_reason="error")
+        except TranscriptAppendError as e:
+            # The log *is* the conversation. If a step cannot be written, the turn stops here instead of
+            # carrying on over a history nobody will ever read again — the alternative is a session that
+            # looks normal live and is missing turns on reload. Not retryable: earlier steps of this turn
+            # are already logged, so re-running it would append them twice.
+            logger.error(f"Turn aborted: {e}")
+            if self.bus:
+                self.bus.publish(
+                    Event(
+                        type="turn.error",
+                        session_id=session.session_id,
+                        turn_id=turn_id,
+                        data=TurnError(
+                            message=(
+                                "The session log could not be written, so the turn was stopped rather "
+                                f"than continue unrecorded ({e.reason}). Nothing was lost that was not "
+                                "already written."
+                            ),
+                            kind="transcript_append_failed",
+                            retryable=False,
+                        ),
+                    )
+                )
+            return TurnResult(output="", error=str(e), stop_reason="transcript_append_failed")
         except Exception as e:
             logger.exception(f"Turn execution error: {e}")
             if self.bus:

@@ -1,12 +1,14 @@
 [
   {
     "content": "Plan the architecture using the code-architect skill.",
-    "metadata": {},
+    "kind": "user.message",
     "role": "user",
-    "step_index": 1
+    "step_index": 1,
+    "v": 2
   },
   {
     "content": "Loading the playbook first.",
+    "kind": "assistant.message",
     "metadata": {
       "stop_reason": "tool_use",
       "usage": {
@@ -25,10 +27,12 @@
         "id": "evt#1",
         "name": "view_skill"
       }
-    ]
+    ],
+    "v": 2
   },
   {
     "content": "",
+    "kind": "tool.result",
     "metadata": {
       "tool_results": true
     },
@@ -45,10 +49,12 @@
         "is_error": false,
         "tool_use_id": "call#1"
       }
-    ]
+    ],
+    "v": 2
   },
   {
     "content": "Loaded the code-architect playbook; proceeding with an architecture plan.",
+    "kind": "assistant.message",
     "metadata": {
       "stop_reason": "end_turn",
       "usage": {
@@ -58,6 +64,7 @@
       }
     },
     "role": "assistant",
-    "step_index": 4
+    "step_index": 4,
+    "v": 2
   }
 ]

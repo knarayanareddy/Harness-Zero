@@ -152,7 +152,7 @@ harness plugin doctor --all
 ## 4. Verification & Testing
 
 Harness-Zero uses hermetic, isolated test fixtures that never pollute `$HOME` or external environments. One
-invocation runs everything — kernel, plugins, frontends, e2e acceptance and the 21 record/replay
+invocation runs everything — kernel, plugins, frontends, e2e acceptance and the 24 record/replay
 flow-of-information scenarios that drive the shipped web client in jsdom against a real daemon
 (`tests/scenarios/`, needs `node` + `npm ci`):
 

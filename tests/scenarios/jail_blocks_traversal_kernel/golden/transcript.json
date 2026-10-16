@@ -1,12 +1,14 @@
 [
   {
     "content": "Read /etc/hostname and write a file one level up.",
-    "metadata": {},
+    "kind": "user.message",
     "role": "user",
-    "step_index": 1
+    "step_index": 1,
+    "v": 2
   },
   {
     "content": "",
+    "kind": "assistant.message",
     "metadata": {
       "stop_reason": "tool_use",
       "usage": {
@@ -25,10 +27,12 @@
         "id": "evt#1",
         "name": "view_file"
       }
-    ]
+    ],
+    "v": 2
   },
   {
     "content": "",
+    "kind": "tool.result",
     "metadata": {
       "tool_results": true
     },
@@ -45,10 +49,12 @@
         "is_error": true,
         "tool_use_id": "call#1"
       }
-    ]
+    ],
+    "v": 2
   },
   {
     "content": "",
+    "kind": "assistant.message",
     "metadata": {
       "stop_reason": "tool_use",
       "usage": {
@@ -68,10 +74,12 @@
         "id": "evt#2",
         "name": "write_to_file"
       }
-    ]
+    ],
+    "v": 2
   },
   {
     "content": "",
+    "kind": "tool.result",
     "metadata": {
       "tool_results": true
     },
@@ -88,10 +96,12 @@
         "is_error": true,
         "tool_use_id": "call#2"
       }
-    ]
+    ],
+    "v": 2
   },
   {
     "content": "Both attempts were blocked by the workspace jail.",
+    "kind": "assistant.message",
     "metadata": {
       "stop_reason": "end_turn",
       "usage": {
@@ -101,6 +111,7 @@
       }
     },
     "role": "assistant",
-    "step_index": 6
+    "step_index": 6,
+    "v": 2
   }
 ]

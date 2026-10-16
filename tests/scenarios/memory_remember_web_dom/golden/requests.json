@@ -226,7 +226,7 @@
         "content": [
           {
             "is_error": false,
-            "tool_result": "Found 2 matches for 'Falcon':\n\n- fact #1: codename: Project codename is Falcon\n- [<session> step 0] Remember the codename is [Falcon]"
+            "tool_result": "Found 2 matches for 'Falcon':\n\n- fact #1: codename: Project codename is Falcon\n- [<session> step 1] Remember the codename is [Falcon]"
           }
         ],
         "role": "user"

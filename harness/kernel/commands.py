@@ -194,7 +194,11 @@ class Commands:
         if not session:
             raise HarnessError(f"Session '{session_id}' not found")
 
-        records = await session.transcript.read(compact=False)
+        # Read through the session log, not the raw store: v1 lines get upgraded and gain a `kind`, so
+        # the client renders a reloaded session with exactly the records the live session produced
+        # (WS-04). `records` is the one history shape the UI consumes — there is no second `history` key
+        # to keep in step with it.
+        records = await session.get_history()
         return {
             "session_id": session_id,
             "workspace": str(session.workspace),

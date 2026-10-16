@@ -1,12 +1,14 @@
 [
   {
     "content": "Question one",
-    "metadata": {},
+    "kind": "user.message",
     "role": "user",
-    "step_index": 1
+    "step_index": 1,
+    "v": 2
   },
   {
     "content": "Answer one: Amsterdam.",
+    "kind": "assistant.message",
     "metadata": {
       "stop_reason": "end_turn",
       "usage": {
@@ -16,16 +18,19 @@
       }
     },
     "role": "assistant",
-    "step_index": 2
+    "step_index": 2,
+    "v": 2
   },
   {
     "content": "Question two",
-    "metadata": {},
+    "kind": "user.message",
     "role": "user",
-    "step_index": 3
+    "step_index": 3,
+    "v": 2
   },
   {
     "content": "Answer two: Rotterdam.",
+    "kind": "assistant.message",
     "metadata": {
       "stop_reason": "end_turn",
       "usage": {
@@ -35,6 +40,7 @@
       }
     },
     "role": "assistant",
-    "step_index": 4
+    "step_index": 4,
+    "v": 2
   }
 ]

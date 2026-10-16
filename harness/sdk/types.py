@@ -5,6 +5,7 @@ All types are slot dataclasses or string enums, fully serializable to and from d
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -196,9 +197,74 @@ class Message:
         )
 
 
+RECORD_KINDS: tuple[str, ...] = (
+    # Session facts, in the order they can appear. Every model-visible or user-visible fact is one of
+    # these (WS-04: "model-visible ⇒ logged"); the log is the source of truth and `derive_messages` is
+    # the only producer of a `ModelRequest.messages` list.
+    "turn.started",
+    "turn.completed",
+    "turn.error",
+    "turn.cancelled",
+    "user.message",
+    "assistant.message",
+    "tool.call",
+    "tool.decision",
+    "approval.requested",
+    "approval.resolved",
+    "tool.result",
+    "ui.card",
+    "compaction.summary",
+    "system.notice",
+    "settings.changed",
+    "checkpoint.created",
+    # reserved for WS-10 (background jobs / goals); declared so the catalogue and the upgrader know them
+    "job.started",
+    "job.completed",
+    "goal.created",
+    "goal.completed",
+)
+
+RecordKind = str  # Literal[RECORD_KINDS] is not expressible; validated by `infer_record_kind`
+
+
+def infer_record_kind(
+    *,
+    role: str = "",
+    tool_calls: Sequence[Any] = (),
+    tool_results: Sequence[Any] = (),
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    """The record kind for a v1 record that never declared one.
+
+    Order matters: a compaction summary is a system message that must be findable as such, and a
+    tool-result carrier is a *user-role* message in this transcript format (§4.1 #4), so role alone
+    cannot tell the two apart.
+    """
+    md = metadata or {}
+    if md.get("compaction_summary"):
+        return "compaction.summary"
+    if tool_results:
+        return "tool.result"
+    if tool_calls or role == "assistant":
+        return "assistant.message"
+    if role == "user":
+        return "user.message"
+    if role in ("", "system", "tool"):
+        return "system.notice"
+    return "system.notice"
+
+
 @dataclass(slots=True)
 class TranscriptRecord:
-    role: str  # "user", "assistant", "system"
+    """One appended fact in a session's transcript (v2).
+
+    `kind` is what makes the log self-describing: a v1 line had only `role`, so a reloaded session
+    could not tell a tool result from a user message, and cards/approvals were not in it at all.
+    `v` exists so a future format change can be upgraded on read instead of guessed.
+    """
+
+    role: str = ""  # "user", "assistant", "system"
+    kind: str = ""  # one of RECORD_KINDS; derived from role/payload when not given
     content: str = ""
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     tool_results: list[dict[str, Any]] = field(default_factory=list)
@@ -207,9 +273,23 @@ class TranscriptRecord:
     timestamp: float = field(default_factory=time.time)
     metadata: dict[str, Any] = field(default_factory=dict)
     step_index: int | None = None
+    v: int = 2
+
+    def __post_init__(self) -> None:
+        if not self.kind:
+            self.kind = infer_record_kind(
+                role=self.role,
+                tool_calls=self.tool_calls,
+                tool_results=self.tool_results,
+                metadata=self.metadata,
+            )
+        elif self.kind not in RECORD_KINDS:
+            raise ValueError(f"unknown transcript record kind {self.kind!r}")
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
+            "v": self.v,
+            "kind": self.kind,
             "role": self.role,
             "content": self.content,
             "timestamp": self.timestamp,
@@ -265,8 +345,15 @@ class TranscriptRecord:
         if typ == "COMPACTION_SUMMARY":
             metadata["compaction_summary"] = True
 
+        # A kind this build does not know (written by a newer harness, or by a store with its own
+        # vocabulary) is not an error to *read*: fall back to inference so an old client can still
+        # replay a session it cannot fully interpret.
+        disk_kind = str(data.get("kind", "") or "")
+        kind = disk_kind if disk_kind in RECORD_KINDS else ""
+
         return cls(
             role=role,
+            kind=kind,
             content=str(content or ""),
             tool_calls=tool_calls,
             tool_results=tool_results,
@@ -275,6 +362,7 @@ class TranscriptRecord:
             timestamp=float(data.get("timestamp", time.time())),
             metadata=metadata,
             step_index=data.get("step_index"),
+            v=int(data.get("v", 2) or 2),
         )
 
 

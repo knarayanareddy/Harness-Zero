@@ -188,6 +188,18 @@ generated JSON schema (`harness events schema`).
   `transcript.jsonl` compact, `transcript_full.jsonl` with tool payloads). The transcript store holds one session; listing is
   `SessionManager.list_sessions()` → `SessionRow[]` (`title` = first prompt, `turns`, `updated_at`, `active`,
   `busy`), newest activity first.
+* **The log is the source of truth** (WS-04). `TranscriptLog` (`harness/kernel/transcript.py`) owns the
+  write path — one instance per session directory, shared by the turn runner, `Session.log` and
+  `sessions.get`, so there is no in-memory mirror of the conversation to drift from the file. Records are
+  typed and versioned (`kind` ∈ `RECORD_KINDS`, `v: 2`); v1 lines are upgraded *on read* and never
+  rewritten, because an appended line is the audit trail of what was recorded when.
+* `derive_messages` (`harness/kernel/context.py`) is the only producer of a model request's message
+  list: `user.message`, `assistant.message`, `tool.result`, `compaction.summary` and a
+  `system.notice` marked `model_visible` reach the model; decisions, approvals, cards and turn markers
+  are in the log for the user and not in the request. A `tool_use` with no recorded result (a crash
+  between the two) is repaired with an explicit synthetic error result, so a crashed turn cannot wedge
+  the session. Appending is fail-closed: if the store cannot write, the turn stops with
+  `turn.error(kind="transcript_append_failed")` instead of continuing on a history nobody will read.
 * On start, `bootstrap_kernel(resume_session=True)` resumes the newest session that has turns
   (`session.switched`); `harness run` starts fresh unless `--continue`, `harness interactive` resumes unless
   `--new`. The web client **never creates a session at boot**: it connects SSE, lists sessions, renders the
@@ -220,7 +232,7 @@ generated JSON schema (`harness events schema`).
 | `tests/plugins/` | one file per plugin family incl. provider readiness; also `harness plugin test --all` | `pytest tests/plugins -q` |
 | `tests/frontends/` | web server (auth, SSE, commands), static contract tests (handlers/cards/pickers read only contract keys), UI coherence (`ui_audit.py` + jsdom cascade), CLI | `pytest tests/frontends -q` |
 | `tests/e2e/` | S2–S6 acceptance scenarios on a bootstrapped kernel | `pytest tests/e2e -q` |
-| `tests/scenarios/` | 21 record/replay **flow-of-information** scenarios: real kernel → real daemon → the shipped client in jsdom, provider replayed from `provider.jsonl`, goldens for transcript / events / requests / http / timeline | `SCENARIO_DOM_WAIT_MS=6000 pytest tests/scenarios -q` (needs `npm ci`) |
+| `tests/scenarios/` | 24 record/replay **flow-of-information** scenarios: real kernel → real daemon → the shipped client in jsdom, provider replayed from `provider.jsonl`, goldens for transcript / events / requests / http / timeline | `SCENARIO_DOM_WAIT_MS=6000 pytest tests/scenarios -q` (needs `npm ci`) |
 | `tests/test_docs_and_versions.py` | this document and the CHANGELOG stay true to the code | `pytest tests/test_docs_and_versions.py -q` |
 
 Plain `pytest -q` (hermetic: `export HOME=$(mktemp -d); export HARNESS_CONFIG_DIR=$HOME/.harness`) runs all

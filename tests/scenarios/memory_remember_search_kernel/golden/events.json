@@ -249,7 +249,7 @@
               "codename: Project codename is Falcon"
             ],
             [
-              "0",
+              "1",
               "UNKNOWN",
               "Remember the codename is [Falcon]"
             ]
@@ -268,7 +268,7 @@
       "is_error": false,
       "metadata": {},
       "name": "search_memory",
-      "preview": "Found 2 matches for 'Falcon':\n\n- fact #1: codename: Project codename is Falcon\n- [<session> step 0] Remember the codename is [Falcon]"
+      "preview": "Found 2 matches for 'Falcon':\n\n- fact #1: codename: Project codename is Falcon\n- [<session> step 1] Remember the codename is [Falcon]"
     },
     "type": "tool.result"
   },

@@ -1,12 +1,14 @@
 [
   {
     "content": "Create notes.txt",
-    "metadata": {},
+    "kind": "user.message",
     "role": "user",
-    "step_index": 1
+    "step_index": 1,
+    "v": 2
   },
   {
     "content": "",
+    "kind": "assistant.message",
     "metadata": {
       "stop_reason": "tool_use",
       "usage": {
@@ -26,10 +28,12 @@
         "id": "evt#1",
         "name": "write_to_file"
       }
-    ]
+    ],
+    "v": 2
   },
   {
     "content": "",
+    "kind": "tool.result",
     "metadata": {
       "tool_results": true
     },
@@ -46,10 +50,12 @@
         "is_error": false,
         "tool_use_id": "call#1"
       }
-    ]
+    ],
+    "v": 2
   },
   {
     "content": "Done — notes.txt written.",
+    "kind": "assistant.message",
     "metadata": {
       "stop_reason": "end_turn",
       "usage": {
@@ -59,6 +65,7 @@
       }
     },
     "role": "assistant",
-    "step_index": 4
+    "step_index": 4,
+    "v": 2
   }
 ]

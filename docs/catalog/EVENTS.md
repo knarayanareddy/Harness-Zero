@@ -42,7 +42,7 @@ Payloads come from `harness.sdk.events.EVENT_PAYLOADS` (the same dataclasses tha
 
 ## Producers (heuristic)
 
-- `approval.required` — `harness/frontends/cli/app.py`, `harness/kernel/approvals.py`, `harness/plugins/bridges/acp/server.py`
+- `approval.required` — `harness/kernel/approvals.py`
 - `approval.resolved` — `harness/kernel/approvals.py`
 - `compaction.completed` — `harness/kernel/compaction.py`
 - `compaction.started` — `harness/kernel/compaction.py`
@@ -52,8 +52,8 @@ Payloads come from `harness.sdk.events.EVENT_PAYLOADS` (the same dataclasses tha
 - `model.completed` — `harness/kernel/runner.py`
 - `model.notice` — `harness/kernel/runner.py`
 - `model.started` — `harness/kernel/runner.py`
-- `model.text.delta` — `harness/kernel/bus.py`, `harness/kernel/runner.py`, `harness/plugins/bridges/acp/server.py`
-- `model.thinking.delta` — `harness/kernel/bus.py`, `harness/kernel/runner.py`, `harness/plugins/bridges/acp/server.py`
+- `model.text.delta` — `harness/kernel/runner.py`
+- `model.thinking.delta` — `harness/kernel/runner.py`
 - `model.tool_call` — `harness/kernel/runner.py`
 - `plugin.error` — `harness/kernel/registry.py`
 - `plugin.loaded` — `harness/kernel/registry.py`
@@ -62,12 +62,12 @@ Payloads come from `harness.sdk.events.EVENT_PAYLOADS` (the same dataclasses tha
 - `settings.changed` — `harness/kernel/commands.py`
 - `task.completed` — `harness/kernel/inbox.py`
 - `task.started` — `harness/kernel/inbox.py`
-- `tool.call` — `harness/kernel/gate.py`, `harness/plugins/bridges/acp/server.py`
+- `tool.call` — `harness/kernel/gate.py`
 - `tool.decision` — `harness/kernel/gate.py`
-- `tool.output.delta` — `harness/kernel/bus.py`, `harness/kernel/gate.py`
-- `tool.result` — `harness/kernel/gate.py`, `harness/plugins/bridges/acp/server.py`
+- `tool.output.delta` — `harness/kernel/gate.py`
+- `tool.result` — `harness/kernel/gate.py`
 - `turn.cancelled` — `harness/kernel/runner.py`
-- `turn.completed` — `harness/kernel/runner.py`, `harness/plugins/bridges/acp/server.py`
+- `turn.completed` — `harness/kernel/runner.py`
 - `turn.error` — `harness/kernel/runner.py`
 - `turn.started` — `harness/kernel/runner.py`
 - `ui.card` — `harness/kernel/commands.py`, `harness/kernel/gate.py`, `harness/plugins/bridges/shell_hooks/hook.py`

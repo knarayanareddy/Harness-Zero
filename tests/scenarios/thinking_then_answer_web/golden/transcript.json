@@ -1,12 +1,14 @@
 [
   {
     "content": "Give me a short answer.",
-    "metadata": {},
+    "kind": "user.message",
     "role": "user",
-    "step_index": 1
+    "step_index": 1,
+    "v": 2
   },
   {
     "content": "Forty-two.",
+    "kind": "assistant.message",
     "metadata": {
       "stop_reason": "end_turn",
       "usage": {
@@ -16,6 +18,7 @@
       }
     },
     "role": "assistant",
-    "step_index": 2
+    "step_index": 2,
+    "v": 2
   }
 ]

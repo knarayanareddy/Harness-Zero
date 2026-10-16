@@ -246,18 +246,30 @@ def _first_line(text: str | None) -> str:
 
 
 def _scan_producers(repo_root: Path, etype: str) -> list[str]:
-    """Heuristic: files that name this event type next to a publish site.
+    """Heuristic: files that name this event type *at* a publish site.
 
     Deliberately dumb and labelled as such in the generated docs — the payload dataclasses are the
-    contract, this only answers "who emits it".
+    contract, this only answers "who emits it". The match is local (a window around each occurrence)
+    rather than file-wide, because a module that merely enumerates event names is not a producer: the
+    record-kind vocabulary in `harness/sdk/types.py` deliberately spells them the same as the durable
+    events, and a file-wide scan read that as a publisher of all of them.
     """
     literal = f'"{etype}"'
+    markers = ("Event(", "publish", "type=", '"type":')
     hits: list[str] = []
     for path in sorted((repo_root / "harness").rglob("*.py")):
         if "__pycache__" in path.parts or path.name == "events.py":
             continue
         text = path.read_text(encoding="utf-8")
-        if literal in text and ("Event(" in text or "publish" in text or "bus" in text):
+        found = False
+        start = text.find(literal)
+        while start != -1:
+            window = text[max(0, start - 120) : start + 120]
+            if any(marker in window for marker in markers):
+                found = True
+                break
+            start = text.find(literal, start + 1)
+        if found:
             hits.append(str(path.relative_to(repo_root)))
     return hits[:4]
 

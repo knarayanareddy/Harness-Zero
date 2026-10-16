@@ -465,9 +465,7 @@
       ],
       "payload": "ApprovalRequired",
       "producers": [
-        "harness/frontends/cli/app.py",
-        "harness/kernel/approvals.py",
-        "harness/plugins/bridges/acp/server.py"
+        "harness/kernel/approvals.py"
       ],
       "scenarios": [
         "approval_allow_kernel",
@@ -696,9 +694,7 @@
       ],
       "payload": "ModelTextDelta",
       "producers": [
-        "harness/kernel/bus.py",
-        "harness/kernel/runner.py",
-        "harness/plugins/bridges/acp/server.py"
+        "harness/kernel/runner.py"
       ],
       "scenarios": [
         "approval_allow_kernel",
@@ -735,9 +731,7 @@
       ],
       "payload": "ModelThinkingDelta",
       "producers": [
-        "harness/kernel/bus.py",
-        "harness/kernel/runner.py",
-        "harness/plugins/bridges/acp/server.py"
+        "harness/kernel/runner.py"
       ],
       "scenarios": [
         "thinking_then_answer_web"
@@ -920,8 +914,7 @@
       ],
       "payload": "ToolCallStarted",
       "producers": [
-        "harness/kernel/gate.py",
-        "harness/plugins/bridges/acp/server.py"
+        "harness/kernel/gate.py"
       ],
       "scenarios": [
         "approval_allow_kernel",
@@ -991,7 +984,6 @@
       ],
       "payload": "ToolOutputDelta",
       "producers": [
-        "harness/kernel/bus.py",
         "harness/kernel/gate.py"
       ],
       "scenarios": [
@@ -1029,8 +1021,7 @@
       ],
       "payload": "ToolCallResult",
       "producers": [
-        "harness/kernel/gate.py",
-        "harness/plugins/bridges/acp/server.py"
+        "harness/kernel/gate.py"
       ],
       "scenarios": [
         "approval_allow_kernel",
@@ -1095,8 +1086,7 @@
       ],
       "payload": "TurnCompleted",
       "producers": [
-        "harness/kernel/runner.py",
-        "harness/plugins/bridges/acp/server.py"
+        "harness/kernel/runner.py"
       ],
       "scenarios": [
         "approval_allow_kernel",

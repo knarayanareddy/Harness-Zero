@@ -1,12 +1,14 @@
 [
   {
     "content": "What is the capital of the Netherlands?",
-    "metadata": {},
+    "kind": "user.message",
     "role": "user",
-    "step_index": 1
+    "step_index": 1,
+    "v": 2
   },
   {
     "content": "The capital of the Netherlands is Amsterdam.",
+    "kind": "assistant.message",
     "metadata": {
       "stop_reason": "end_turn",
       "usage": {
@@ -16,6 +18,7 @@
       }
     },
     "role": "assistant",
-    "step_index": 2
+    "step_index": 2,
+    "v": 2
   }
 ]
