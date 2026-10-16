@@ -865,6 +865,12 @@ class HookEvent(str, Enum):
     USER_PROMPT_SUBMIT = "user_prompt_submit"
     PRE_TOOL_USE = "pre_tool_use"
     POST_TOOL_USE = "post_tool_use"
+    # Fires in gate step 9, *after* the handler returned and *before* sanitisation and the
+    # `tool_result_bytes` truncation, so a hook can replace the result the model will see.
+    # The size guards (pruner, spill) must live here: at POST_TOOL_USE they would be undone by
+    # truncation, and truncation alone keeps the head and throws away the tail — which is where
+    # test failures and stack traces are.
+    TOOL_RESULT_FINALIZE = "tool_result_finalize"
     PRE_COMPACT = "pre_compact"
     STOP = "stop"
     TURN_ERROR = "turn_error"
@@ -877,6 +883,10 @@ class HookOutcome:
     reason: str = ""
     arguments: dict[str, Any] | None = None
     additional_context: str | None = None
+    # With `action == "mutate"` on TOOL_RESULT_FINALIZE, the hook's replacement result.
+    # `arguments` mutates the *call*; `result` mutates the *outcome* — the two directions of the
+    # same seam, kept separate so a hook cannot accidentally rewrite a call after it ran.
+    result: ToolResult | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -884,6 +894,7 @@ class HookOutcome:
             "reason": self.reason,
             "arguments": self.arguments,
             "additional_context": self.additional_context,
+            "result": self.result.to_dict() if self.result is not None else None,
         }
 
     @classmethod

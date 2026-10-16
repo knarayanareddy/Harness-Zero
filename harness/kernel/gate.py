@@ -176,6 +176,11 @@ class ToolContextImpl(ToolContext):
         plugin_name: str = "",
         inbox: Any = None,
     ):
+        # WS-03 cooperative timeout state, filled in by the gate around the handler call.
+        self.deadline: float | None = None
+        self.cancel_event = asyncio.Event()
+        self._output_buffer: list[str] = []
+        self._live_procs: list[Any] = []
         self.call_id = call_id
         self.workspace = workspace
         self.data_dir = data_dir
@@ -198,7 +203,42 @@ class ToolContextImpl(ToolContext):
             raise RuntimeError("No executor configured in kernel.")
         return self._executor
 
+    def track_process(self, proc: Any) -> None:
+        """Registers a child process so the gate can stop it if the call runs out of time.
+
+        A tool that spawns something (the shell executor does) and is then cancelled would otherwise
+        leave that process running with the pipe still held open — the classic way a timed-out
+        `run_command` leaks a `sleep 30` past the turn.
+        """
+        self._live_procs.append(proc)
+
+    def drain_output_buffer(self, max_chars: int = 65536) -> str:
+        """Everything streamed through ``emit_output_delta`` so far (for partial results)."""
+        text = "".join(self._output_buffer)
+        self._output_buffer.clear()
+        return text[-max_chars:] if len(text) > max_chars else text
+
+    async def terminate_tracked(self) -> int:
+        """Best-effort kill of every still-running tracked process. Returns how many were alive."""
+        alive = 0
+        for proc in self._live_procs:
+            try:
+                if getattr(proc, "returncode", None) is None:
+                    alive += 1
+                kill = getattr(proc, "kill", None)
+                if kill is not None:
+                    outcome = kill()
+                    if hasattr(outcome, "__await__"):
+                        await outcome
+            except Exception as err:  # noqa: BLE001 — cleanup must not mask the timeout
+                logger.debug("terminate_tracked: %s", err)
+        self._live_procs.clear()
+        return alive
+
     def emit_output_delta(self, stream: Literal["stdout", "stderr"], text: str) -> None:
+        # Kept for the timeout path: whatever a tool streamed is the partial output it can show.
+        if text:
+            self._output_buffer.append(text)
         if self._bus:
             evt = Event(
                 type="tool.output.delta",
@@ -295,8 +335,14 @@ class PolicyGate:
         options: dict[str, Any] | None = None,
         session_id: str = "",
         principal_capabilities: frozenset[Capability] = frozenset(),
+        turn_state: dict[str, Any] | None = None,
     ) -> ToolResult:
-        """Executes a single tool call through the complete 9-step PolicyGate pipeline."""
+        """Executes a single tool call through the complete 9-step PolicyGate pipeline.
+
+        `turn_state` is the per-turn scratch dict the runner owns (WS-03): hooks share it through
+        `hook_ctx` instead of module globals, so two concurrent sessions cannot see each other's
+        repeat counters and a restart never strands half a turn's state.
+        """
         start_time = time.time()
         options = options or {}
         call_id = getattr(call, "id", getattr(call, "call_id", "call_unknown"))
@@ -369,7 +415,12 @@ class PolicyGate:
                 )
             )
 
-        hook_ctx = HookContextImpl(session_id=session_id, workspace=self.registry.workspace)
+        hook_ctx = HookContextImpl(
+            session_id=session_id,
+            workspace=self.registry.workspace,
+            turn_state=turn_state if turn_state is not None else {},
+            bus=self.bus,
+        )
         for hook, _h_plugin in self.registry.hooks:
             is_pre = getattr(hook, "event", None) == HookEvent.PRE_TOOL_USE or (
                 hasattr(hook, "events") and HookEvent.PRE_TOOL_USE in hook.events
@@ -610,16 +661,58 @@ class PolicyGate:
         )
 
         # ---------------------------------------------------------
-        # Step 7: Run tool handler under timeout and error capture
+        # Step 7: Run tool handler under a cooperative timeout
         # ---------------------------------------------------------
+        # `asyncio.timeout` alone would cancel the handler mid-await and throw away whatever it had
+        # already streamed, and would leave any child process running. So: signal first
+        # (`cancel_event`), allow `tool_grace_s` for a clean return, then cancel — and stop the
+        # children either way. The result is the same text the model is told about (P1).
+        grace_s = float(self.settings.get("kernel.limits.tool_grace_s", 5.0) or 0.0)
+        tool_ctx.deadline = asyncio.get_running_loop().time() + float(spec.timeout_s)
+        task = asyncio.create_task(handler(current_args, tool_ctx))
+        timed_out = False
         try:
-            async with asyncio.timeout(spec.timeout_s):
-                result = await handler(current_args, tool_ctx)
+            result = await asyncio.wait_for(asyncio.shield(task), timeout=spec.timeout_s)
         except TimeoutError:
-            result = ToolResult.error(f"Tool '{spec.name}' timed out after {spec.timeout_s}s")
+            timed_out = True
+            tool_ctx.cancel_event.set()
+            timeout_note = f"Tool '{spec.name}' exceeded {spec.timeout_s:g}s"
+            returned_in_grace = False
+            try:
+                # The handler may still return something useful inside the grace period.
+                result = await asyncio.wait_for(task, timeout=grace_s)
+                returned_in_grace = True
+            except (TimeoutError, asyncio.CancelledError):
+                task.cancel()
+                # Await the cancellation so the handler's own cleanup runs before the turn moves on;
+                # gathering without it would leave a pending task nobody owns.
+                await asyncio.gather(task, return_exceptions=True)
+                result = ToolResult.error(f"{timeout_note} and was cancelled.")
+            except Exception as err:  # noqa: BLE001 — the handler failing on the way out is not new info
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+                result = ToolResult.error(f"{timeout_note} and was cancelled ({type(err).__name__}: {err})")
+            await tool_ctx.terminate_tracked()
+            # Whatever the tool managed to say is kept, but the result is always an error: an
+            # incomplete answer must never look like a completed one to the model.
+            partial = tool_ctx.drain_output_buffer()
+            metadata = {**dict(result.metadata), "timed_out": True}
+            if partial:
+                metadata["partial_output"] = True
+                head = f"{timeout_note}; partial output follows.\n{partial}"
+            elif returned_in_grace:
+                head = f"{timeout_note}; the tool returned what it had before stopping."
+            else:
+                head = ""
+            content = ([TextBlock(text=head)] if head else []) + list(result.content)
+            result = ToolResult(content=content, is_error=True, metadata=metadata)
         except Exception as err:
             logger.exception(f"Unhandled exception in tool '{spec.name}': {err}")
             result = ToolResult.error(f"{type(err).__name__}: {err}")
+        finally:
+            tool_ctx.deadline = None
+            if not timed_out:
+                tool_ctx.drain_output_buffer()  # streamed output is already in the result; drop the copy
 
         # ---------------------------------------------------------
         # Step 8: POST_TOOL_USE hooks
@@ -658,6 +751,36 @@ class PolicyGate:
                         )
                 except Exception as err:
                     logger.warning(f"POST_TOOL_USE hook '{hook.name}' failed: {err}")
+
+        # ---------------------------------------------------------
+        # Step 8b: TOOL_RESULT_FINALIZE hooks (WS-03) — size guards live here
+        # ---------------------------------------------------------
+        # Ordered, and allowed to replace the result (`action="mutate"` with `outcome.result`).
+        # This is the last point at which a hook can decide what the model reads: what survives
+        # here is what gets sanitised, truncated, recorded and rendered.
+        finalize_hooks = [
+            (hook, hp)
+            for hook, hp in self.registry.hooks
+            if getattr(hook, "event", None) == HookEvent.TOOL_RESULT_FINALIZE
+            or (hasattr(hook, "events") and HookEvent.TOOL_RESULT_FINALIZE in hook.events)
+        ]
+        for hook, _hp in sorted(finalize_hooks, key=lambda item: getattr(item[0], "order", 500)):
+            try:
+                async with asyncio.timeout(5.0):
+                    outcome = await hook.on(
+                        HookEvent.TOOL_RESULT_FINALIZE,
+                        {
+                            "call": call,
+                            "result": result,
+                            "session_id": session_id,
+                            "spec": spec,
+                        },
+                        hook_ctx,
+                    )
+                if outcome.action == "mutate" and outcome.result is not None:
+                    result = outcome.result
+            except Exception as err:
+                logger.warning(f"TOOL_RESULT_FINALIZE hook '{hook.name}' failed: {err}")
 
         # ---------------------------------------------------------
         # Step 9: Secret sanitization and size truncation

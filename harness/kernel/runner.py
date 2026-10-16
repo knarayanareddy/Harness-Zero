@@ -186,6 +186,10 @@ class KernelServicesImpl:
         self.session = session
         self.turn_id = turn_id
         self.options = options
+        # Per-turn scratch for hooks (WS-03). Deliberately *not* in `options`: options are recorded
+        # on `turn.started`, and a mutable dict shared between gate and hooks is nobody's business
+        # but this turn's.
+        self.turn_state: dict[str, Any] = {}
         self.cancel = cancel
         self.depth = depth
 
@@ -544,7 +548,10 @@ class KernelServicesImpl:
     async def execute_tool(self, call: ToolCall) -> ToolResult:
         """Executes a single tool call via the PolicyGate."""
         return await self.gate.execute(
-            call, options=self.options, session_id=self.session.session_id
+            call,
+            options=self.options,
+            session_id=self.session.session_id,
+            turn_state=self.turn_state,
         )
 
     async def execute_tools(self, calls: list[ToolCall]) -> list[ToolResult]:

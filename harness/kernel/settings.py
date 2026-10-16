@@ -118,6 +118,9 @@ KERNEL_SCHEMA: dict[str, Any] = {
             "additionalProperties": False,
             "properties": {
                 "tool_result_bytes": {"type": "integer", "default": 65536, "minimum": 1024},
+                # WS-03 cooperative timeout: after the deadline the handler gets this much time to
+                # return partial output (and to let a tracked process exit) before it is cancelled.
+                "tool_grace_s": {"type": "number", "default": 5.0, "minimum": 0.0},
                 "upload_bytes": {"type": "integer", "default": 26214400, "minimum": 1024},
             },
         },

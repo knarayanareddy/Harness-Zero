@@ -52,6 +52,18 @@ class HookContextImpl:
     """Concrete implementation satisfying the HookContext protocol."""
     session_id: str
     workspace: Path
+    turn_state: dict[str, Any] = field(default_factory=dict)
+    bus: Any = None
+
+    def emit(self, event_type: str, data: Any) -> None:
+        """Publishes a live, non-durable event for the UI (badges, notices).
+
+        Deliberately narrow: no session/turn routing, no replay, no `tool.*` channel the client
+        validates field-by-field. A hook that needs a durable fact writes a record, not an event.
+        """
+        if self.bus is None:
+            return
+        self.bus.publish(Event(type=event_type, session_id=self.session_id, data=data))
 
 
 @dataclass

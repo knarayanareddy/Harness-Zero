@@ -101,8 +101,20 @@ class ToolContext(Protocol):
     executor: Executor
     capabilities: frozenset[Capability]
 
+    deadline: float | None
+    """Loop time at which the gate will stop waiting for this call (WS-03)."""
+
+    cancel_event: Any
+    """Set by the gate when the deadline passes. A handler that can produce something useful while
+    being stopped (partial output, a clean shutdown message) should poll this and return; one that
+    cannot just let the cancellation arrive."""
+
     def emit_output_delta(self, stream: Literal["stdout", "stderr"], text: str) -> None:
-        """Streams output delta chunks during execution."""
+        """Streams output delta chunks during execution.
+
+        The kernel also buffers these, so a call that is cancelled mid-flight still has its partial
+        output to show the model (WS-03 `test_partial_output_survives_timeout`).
+        """
         ...
 
     def background(self, proc: Process, label: str = "") -> str:
@@ -159,6 +171,14 @@ class TurnContext(Protocol):
 class HookContext(Protocol):
     session_id: str
     workspace: Path
+    turn_state: dict
+    """Scratch space shared by every hook for the duration of one turn (created per turn by the
+    runner, never persisted). Repeat detection, read ledgers and other cross-call memory live here
+    so a hook needs no module globals — and a restart cannot strand half a turn's state."""
+
+    def emit(self, event_type: str, data: Any) -> None:
+        """Publishes a live event on the bus (never durable, never a tool's private channel)."""
+        ...
 
 
 @runtime_checkable

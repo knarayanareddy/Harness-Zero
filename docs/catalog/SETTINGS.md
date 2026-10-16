@@ -34,6 +34,7 @@ Aggregated from the schemas the loader registered — `KERNEL_SCHEMA` and every 
 |---|---|---|---|---|---|
 | `kernel.background.wait_s` | integer | `600` | number | kernel | no |
 | `kernel.context.budget_tokens` | integer | `60000` | number | kernel | yes |
+| `kernel.limits.tool_grace_s` | number | `5.0` | number | kernel | no |
 | `kernel.limits.tool_result_bytes` | integer | `65536` | number | kernel | no |
 | `kernel.limits.upload_bytes` | integer | `26214400` | number | kernel | no |
 | `kernel.max_tool_iterations` | integer | `20` | number | kernel | yes |
@@ -81,6 +82,7 @@ These are real, validated settings that the kernel does not expose as a panel co
 | Key | Type | Default | Owner |
 |---|---|---|---|
 | `kernel.background.wait_s` | integer | `600` | kernel |
+| `kernel.limits.tool_grace_s` | number | `5.0` | kernel |
 | `kernel.limits.tool_result_bytes` | integer | `65536` | kernel |
 | `kernel.limits.upload_bytes` | integer | `26214400` | kernel |
 | `kernel.migrated_from_legacy_config` | boolean | `false` | kernel |

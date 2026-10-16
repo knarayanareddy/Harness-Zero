@@ -2052,6 +2052,18 @@
     },
     {
       "alias": false,
+      "default": "5.0",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.limits.tool_grace_s",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "number",
+      "widget": "number"
+    },
+    {
+      "alias": false,
       "default": "65536",
       "group": "Execution & Strategies",
       "in_ui": false,

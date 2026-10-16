@@ -221,6 +221,9 @@ class Hook(Protocol):
     events: frozenset[HookEvent]
     matcher: str | None  # regex on tool name for tool hooks
     timeout_s: float
+    # Hooks at the same event run in ascending `order`; the size guards deliberately run late
+    # (pruner 900) so they see what earlier hooks appended. Missing attribute ⇒ 500.
+    order: int
 
     async def on(
         self, event: HookEvent, payload: dict[str, Any], ctx: Any
