@@ -678,6 +678,8 @@ Plus one that only showed up under load: a timed-out `run_command` left its chil
 | R43 | `frontends/web/static/app.js` | The reload path rendered `sessions.get` history by **role**, and the payload it re-derived contained only user/assistant text and tool results. Approvals, policy decisions, tool cards and the compaction summary were therefore invisible after a refresh — the log held them, the client had no case for them. A `plugin · risk` subtitle also existed only on the live `tool.call` event, so even a card that survived reloaded thinner. | P11: `renderRecord(rec)` switches on `rec.kind` and reuses the live painters; `tool.decision` gained `plugin` on the event and in the record; scenario `reload_equals_live_web_dom` asserts every live line survives a refresh |
 | R45 | `tests/scenarios/_lib/` (record path) | In record mode the tee was registered *alongside* the provider it wrapped, under the fixture's key. `app.js` sends the provider of the selected model, so a browser-lane request resolved to the real `mock` plugin, the recorder saw nothing, and `provider.jsonl` came out 1 byte with the run still green — the emptiness only surfaced later, as `ReplayExhausted: … recorded 0 requests` in the replay phase. Keying the tee as `mock` is refused outright (`_register_provider`: duplicate name). | P11b: the tee keeps the fixture key and the wrapped provider is popped from `runtime.registry.providers` for the run; `test_record_then_replay_in_the_web_lane` asserts the recording is non-empty and that both lanes agree, so a silent no-op recording fails the same test that wrote it |
 | R46 | `tests/scenarios/_lib/node/headless_timeline.mjs` | The model chip was selected by **id** alone. A recorded fixture's id (`mock-v1`) is also served by the built-in mock, so the browser lane replayed against the plugin rather than the fixture: `turn.started` said `provider: "mock"` where the kernel lane said `"replay"`, and the two runs' goldens could never agree. Selecting by `sel.value = id` compounds it — jsdom takes the first option with that value, i.e. option order decides what a test means. | P11b: `MODEL_PROVIDER` scopes the selection to the fixture's provider (only when several providers list the id), the chosen option's provider is reported as `model_selected_provider`, and the sidecar's model id is what replay pins (`scenario_model`) |
+| R47 | `kernel/commands.py` → `settings_schema` | `groups = [g for g in SETTINGS_GROUPS if g in present]` filtered the settings surface through a hand-kept list of tab names, so a plugin that declared `x-ui.group: Obsidian` in its own `settings.schema.json` got its properties into the response but **no tab** — the one mechanism WS-05 needs (disable a feature, its tab goes) was unreachable without editing kernel code, and no test noticed because every built-in plugin reused a kernel label. | P12a: `order_groups()` derives membership from the aggregated properties and order from `x-ui.order` (built-in sequence as fallback), pinned by `test_a_plugin_settings_group_is_a_tab_the_kernel_never_mentioned` |
+| R48 | `kernel/catalog.py` (the new static parse) | Reading `data-tab`/`data-command` attributes out of JS *and* HTML counted `document.querySelector('.studio-tab[data-tab="${tabName}"]')` as a declared tab named `${tabName}` — a static check that invents requirements teaches people to ignore it, and its "fix" is a fake declaration in the source. | P12a: `_static_values()` filters template-literal placeholders in both the catalogue and `test_ui_contract.py`, and the same rule is stated once in each place it is needed |
 | R44 | `plugins/stores/fts5_search/` | Two related bugs. The row projection read v1 field names (`type`, `source`), so every row the runner indexed from a v2 record said `UNKNOWN`/`UNKNOWN` and `search_memory`'s Source column was decoration; and the only rebuild path ran when the table was empty, so a workspace whose index had gone stale had no repair — there was no CLI entry point at all. | P11: one `record_row()` shared by the live hook and the rebuild; `rebuild_from_sessions` is unconditional; new `harness sessions reindex`; `test_the_search_index_is_rebuildable_from_the_log` |
 
 ---
@@ -945,4 +947,35 @@ command; and the SDK-side utilities were undiscoverable from the plugin-authorin
 5. `provider.requests.json` is `{provider, model, requests}`, not the spec's bare request list: a replay needs
    the recorded model id to name itself (R46), and the legacy list shape is still tolerated on read so a fixture
    recorded before this change replays unchanged.
+
+## P12a — WS-05a: feature-owned UI, kernel side
+
+**Spec.** `WS-05_feature_owned_ui.md` §3.1–§3.3 (manifest `ui` block, the built-in declaration, settings groups
+from schema), §3.4 (the contract test) and the `commands.list` half of §3.1. The client restructure (§3.2) is
+WS-05b; the served plugin modules, the two scenarios and `--check ui`'s final form are WS-05c.
+
+**Already true when the phase started** — worth recording, because the spec's §2 "current state" is a snapshot
+of `main` before the user's refactor and WS-02/04: the settings fallback schema in `settings.js` was *already*
+deleted (WS-02 made `settings.schema` the only source), `index.html` held no `data-notice` placeholders and no
+ten stub panels — three tabs remained — so three of the six fail-first rows in §5 had nothing left to fail. They
+are kept as regression tests anyway (`test_no_placeholder_bindings`, `test_settings_js_holds_no_schema_of_its_own`),
+which is the honest version of "red first": the *invariant* is pinned, not the archaeology.
+
+**Built.** `UiContribution`/`UiPanel` in the SDK manifest with the validation matrix; `ui.toml` for the shipped
+client and `registry.ui_contributions()` (cleared on unload, so disable ⇒ gone); `commands.list` and
+`ui.contributions`; `order_groups` (**R47**); the generated `UI_CONTRACT.md` panels/kind/bindings tables; the
+strengthened `--section ui` gate; 30 new tests, 5 of which were shown to fail against deliberate mutations.
+
+**Teeth.** Adding `<div class="studio-tab" data-tab="ghost">` to `index.html` fails both the contract test and
+`harness catalog --check --section ui`; pointing the `sessions` panel at `sessions.purge` fails the gate naming
+`declared by web`; deleting the `case 'tool.result':` branch from `renderRecord` fails
+`test_every_durable_record_kind_is_painted_or_excused` with exactly that kind listed; a `data-command="nope"`
+binding fails the binding test by name. All four restored before commit.
+
+**Deviation.** The spec's acceptance line says `harness catalog --check ui`; the CLI's actual form is
+`harness catalog --check --section ui` (`--section` is repeatable, from WS-02). Nothing else about the
+acceptance changed, and the `kinds_without_renderer` count stays *advisory* in the gate on purpose: `turn.completed`
+legitimately has no renderer, and the list of such kinds — with a reason each — belongs to the test that a client
+author reads (`UNPAINTED_KINDS`), not to a build gate that would be bypassed by someone adding a bogus
+declaration to `ui.toml`.
 

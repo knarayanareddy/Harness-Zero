@@ -42,3 +42,26 @@ Parsed statically from `harness/frontends/web/static/` and the daemon's route ta
 ## `data-*` bindings in the client
 
 - `data-action`: `cards.js:approve-approval`, `cards.js:deny-approval`, `index.html:new-session`, `index.html:send`, `index.html:stop`, `settings.js:save-secret`
+
+## Panels the client mounts
+
+From `ui.contributions`: a panel is a declaration in a manifest's `[ui]` block (the shipped client's are in `harness/frontends/web/ui.toml`) plus a dispatchable command. Disabling the feature removes its row, which is the point.
+
+| Panel | Title | Backed by | Renderer | Owner | In client markup |
+|---|---|---|---|---|---|
+| `artifact` | Artifacts | `sessions.get` | markdown | web | yes |
+| `economics` | Spend | `economics` | table | web | yes |
+| `sessions` | Sessions | `sessions.list` | list | web | yes |
+
+## Record kinds and their renderers
+
+Durable kinds — records a session log keeps and a reloaded page must show — are painted by a `case` in the client's record switch, by a module under `static/renderers/`, or by a plugin module named in `[ui].record_renderers`.
+
+- modules under `static/renderers/`: none yet
+- **no renderer**: `turn.completed` (of 11 durable kinds)
+
+No `data-command` bindings exist yet: interactive elements name their command in JS, so the table above is the whole contract until WS-05b moves them into markup.
+
+## Settings tabs
+
+`Models & Providers`, `Security & Sandboxing`, `Execution & Strategies`, `Economics & Spend`, `Plugins & Integrations`, `Secrets`

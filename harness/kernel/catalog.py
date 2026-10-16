@@ -453,12 +453,43 @@ async def build_catalog(runtime: Any = None, repo_root: Path | None = None) -> d
         for kind, value in _DATA_ATTR_RE.findall(js.read_text(encoding="utf-8")):
             ui_attrs.setdefault(kind, []).append(f"{js.name}:{value}")
     builtins = set(BUILTIN_COMMANDS)
+
+    # ---- UI contributions (WS-05): what the client mounts, and whether the markup agrees ----
+    # The kernel's answer (`ui.contributions`) and the static HTML are compared rather than one derived from
+    # the other: a tab in `index.html` with no declaration is a pane nobody owns, and a declared panel with no
+    # markup is a feature promising a tab it never renders. Neither looks wrong in isolation, so the pairing
+    # is what makes the evidence.
+    contributions = await commands.ui_contributions()
+    commands_exposed = {row["name"] for row in await commands.commands_list() if row["exposed"]}
+    html_text = (client / "index.html").read_text(encoding="utf-8")
+    js_text = "\n".join(js.read_text(encoding="utf-8") for js in sorted(client.rglob("*.js")))
+    markup = html_text + js_text
+    tabs_in_html = _static_values(re.findall(_TAB_RE, markup))
+    declared_panels = {panel["id"]: panel for panel in contributions["panels"]}
+    bound = _static_values(re.findall(_DATA_COMMAND_RE, markup))
+    # Kinds the client has a case for: the `renderRecord` switch today, one module per kind after WS-05b — both
+    # shapes are read, so the count does not move when the code moves.
+    painted = set(re.findall(_RENDER_CASE_RE, js_text))
+    renderer_dir = client / "renderers"
+    renderer_modules = sorted(f.stem for f in renderer_dir.glob("*.js")) if renderer_dir.is_dir() else []
+    painted |= set(renderer_modules)
+    declared_renderers = {r["kind"] for r in contributions["record_renderers"]}
+    durable = [r["kind"] for r in record_kinds if r["durable_events"]]
     ui = {
         "routes": routes,
         "client_commands": sorted(client_cmds),
         "unknown_client_commands": sorted(c for c in client_cmds if c not in builtins),
         "data_attributes": {k: sorted(set(v)) for k, v in sorted(ui_attrs.items())},
         "events_without_renderer": sorted(t for t, e in ((e["type"], e) for e in events) if e["client_renderer"].startswith("none")),
+        "panels": [{**panel, "in_client_markup": panel["id"] in tabs_in_html} for panel in contributions["panels"]],
+        "undocumented_tabs": [t for t in tabs_in_html if t not in declared_panels],
+        "unbacked_panels": contributions["unbacked_panels"],
+        "data_command_bindings": [{"command": c, "registered": c in commands_exposed} for c in bound],
+        "client_modules": contributions["client_modules"],
+        "renderer_modules": renderer_modules,
+        "durable_kinds": sorted(durable),
+        "settings_groups": contributions["settings_groups"],
+        "kinds_without_renderer": sorted(k for k in durable if k not in painted and k not in declared_renderers),
     }
 
     # ---- scenarios ----
@@ -528,6 +559,20 @@ def _version() -> str:
 # renderers
 # --------------------------------------------------------------------------------------
 
+
+_TAB_RE = re.compile("""data-tab=["']([^"'`]+)["']""")
+_DATA_COMMAND_RE = re.compile("""data-command=["']([^"'`]+)["']""")
+_RENDER_CASE_RE = re.compile("""case ["']([a-z_][a-z0-9_.]*)["']:""")
+
+
+def _static_values(matches) -> list[str]:
+    """The literal values among them, dropping template-literal placeholders.
+
+    `data-tab="${tabName}"` in a JS selector is not a declared tab. Reading one as a binding is how a static
+    check starts demanding a panel called `${tabName}` — and a checker that invents requirements is worse than a
+    checker that misses one, because the fix it prompts is a lie in the source.
+    """
+    return sorted({m for m in matches if m and not any(c in m for c in "${} \t")})
 
 CATALOG_DOCS = ("PLUGINS.md", "TOOLS.md", "SETTINGS.md", "EVENTS.md", "COMMANDS.md", "RECORD_KINDS.md", "UI_CONTRACT.md")
 
@@ -721,6 +766,74 @@ def render_markdown(cat: dict[str, Any], name: str) -> str:
         body.append("\n## `data-*` bindings in the client\n")
         for kind, values in ui["data_attributes"].items():
             body.append(f"- `data-{kind}`: " + ", ".join(f"`{v}`" for v in values))
+        body.append(
+            "\n## Panels the client mounts\n\nFrom `ui.contributions`: a panel is a declaration in a manifest's "
+            "`[ui]` block (the shipped client's are in `harness/frontends/web/ui.toml`) plus a dispatchable command. "
+            "Disabling the feature removes its row, which is the point.\n"
+        )
+        body.append(
+            _table(
+                ["Panel", "Title", "Backed by", "Renderer", "Owner", "In client markup"],
+                [
+                    [
+                        f"`{panel['id']}`",
+                        panel["title"],
+                        f"`{panel['command']}`",
+                        panel["renderer"],
+                        panel["plugin"],
+                        "yes" if panel["in_client_markup"] else "**no**",
+                    ]
+                    for panel in ui["panels"]
+                ]
+                or [["—", "no panels declared", "", "", "", ""]],
+            )
+        )
+        if ui["unbacked_panels"]:
+            body.append(
+                "\nDeclared but **not dispatchable**, so the kernel refused to hand them out: "
+                + ", ".join(f"`{panel['id']}` → `{panel['command']}`" for panel in ui["unbacked_panels"])
+            )
+        if ui["undocumented_tabs"]:
+            body.append(
+                "\n`data-tab` in the client with **no declaration**: "
+                + ", ".join(f"`{t}`" for t in ui["undocumented_tabs"])
+                + " — a pane nobody owns. Delete it or declare it."
+            )
+        body.append("\n## Record kinds and their renderers\n")
+        body.append(
+            "Durable kinds — records a session log keeps and a reloaded page must show — are painted by a `case` in "
+            "the client's record switch, by a module under `static/renderers/`, or by a plugin module named in "
+            "`[ui].record_renderers`.\n"
+        )
+        body.append(
+            "- modules under `static/renderers/`: " + (", ".join(f"`{m}.js`" for m in ui["renderer_modules"]) or "none yet")
+        )
+        body.append(
+            f"- **no renderer**: {', '.join('`' + k + '`' for k in ui['kinds_without_renderer']) or 'none'}"
+            f" (of {len(ui['durable_kinds'])} durable kinds)"
+        )
+        if ui["data_command_bindings"]:
+            body.append("\n## `data-command` bindings\n")
+            body.append(
+                _table(
+                    ["Command", "Registered"],
+                    [[f"`{b['command']}`", "yes" if b["registered"] else "**NO**"] for b in ui["data_command_bindings"]],
+                )
+            )
+        else:
+            body.append(
+                "\nNo `data-command` bindings exist yet: interactive elements name their command in JS, so the "
+                "table above is the whole contract until WS-05b moves them into markup."
+            )
+        if ui["client_modules"]:
+            body.append("\n## Plugin client modules\n")
+            body.append(
+                _table(
+                    ["Plugin", "Module", "Served at"],
+                    [[m["plugin"], f"`{m['path']}`", m["url"]] for m in ui["client_modules"]],
+                )
+            )
+        body.append("\n## Settings tabs\n\n" + ", ".join(f"`{g}`" for g in ui["settings_groups"]))
     else:  # pragma: no cover
         raise ValueError(f"no renderer for {name}")
     return "\n".join(body) + "\n"
@@ -825,11 +938,48 @@ def _check_readmes(cat: dict[str, Any], root: Path) -> dict[str, Any]:
 
 
 def _check_ui(cat: dict[str, Any]) -> dict[str, Any]:
-    unknown = cat["ui"]["unknown_client_commands"]
-    if unknown:
-        return {"status": "fail", "detail": "web client calls unregistered commands", "lines": [f"POST /commands/{u}" for u in unknown]}
-    unrendered = cat["ui"]["events_without_renderer"]
-    return {"status": "pass", "detail": f"client calls {len(cat['ui']['client_commands'])} registered commands; {len(unrendered)} event(s) are bus-only by design", "lines": []}
+    """The client may not claim UI that the kernel does not offer.
+
+    This check used to be advisory about one thing (an event with no client renderer, which is a design choice —
+    a stream delta has nothing to paint). The three facts below are not choices: a tab in the markup that no
+    feature declared, a declared panel whose command does not dispatch, and a control bound to a command the
+    table does not contain. Each one is a bug a user finds by clicking, which is why they gate the build instead
+    of only appearing in `docs/catalog/UI_CONTRACT.md`.
+    """
+    ui = cat["ui"]
+    problems: list[tuple[str, list[str]]] = []
+    if ui["unknown_client_commands"]:
+        problems.append(("the web client calls commands that are not registered", [f"POST /commands/{c}" for c in ui["unknown_client_commands"]]))
+    if ui["undocumented_tabs"]:
+        problems.append(
+            ("`data-tab` in the client with no `[ui]` declaration (delete the pane or declare it)",
+             [f'data-tab="{t}"' for t in ui["undocumented_tabs"]])
+        )
+    if ui["unbacked_panels"]:
+        problems.append(
+            ("declared panels whose command is not dispatchable",
+             [f"{panel['id']} → {panel['command']} (declared by {panel['plugin']})" for panel in ui["unbacked_panels"]])
+        )
+    dangling = [b["command"] for b in ui["data_command_bindings"] if not b["registered"]]
+    if dangling:
+        problems.append(("`data-command` bindings to commands the kernel does not expose", [f"data-command=\"{c}\"" for c in dangling]))
+    if problems:
+        # One heading per problem, then its offending items — `--check` prints these verbatim.
+        lines = []
+        for label, items in problems:
+            lines.append(f"{label}:")
+            lines.extend(f"  {item}" for item in items)
+        return {"status": "fail", "detail": f"{len(problems)} UI contract problem(s)", "lines": lines}
+    unrendered = ui["events_without_renderer"]
+    return {
+        "status": "pass",
+        "detail": (
+            f"client calls {len(ui['client_commands'])} registered commands and mounts {len(ui['panels'])} "
+            f"declared panel(s); {len(unrendered)} event(s) are bus-only by design; "
+            f"{len(ui['kinds_without_renderer'])} durable kind(s) are markers with nothing to paint"
+        ),
+        "lines": [],
+    }
 
 
 def _check_scenarios(cat: dict[str, Any], strict: bool) -> dict[str, Any]:

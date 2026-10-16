@@ -35,7 +35,7 @@ from harness.sdk.errors import (
     PluginLoadError,
 )
 from harness.sdk.events import Event, PluginError, PluginLoaded
-from harness.sdk.manifest import PluginManifest
+from harness.sdk.manifest import PluginManifest, UiContribution
 from harness.sdk.types import SDK_API_VERSION, Capability, HookEvent, ToolSpec
 
 logger = logging.getLogger(__name__)
@@ -207,6 +207,10 @@ class PluginRegistry:
         # Settings namespaces registered only so old spellings keep resolving; they are excluded
         # from the generated catalog and the settings UI so a key is never listed twice.
         self._alias_namespaces: set[str] = set()
+
+        # UI contributions (WS-05): source name -> what it asks the client to mount. A panel, a record
+        # renderer and a client module are only ever *names* resolved by the client, so nothing here runs.
+        self._ui: dict[str, UiContribution] = {}
 
         # Component collections: item -> (component, plugin_name)
         self.tools: dict[str, tuple[ToolSpec, ToolHandler, str]] = {}
@@ -518,6 +522,7 @@ class PluginRegistry:
                 # Declare settings/secret surface *before* setup(), so ctx.settings.get() during
                 # setup resolves the schema default instead of silently returning None.
                 self._register_settings_schema(dp)
+                self._register_ui_contribution(dp)
 
                 # Instantiate
                 instance = self._instantiate_plugin(dp)
@@ -644,6 +649,80 @@ class PluginRegistry:
             self._alias_namespaces.add(f"plugins.{name}")
             self.settings_namespaces.setdefault(f"plugins.{name}", name)
 
+    def _register_ui_contribution(self, dp: DiscoveredPlugin) -> None:
+        """Records a plugin's `[ui]` manifest block for `ui_contributions()` below."""
+        ui = dp.manifest.ui
+        if ui is not None:
+            self.register_ui_contribution(dp.manifest.name, ui)
+
+    def register_ui_contribution(self, source: str, ui: UiContribution) -> None:
+        """Adds one feature's UI contribution. `source` is a plugin name, or `web` for the shipped client."""
+        if source in self._ui:
+            raise PluginLoadError(f"UI contribution registered twice for {source!r}")
+        self._ui[source] = ui
+
+    def _load_builtin_ui(self) -> None:
+        """The shipped client's own panels live in `harness/frontends/web/ui.toml`, in the same shape.
+
+        Read as data rather than imported, because the kernel must not depend on the frontend package to
+        describe it — and a distribution without the web frontend simply has no built-in panels, which is a
+        valid answer, not an error.
+        """
+        if "web" in self._ui:
+            return
+        path = Path(__file__).resolve().parents[1] / "frontends" / "web" / "ui.toml"
+        if not path.is_file():
+            return
+        import tomllib
+
+        try:
+            doc = tomllib.loads(path.read_text(encoding="utf-8"))
+        except Exception as e:  # noqa: BLE001 - a malformed manifest is a load error, whatever it is
+            raise PluginLoadError(f"Failed to parse {path}: {e}") from e
+        ui = doc.get("ui")
+        if isinstance(ui, dict):
+            self.register_ui_contribution("web", UiContribution.from_dict(ui, plugin="web"))
+
+    def ui_contributions(self) -> dict[str, Any]:
+        """Everything the client should mount, attributed to whoever declared it.
+
+        Only *loaded* plugins contribute: disabling a feature unloads it, so its panel and its renderers
+        disappear from this response without a second enable/disable check anywhere — which is the whole point
+        of a feature owning its UI instead of the client knowing about it.
+
+        ``{"panels": [{id,title,command,renderer,plugin}], "record_renderers": [{kind,plugin}],
+        "client_modules": [{plugin,path,url}]}``
+        """
+        self._load_builtin_ui()
+        panels: list[dict[str, Any]] = []
+        renderers: list[dict[str, str]] = []
+        modules: list[dict[str, str]] = []
+        for source in sorted(self._ui):
+            ui = self._ui[source]
+            for panel in ui.panels:
+                panels.append({**panel.to_dict(), "plugin": source})
+            for kind in ui.record_renderers:
+                renderers.append({"kind": kind, "plugin": source})
+            if ui.client_module:
+                # Served by the web frontend's `/static/...` route from the plugin's own directory, so the URL
+                # is the declared path — the `static/` prefix in the manifest is what the route expects.
+                modules.append({"plugin": source, "path": ui.client_module, "url": f"/{ui.client_module}"})
+        seen: set[str] = set()
+        dupes: set[str] = set()
+        for panel in panels:
+            if panel["id"] in seen:
+                dupes.add(panel["id"])
+            seen.add(panel["id"])
+        claimed = sorted(dupes)
+        if claimed:
+            raise PluginLoadError(
+                f"Two features claim the same panel id: {', '.join(claimed)} — a panel id is the client's key"
+            )
+        panels.sort(key=lambda p: p["id"])
+        renderers.sort(key=lambda r: (r["kind"], r["plugin"]))
+        modules.sort(key=lambda m: m["plugin"])
+        return {"panels": panels, "record_renderers": renderers, "client_modules": modules}
+
     @property
     def alias_namespaces(self) -> frozenset[str]:
         """Settings namespaces kept only for compatibility (never rendered twice)."""
@@ -685,6 +764,9 @@ class PluginRegistry:
         self.stores.clear()
         self.strategies.clear()
         self.hooks.clear()
+        # Contributions are collected while loading, so unloading drops them — which is what makes
+        # "disable a feature, its panel and renderers go with it" true without any client-side check (WS-05).
+        self._ui.clear()
 
     @property
     def discovered(self) -> dict[str, DiscoveredPlugin]:

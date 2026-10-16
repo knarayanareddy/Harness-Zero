@@ -405,6 +405,22 @@
       "handler": "harness/kernel/commands.py:economics",
       "name": "economics",
       "summary": "Returns the ``EconomicsSnapshot`` for a session (defaults to the active session)."
+    },
+    {
+      "alias": false,
+      "args": [],
+      "called_by_web_client": false,
+      "handler": "harness/kernel/commands.py:commands_list",
+      "name": "commands.list",
+      "summary": "``commands.list`` \u2192 every command a frontend may dispatch, with its argument names."
+    },
+    {
+      "alias": false,
+      "args": [],
+      "called_by_web_client": false,
+      "handler": "harness/kernel/commands.py:ui_contributions",
+      "name": "ui.contributions",
+      "summary": "``ui.contributions`` \u2192 what the client mounts: panels, record renderers, client modules, settings tabs."
     }
   ],
   "coverage": {
@@ -422,6 +438,7 @@
     ],
     "commands_unexercised": [
       "approvals.list",
+      "commands.list",
       "files.read",
       "files.write",
       "form.submit",
@@ -431,7 +448,8 @@
       "plugins.info",
       "plugins.list",
       "sessions.get",
-      "settings.schema"
+      "settings.schema",
+      "ui.contributions"
     ],
     "tools_covered": [
       "edit_file",
@@ -3617,6 +3635,7 @@
       "settings.set",
       "submit_turn"
     ],
+    "client_modules": [],
     "data_attributes": {
       "action": [
         "cards.js:approve-approval",
@@ -3627,6 +3646,20 @@
         "settings.js:save-secret"
       ]
     },
+    "data_command_bindings": [],
+    "durable_kinds": [
+      "approval.requested",
+      "approval.resolved",
+      "assistant.message",
+      "compaction.summary",
+      "tool.decision",
+      "tool.result",
+      "turn.cancelled",
+      "turn.completed",
+      "turn.error",
+      "ui.card",
+      "user.message"
+    ],
     "events_without_renderer": [
       "hook.fired",
       "model.completed",
@@ -3638,6 +3671,36 @@
       "tool.repeat_detected",
       "tool.result.pruned"
     ],
+    "kinds_without_renderer": [
+      "turn.completed"
+    ],
+    "panels": [
+      {
+        "command": "sessions.get",
+        "id": "artifact",
+        "in_client_markup": true,
+        "plugin": "web",
+        "renderer": "markdown",
+        "title": "Artifacts"
+      },
+      {
+        "command": "economics",
+        "id": "economics",
+        "in_client_markup": true,
+        "plugin": "web",
+        "renderer": "table",
+        "title": "Spend"
+      },
+      {
+        "command": "sessions.list",
+        "id": "sessions",
+        "in_client_markup": true,
+        "plugin": "web",
+        "renderer": "list",
+        "title": "Sessions"
+      }
+    ],
+    "renderer_modules": [],
     "routes": [
       "/",
       "/artifacts/{filename}",
@@ -3648,6 +3711,16 @@
       "/preview",
       "/ui"
     ],
+    "settings_groups": [
+      "Models & Providers",
+      "Security & Sandboxing",
+      "Execution & Strategies",
+      "Economics & Spend",
+      "Plugins & Integrations",
+      "Secrets"
+    ],
+    "unbacked_panels": [],
+    "undocumented_tabs": [],
     "unknown_client_commands": []
   },
   "version": "0.2.1"

@@ -18,6 +18,27 @@ Harness-Zero enforces strict modular isolation:
 
 Tools allow agents to perform actions in the workspace (filesystem operations, searches, code execution).
 
+### Optional: `[ui]` — a feature that owns its own surface (WS-05)
+
+```toml
+[ui]
+# A side panel, mounted by any frontend that asks `ui.contributions`. `command` must be dispatchable:
+# a tab with no command behind it is how a "coming soon" placeholder is born.
+panels = [
+  { id = "vault", title = "Vault", command = "obsidian.search", renderer = "table" },
+]
+# Record kinds this plugin's *client module* paints, so the timeline can show them after a reload too.
+record_renderers = ["ui.card"]
+# Optional, and only for a built-in or config-dir plugin (workspace plugins may not run code in the browser).
+client_module = "static/plugins/obsidian.js"   # served at /static/plugins/obsidian.js
+```
+
+The parser (`harness/sdk/manifest.py`) refuses an unknown `renderer` (the built-ins are
+`table | tree | markdown | list`), a malformed or duplicate panel id, an empty `command`, an unknown `[ui]` key,
+and a `client_module` outside `static/`. Settings tabs need no declaration at all: name a group in your
+`settings.schema.json` (`x-ui.group`, optionally `x-ui.order`) and it becomes a tab — see
+`docs/testing/SCENARIOS.md` for the tests, `docs/catalog/UI_CONTRACT.md` for what the client mounts.
+
 ### `harness_plugin.toml`
 ```toml
 [plugin]

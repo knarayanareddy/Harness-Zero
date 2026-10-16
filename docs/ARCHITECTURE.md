@@ -87,6 +87,8 @@ contracts they implement are in [`architecture/CONTRACTS.md`](architecture/CONTR
 | `plugins.disable` | `name` | Adds the plugin to `kernel.plugins.disabled` (takes effect on next load). |
 | `approvals.list` | — | Pending approvals. |
 | `economics` | `session_id?` | `EconomicsSnapshot` (`turn_usd`, `session_usd`, `lifetime_usd`, `cap_usd`, `unknown_pricing`, `usage`). |
+| `commands.list` | — | Every dispatchable command with its argument names, `alias_of` and `exposed` (WS-05). |
+| `ui.contributions` | — | What the client mounts: declared panels (with their owner and backing command), `[ui].record_renderers`, plugin client modules, `settings_groups`, `record_kinds`. |
 
 Errors map to HTTP: a `HarnessError` with a `status_code` keeps it (`TurnInProgress` → 409); other
 `HarnessError` / `ValueError` → 400; `KeyError` / `FileNotFoundError` → 404; anything else → 500 with the
@@ -247,6 +249,12 @@ generated JSON schema (`harness events schema`).
   `tool.output.delta` → `tool.result`, approvals from `approval.required`, cards from `ui.card`
   (artifacts also into the Artifacts tab), economics from `cost.updated` / `economics`, and the model picker
   from `models.list` grouped by `status`.
+* Which **panels** exist is not client knowledge: `ui.contributions` returns the panels declared in a manifest's
+  `[ui]` block — the shipped client's three are in `harness/frontends/web/ui.toml` — each backed by a command in
+  `commands.list`. A feature that is disabled contributes nothing, so its tab goes with it; a panel whose command
+  is not dispatchable is reported in `unbacked_panels` and not served. Timeline rendering dispatches on
+  `record.kind`, and every durable kind is painted or excused in
+  `tests/frontends/test_ui_contract.py` (generated table: `docs/catalog/UI_CONTRACT.md`).
 
 ## 7. Where the tests live
 

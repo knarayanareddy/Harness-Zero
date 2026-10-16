@@ -29,5 +29,7 @@
 | `plugins.disable` | `harness/kernel/commands.py:plugins_disable` | `name: str` | no |
 | `approvals.list` | `harness/kernel/commands.py:approvals_list` | — | no |
 | `economics` | `harness/kernel/commands.py:economics` | `session_id: str \| None` | yes |
+| `commands.list` | `harness/kernel/commands.py:commands_list` | — | no |
+| `ui.contributions` | `harness/kernel/commands.py:ui_contributions` | — | no |
 
 Underscore aliases kept for external callers: `form_submit`.

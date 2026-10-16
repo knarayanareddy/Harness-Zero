@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import inspect
 import logging
 import os
 import tempfile
@@ -24,8 +25,8 @@ from harness.kernel.secrets import Secrets
 from harness.kernel.session import SessionManager
 from harness.kernel.settings import SettingsStore
 from harness.kernel.settings_schema import (
-    SETTINGS_GROUPS,
     flatten_schema_properties,
+    order_groups,
     with_ui_defaults,
 )
 from harness.kernel.validators import validate_session_id
@@ -33,7 +34,7 @@ from harness.sdk.cards import Card
 from harness.sdk.contracts import Provider
 from harness.sdk.errors import HarnessError
 from harness.sdk.events import Event, SettingsChanged, UiCard
-from harness.sdk.types import ModelRow, TurnResult
+from harness.sdk.types import RECORD_KINDS, ModelRow, TurnResult
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,12 @@ BUILTIN_COMMANDS: tuple[str, ...] = (
     "plugins.disable",
     "approvals.list",
     "economics",
+    # The client's boot-time vocabulary (WS-05): what may be dispatched, and what to mount. Both exist so the
+    # shipped client stops hard-coding the answer — a button wired to a command that no longer exists, or a
+    # panel a disabled plugin still contributes, is a bug the contract test can only catch if the client asks
+    # the kernel instead of remembering.
+    "commands.list",
+    "ui.contributions",
 )
 
 
@@ -286,7 +293,9 @@ class Commands:
         present = {prop.get("x-ui", {}).get("group") for prop in props.values()}
         if "secrets" in registered:
             present.add("Secrets")
-        groups = [g for g in SETTINGS_GROUPS if g in present]
+        # Ordered by the schemas themselves, not by a list of tab names kept in the kernel: a plugin's group
+        # is a tab whether or not anyone here has heard of it (WS-05).
+        groups = order_groups(sorted(g for g in present if g), props)
         return {"groups": groups, "properties": props}
 
     async def models_list(self) -> list[dict[str, Any]]:
@@ -451,6 +460,58 @@ class Commands:
                 )
             )
         return {"form_id": form_id, "status": "submitted", "data": payload}
+
+    async def commands_list(self) -> list[dict[str, Any]]:
+        """``commands.list`` → every command a frontend may dispatch, with its argument names.
+
+        The dispatch table is the source: built-ins are this class's methods (``name.replace(".", "_")``) and
+        plugin commands are the registered custom ones, so a frontend can check its own bindings against
+        reality instead of against a list kept in a JS file. ``alias_of`` marks the underscore spellings kept
+        for external callers and ``exposed`` is false for them: an alias is a compatibility shim, not something
+        to put on a button.
+        """
+        out: list[dict[str, Any]] = []
+        names = set(BUILTIN_COMMANDS) | set(self._custom_commands)
+        for name in sorted(names):
+            handler = self._custom_commands.get(name) or getattr(self, name.replace(".", "_").replace("-", "_"), None)
+            args: list[str] = []
+            if handler is not None:
+                args = [
+                    param.name
+                    for param in inspect.signature(handler).parameters.values()
+                    if param.kind in (param.POSITIONAL_OR_KEYWORD, param.KEYWORD_ONLY)
+                ]
+            alias_of = None
+            if "_" in name:
+                dotted = name.replace("_", ".", 1)
+                if dotted in BUILTIN_COMMANDS:
+                    alias_of = dotted
+            out.append({"name": name, "args": args, "alias_of": alias_of, "exposed": alias_of is None})
+        return out
+
+    async def ui_contributions(self) -> dict[str, Any]:
+        """``ui.contributions`` → what the client mounts: panels, record renderers, client modules, settings tabs.
+
+        One request at boot replaces three lists the client used to keep by hand. A panel is a declaration plus
+        a dispatchable command, so a feature's pane disappears with the feature: disabling it unloads the
+        manifest, and an unloaded manifest contributes nothing (WS-05).
+        """
+        contrib = self.registry.ui_contributions()
+        schema = await self.settings_schema()
+        dispatchable = {row["name"] for row in await self.commands_list() if row["exposed"]}
+        # A panel whose command does not exist is a tab that shows an error, so it is not handed out at all —
+        # and it is reported in the same response, which is what lets the contract test fail on the cause
+        # rather than on a panel that silently never renders.
+        panels, broken = [], []
+        for panel in contrib["panels"]:
+            (panels if panel["command"] in dispatchable else broken).append(panel)
+        return {
+            **contrib,
+            "panels": panels,
+            "unbacked_panels": broken,
+            "settings_groups": schema["groups"],
+            "record_kinds": sorted(RECORD_KINDS),
+        }
 
     async def dispatch(self, command: str, args: dict[str, Any] | None = None) -> Any:
         """Generic command dispatcher for JSON-based frontend interfaces (``POST /commands/<name>``)."""

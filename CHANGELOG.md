@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — P12 / WS-05a feature-owned UI, kernel side
+- **A plugin can declare UI** — `[ui]` in `harness_plugin.toml`: `panels` (`{id, title, command, renderer}`),
+  `record_renderers` (the record kinds *this plugin's client module* paints) and an optional `client_module`.
+  Parsed and validated in `harness/sdk/manifest.py` (`UiContribution`, `UiPanel`): unknown key, malformed or
+  duplicate panel id, empty `command`, a `renderer` outside `table | tree | markdown | list`, a `client_module`
+  outside `static/`, or a client module from a plugin whose trust isn't `builtin`/`config` all fail the load
+  with the reason in the message.
+- **The shipped client declares itself the same way**: `harness/frontends/web/ui.toml` lists the three studio
+  panels (Artifacts ← `sessions.get`, Sessions ← `sessions.list`, Spend ← `economics`) under the source name
+  `web`. `PluginRegistry.ui_contributions()` merges the loaded manifests and *clears on unload*, so disabling a
+  feature removes its panel and its renderers without a single `if enabled` in the client.
+- **Two boot-time commands**: `commands.list` (every dispatchable command with its argument names, `alias_of`,
+  and `exposed` — false for the `form_submit` alias, so an alias is never offered to a button) and
+  `ui.contributions` (panels + renderers + client modules + `settings_groups` + `record_kinds`). A panel whose
+  command is not dispatchable is not served at all; it comes back in `unbacked_panels`, naming its owner.
+- **A plugin's settings group is a tab** (`harness/kernel/settings_schema.order_groups`): membership comes from
+  the aggregated properties and order from `x-ui.order` (lowest wins, then the built-in sequence, then
+  alphabetical), so a feature can add — or place — a tab without a kernel edit. Previously
+  `groups = [g for g in SETTINGS_GROUPS if g in present]` filtered the surface through a hand-kept list, which
+  silently dropped any group the kernel had not heard of (**R47**).
+- **`docs/catalog/UI_CONTRACT.md` grew the contract** (generated): the panel table with owner and backing
+  command, undocumented `data-tab`s, `data-command` bindings against the dispatch table, the renderer modules,
+  durable kinds with no renderer, and the settings tabs. `harness catalog --check --section ui` now **fails** on
+  an unowned tab, an unbacked panel or a dangling binding instead of only reporting unregistered `api.js` calls.
+- **New tests**: `tests/frontends/test_ui_contract.py` (10) — no placeholders, client bindings dispatchable,
+  panels declared-and-mounted-and-backed, the studio pane holds hosts rather than feature markup, every durable
+  record kind painted or excused (the excuse list must have a reason and goes red when a renderer appears),
+  `settings.js` carries no schema data of its own, and this test file and the generated catalogue must agree.
+  `tests/kernel/test_ui_contributions.py` (20) — the manifest validation matrix, the built-in file's own
+  invariants (including that no Python file lists the client's panels), unload semantics, and both new commands.
+
 ### Added — P11b / WS-01 the record path, and the replay machinery in the SDK
 - **`HARNESS_REPLAY=record` is wired into the scenario suite** (`tests/scenarios/_lib/record.py`): the mode
   takes the provider named by `HARNESS_RECORD_PROVIDER` out of the registry, registers a
