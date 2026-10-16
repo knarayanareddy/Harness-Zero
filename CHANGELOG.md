@@ -9,6 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — P8 / WS-03 loop hygiene (tool-result size guards, cooperative timeout, read-before-edit)
+- New kernel seam: `HookEvent.TOOL_RESULT_FINALIZE` fires in the gate after the handler returns and
+  **before** secret sanitisation and the `kernel.limits.tool_result_bytes` truncation, so a hook can
+  replace the result the model reads (`HookOutcome.result` with `action="mutate"`). Hooks at one event
+  now run in `Hook.order` (default 500) order.
+- Cooperative tool timeout: the gate signals `ToolContext.cancel_event` at the deadline, waits
+  `kernel.limits.tool_grace_s` (new, default 5 s) for the handler to return partial work, then cancels
+  the task — and terminates processes registered with `ToolContext.track_process()`. Whatever a tool
+  streamed via `emit_output_delta` is prefixed onto the timeout result instead of being discarded, and
+  the result stays `is_error` so an incomplete answer never reads as a success. `run_command` now
+  registers its child and watches `cancel_event` while waiting (it used to leak a live subprocess past
+  the turn).
+- `HookContext.turn_state`: a per-turn dict shared by every hook, seeded with `records` (the live
+  transcript list) so a guard can derive session history instead of keeping module-level state.
+- `view_file` / `write_to_file` / `edit_file` return `metadata.path` + `metadata.read_sha256`.
+- Four built-in hook plugins, each with a manifest, `settings.schema.json`, README and its own tests:
+  `hook-tool-result-spill` (whole output to `.harness/sessions/<sid>/tool-output/<call_id>.txt`, capped
+  spool), `hook-tool-result-pruner` (head + tail with an explicit omission notice instead of head-only
+  truncation), `hook-repeat-call-reminder` (counts identical calls whose *result* also did not change;
+  `block_after` can stop the loop), `hook-read-before-edit` (refuses a surgical edit of a file that was
+  never read or changed since; transcript-derived, `mode: block|warn|off`).
+- Two live-only events: `tool.result.pruned`, `tool.repeat_detected` (typed payloads in
+  `harness/sdk/events.py`, registered in the client's `KNOWN_EVENT_TYPES`, documented in
+  `docs/ARCHITECTURE.md` and the generated event catalogue).
+- Four scenarios: `huge_tool_output_pruned_and_spilled`, `repeat_call_reminder`,
+  `edit_without_read_blocked` (goldens recorded). Tests: 6 new kernel-seam files/cases for the finalize
+  hook, 6 for the cooperative timeout, 5 end-to-end through a booted kernel, 25 for the hook plugins
+  (kit conformance, declared settings, and the exact model-visible strings).
+- Turning `plugins.hook-tool-result-pruner.enabled` off demonstrably returns head-only truncation
+  (`test_turning_the_pruner_off_brings_back_head_only_truncation`), which is what makes the guard
+  load-bearing rather than decorative.
+
 ### Changed — P7 / WS-02 generated catalogues and freshness gates
 - New `harness catalog` group: `gen` rewrites `docs/catalog/{PLUGINS,TOOLS,SETTINGS,EVENTS,COMMANDS,UI_CONTRACT}.md`
   and `catalog.json` from a booted kernel; `--check [section]` gates them (`drift`, `settings`, `readmes`, `ui`,

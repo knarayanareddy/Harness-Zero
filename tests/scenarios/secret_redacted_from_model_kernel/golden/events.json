@@ -91,7 +91,15 @@
     "data": {
       "call_id": "call#1",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          3
+        ],
+        "lines_total": 3,
+        "path": "<ws>/.env",
+        "read_sha256": "909548ffa2a33f4fd069bd106cdf3964136d30dcd2ea903bf528dcc5f0faad6a"
+      },
       "name": "view_file",
       "preview": "    1 | INTERNAL_TOKEN=[REDACTED SECRET]\n    2 | OPENAI_API_KEY=[REDACTED API KEY]\n    3 | APP_NAME=demo\n"
     },

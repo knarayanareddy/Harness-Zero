@@ -35,7 +35,9 @@
         "tool.call",
         "tool.decision",
         "tool.output.delta",
+        "tool.repeat_detected",
         "tool.result",
+        "tool.result.pruned",
         "turn.cancelled",
         "turn.completed",
         "turn.error",
@@ -445,6 +447,22 @@
       "if": {
         "properties": {
           "type": {
+            "const": "tool.repeat_detected"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/tool.repeat_detected"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
             "const": "tool.result"
           }
         }
@@ -453,6 +471,22 @@
         "properties": {
           "data": {
             "$ref": "#/$defs/payloads/tool.result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tool.result.pruned"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/tool.result.pruned"
           }
         }
       }
@@ -1121,6 +1155,31 @@
           "text"
         ]
       },
+      "tool.repeat_detected": {
+        "title": "ToolRepeatDetected",
+        "type": "object",
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "blocked": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "call_id",
+          "name",
+          "count"
+        ],
+        "description": "Live-only (WS-03): this turn repeated an identical call whose result had not changed."
+      },
       "tool.result": {
         "title": "ToolCallResult",
         "type": "object",
@@ -1152,6 +1211,35 @@
           "duration_ms",
           "preview"
         ]
+      },
+      "tool.result.pruned": {
+        "title": "ToolResultPruned",
+        "type": "object",
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "original_chars": {
+            "type": "integer"
+          },
+          "shown_chars": {
+            "type": "integer"
+          },
+          "spill_path": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "call_id",
+          "name",
+          "original_chars",
+          "shown_chars"
+        ],
+        "description": "Live-only (WS-03): a finalize guard shortened what the model reads for this call."
       },
       "turn.cancelled": {
         "title": "TurnCancelled",

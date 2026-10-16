@@ -4,7 +4,7 @@
 
 # Plugin catalogue (v0.2.1)
 
-35 built-in plugins, read from `registry.discovered` of a booted kernel. `Loaded` is whether `setup()` succeeded — a plugin that raises is reported and skipped, it never aborts the boot.
+39 built-in plugins, read from `registry.discovered` of a booted kernel. `Loaded` is whether `setup()` succeeded — a plugin that raises is reported and skipped, it never aborts the boot.
 
 
 ## `bridges/`
@@ -39,6 +39,10 @@
 | Plugin | Version | Provides | Capabilities | Settings namespace | README sections | Loaded |
 |---|---|---|---|---|---|---|
 | `hook-checkpoints` | 1.0.0 | `hook`, `tool` | fs:write, exec | — | 0/5 | ✓ |
+| `hook-read-before-edit` | 1.0.0 | `hook` | fs:read | `plugins.hook-read-before-edit` | 5/5 | ✓ |
+| `hook-repeat-call-reminder` | 1.0.0 | `hook` | — | `plugins.hook-repeat-call-reminder` | 5/5 | ✓ |
+| `hook-tool-result-pruner` | 1.0.0 | `hook` | — | `plugins.hook-tool-result-pruner` | 5/5 | ✓ |
+| `hook-tool-result-spill` | 1.0.0 | `hook` | fs:write | `plugins.hook-tool-result-spill` | 5/5 | ✓ |
 
 ## `policy/`
 

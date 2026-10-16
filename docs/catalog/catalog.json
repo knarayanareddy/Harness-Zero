@@ -556,6 +556,8 @@
         "approval_allow_web_dom",
         "approval_deny_no_approver_kernel",
         "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
         "jail_blocks_traversal_kernel",
         "mcp_echo_kernel",
         "memory_remember_search_kernel",
@@ -564,6 +566,7 @@
         "plain_answer_web",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
         "session_reload_web_dom",
@@ -609,6 +612,8 @@
         "approval_allow_web_dom",
         "approval_deny_no_approver_kernel",
         "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
         "jail_blocks_traversal_kernel",
         "mcp_echo_kernel",
         "memory_remember_search_kernel",
@@ -617,6 +622,7 @@
         "plain_answer_web",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
         "session_reload_web_dom",
@@ -659,6 +665,8 @@
         "approval_allow_web_dom",
         "approval_deny_no_approver_kernel",
         "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
         "jail_blocks_traversal_kernel",
         "mcp_echo_kernel",
         "memory_remember_search_kernel",
@@ -667,6 +675,7 @@
         "plain_answer_web",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
         "session_reload_web_dom",
@@ -696,6 +705,8 @@
         "approval_allow_web_dom",
         "approval_deny_no_approver_kernel",
         "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
         "jail_blocks_traversal_kernel",
         "mcp_echo_kernel",
         "memory_remember_search_kernel",
@@ -704,6 +715,7 @@
         "plain_answer_web",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "repeat_call_reminder",
         "secret_redacted_from_model_kernel",
         "session_reload_web_dom",
         "session_resume_web",
@@ -748,12 +760,15 @@
         "approval_allow_kernel",
         "approval_allow_web_dom",
         "approval_deny_no_approver_kernel",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
         "jail_blocks_traversal_kernel",
         "mcp_echo_kernel",
         "memory_remember_search_kernel",
         "memory_remember_web_dom",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
         "shell_exec_denied_without_approver_kernel",
@@ -813,6 +828,8 @@
         "approval_allow_web_dom",
         "approval_deny_no_approver_kernel",
         "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
         "jail_blocks_traversal_kernel",
         "mcp_echo_kernel",
         "memory_remember_search_kernel",
@@ -821,6 +838,7 @@
         "plain_answer_web",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
         "session_reload_web_dom",
@@ -909,12 +927,15 @@
         "approval_allow_kernel",
         "approval_allow_web_dom",
         "approval_deny_no_approver_kernel",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
         "jail_blocks_traversal_kernel",
         "mcp_echo_kernel",
         "memory_remember_search_kernel",
         "memory_remember_web_dom",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
         "shell_exec_denied_without_approver_kernel",
@@ -942,12 +963,15 @@
         "approval_allow_kernel",
         "approval_allow_web_dom",
         "approval_deny_no_approver_kernel",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
         "jail_blocks_traversal_kernel",
         "mcp_echo_kernel",
         "memory_remember_search_kernel",
         "memory_remember_web_dom",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
         "shell_exec_denied_without_approver_kernel",
@@ -970,8 +994,27 @@
         "harness/kernel/bus.py",
         "harness/kernel/gate.py"
       ],
-      "scenarios": [],
+      "scenarios": [
+        "huge_tool_output_pruned_and_spilled",
+        "repeat_call_reminder"
+      ],
       "type": "tool.output.delta"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "fields": [
+        "EVENT_TYPE",
+        "blocked",
+        "call_id",
+        "count",
+        "name"
+      ],
+      "payload": "ToolRepeatDetected",
+      "producers": [],
+      "scenarios": [
+        "repeat_call_reminder"
+      ],
+      "type": "tool.repeat_detected"
     },
     {
       "client_renderer": "app.js",
@@ -993,12 +1036,15 @@
         "approval_allow_kernel",
         "approval_allow_web_dom",
         "approval_deny_no_approver_kernel",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
         "jail_blocks_traversal_kernel",
         "mcp_echo_kernel",
         "memory_remember_search_kernel",
         "memory_remember_web_dom",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
         "shell_exec_denied_without_approver_kernel",
@@ -1007,6 +1053,23 @@
         "tirith_blocks_ssrf_web_dom"
       ],
       "type": "tool.result"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "fields": [
+        "EVENT_TYPE",
+        "call_id",
+        "name",
+        "original_chars",
+        "shown_chars",
+        "spill_path"
+      ],
+      "payload": "ToolResultPruned",
+      "producers": [],
+      "scenarios": [
+        "huge_tool_output_pruned_and_spilled"
+      ],
+      "type": "tool.result.pruned"
     },
     {
       "client_renderer": "app.js",
@@ -1040,6 +1103,8 @@
         "approval_allow_web_dom",
         "approval_deny_no_approver_kernel",
         "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
         "jail_blocks_traversal_kernel",
         "mcp_echo_kernel",
         "memory_remember_search_kernel",
@@ -1048,6 +1113,7 @@
         "plain_answer_web",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
         "session_reload_web_dom",
@@ -1094,6 +1160,8 @@
         "approval_allow_web_dom",
         "approval_deny_no_approver_kernel",
         "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
         "jail_blocks_traversal_kernel",
         "mcp_echo_kernel",
         "memory_remember_search_kernel",
@@ -1102,6 +1170,7 @@
         "plain_answer_web",
         "read_then_edit_kernel",
         "read_then_edit_web_dom",
+        "repeat_call_reminder",
         "runaway_tool_loop_kernel",
         "secret_redacted_from_model_kernel",
         "session_reload_web_dom",
@@ -1127,6 +1196,7 @@
         "harness/plugins/bridges/shell_hooks/hook.py"
       ],
       "scenarios": [
+        "edit_without_read_blocked",
         "memory_remember_search_kernel",
         "memory_remember_web_dom",
         "read_then_edit_kernel",
@@ -1397,6 +1467,106 @@
       "requires": [],
       "settings_schema": null,
       "summary": "Cline-style shadow git repo snapshots before mutating tools with checkpoint_restore tool",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read"
+      ],
+      "entry": "harness.plugins.hooks.read_before_edit.plugin:ReadBeforeEditPlugin",
+      "family": "hooks",
+      "loaded": true,
+      "name": "hook-read-before-edit",
+      "path": "harness/plugins/hooks/read_before_edit",
+      "provides": [
+        "hook"
+      ],
+      "readme": "harness/plugins/hooks/read_before_edit/README.md",
+      "readme_sections": [
+        "Summary",
+        "Configuration",
+        "Extension points",
+        "Model experience",
+        "Known limitations"
+      ],
+      "requires": [],
+      "settings_schema": "harness/plugins/hooks/read_before_edit/settings.schema.json",
+      "summary": "Blocks edit_file/write_to_file on files the model never read or that changed since it did",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.hooks.repeat_call_reminder.plugin:RepeatCallReminderPlugin",
+      "family": "hooks",
+      "loaded": true,
+      "name": "hook-repeat-call-reminder",
+      "path": "harness/plugins/hooks/repeat_call_reminder",
+      "provides": [
+        "hook"
+      ],
+      "readme": "harness/plugins/hooks/repeat_call_reminder/README.md",
+      "readme_sections": [
+        "Summary",
+        "Configuration",
+        "Extension points",
+        "Model experience",
+        "Known limitations"
+      ],
+      "requires": [],
+      "settings_schema": "harness/plugins/hooks/repeat_call_reminder/settings.schema.json",
+      "summary": "Tells the model when it repeats an identical tool call in one turn, and can stop it",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.hooks.tool_result_pruner.plugin:ToolResultPrunerPlugin",
+      "family": "hooks",
+      "loaded": true,
+      "name": "hook-tool-result-pruner",
+      "path": "harness/plugins/hooks/tool_result_pruner",
+      "provides": [
+        "hook"
+      ],
+      "readme": "harness/plugins/hooks/tool_result_pruner/README.md",
+      "readme_sections": [
+        "Summary",
+        "Configuration",
+        "Extension points",
+        "Model experience",
+        "Known limitations"
+      ],
+      "requires": [],
+      "settings_schema": "harness/plugins/hooks/tool_result_pruner/settings.schema.json",
+      "summary": "Keeps the head and the tail of oversized tool results instead of letting truncation drop the diagnosis",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:write"
+      ],
+      "entry": "harness.plugins.hooks.tool_result_spill.plugin:ToolResultSpillPlugin",
+      "family": "hooks",
+      "loaded": true,
+      "name": "hook-tool-result-spill",
+      "path": "harness/plugins/hooks/tool_result_spill",
+      "provides": [
+        "hook"
+      ],
+      "readme": "harness/plugins/hooks/tool_result_spill/README.md",
+      "readme_sections": [
+        "Summary",
+        "Configuration",
+        "Extension points",
+        "Model experience",
+        "Known limitations"
+      ],
+      "requires": [],
+      "settings_schema": "harness/plugins/hooks/tool_result_spill/settings.schema.json",
+      "summary": "Copies oversized tool results into the session directory before truncation, so nothing is lost",
       "tier": "builtin",
       "version": "1.0.0"
     },
@@ -1880,6 +2050,25 @@
     },
     {
       "kind": "kernel",
+      "name": "edit_without_read_blocked",
+      "summary": ">-.",
+      "tools_called": [
+        "edit_file",
+        "view_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "huge_tool_output_pruned_and_spilled",
+      "summary": ">-.",
+      "tools_called": [
+        "run_command"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
       "name": "jail_blocks_traversal_kernel",
       "summary": "Workspace jail \u2014 a read and a write outside the workspace are denied by policy even in allow mode; nothing is read or written; the model is told why.",
       "tools_called": [
@@ -1948,6 +2137,15 @@
       "tools_called": [
         "edit_file",
         "view_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "repeat_call_reminder",
+      "summary": ">-.",
+      "tools_called": [
+        "run_command"
       ],
       "turns": 1
     },
@@ -2335,6 +2533,210 @@
       "namespace": "plugins.context-repo-map",
       "owner": "context-repo-map",
       "title": "Repo Map Budget (tokens)",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "[]",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.hook-read-before-edit.exempt_globs",
+      "namespace": "plugins.hook-read-before-edit",
+      "owner": "hook-read-before-edit",
+      "title": "Glob patterns (workspace-relative) the guard ignores.",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "[\"edit_file\", \"write_to_file\"]",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.hook-read-before-edit.guarded_tools",
+      "namespace": "plugins.hook-read-before-edit",
+      "owner": "hook-read-before-edit",
+      "title": "Tools that must not blind-edit.",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "\"block\"",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.hook-read-before-edit.mode",
+      "namespace": "plugins.hook-read-before-edit",
+      "owner": "hook-read-before-edit",
+      "title": "'block' refuses the call, 'warn' appends a note, 'off' keeps the guard loaded but idle.",
+      "type": "string",
+      "widget": "text"
+    },
+    {
+      "alias": false,
+      "default": "[\"view_file\"]",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.hook-read-before-edit.read_tools",
+      "namespace": "plugins.hook-read-before-edit",
+      "owner": "hook-read-before-edit",
+      "title": "Tools whose use counts as having read the file.",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "0",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.hook-repeat-call-reminder.block_after",
+      "namespace": "plugins.hook-repeat-call-reminder",
+      "owner": "hook-repeat-call-reminder",
+      "title": "Block the call from this many identical calls; 0 never blocks.",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "true",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.hook-repeat-call-reminder.enabled",
+      "namespace": "plugins.hook-repeat-call-reminder",
+      "owner": "hook-repeat-call-reminder",
+      "title": "Count identical tool calls within a turn.",
+      "type": "boolean",
+      "widget": "boolean"
+    },
+    {
+      "alias": false,
+      "default": "[\"manage_task\", \"view_file\"]",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.hook-repeat-call-reminder.exempt_tools",
+      "namespace": "plugins.hook-repeat-call-reminder",
+      "owner": "hook-repeat-call-reminder",
+      "title": "Tools that are expected to be polled or paged.",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "3",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.hook-repeat-call-reminder.repeat_after",
+      "namespace": "plugins.hook-repeat-call-reminder",
+      "owner": "hook-repeat-call-reminder",
+      "title": "Nag from this many identical calls in one turn.",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "true",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.hook-tool-result-pruner.enabled",
+      "namespace": "plugins.hook-tool-result-pruner",
+      "owner": "hook-tool-result-pruner",
+      "title": "Prune oversized tool results when the final result is built.",
+      "type": "boolean",
+      "widget": "boolean"
+    },
+    {
+      "alias": false,
+      "default": "[\"view_file\"]",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.hook-tool-result-pruner.exempt_tools",
+      "namespace": "plugins.hook-tool-result-pruner",
+      "owner": "hook-tool-result-pruner",
+      "title": "Tools whose output is already an explicit, ranged read.",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "4096",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.hook-tool-result-pruner.head_chars",
+      "namespace": "plugins.hook-tool-result-pruner",
+      "owner": "hook-tool-result-pruner",
+      "title": "Characters kept from the start, snapped to a line boundary.",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "1024",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.hook-tool-result-pruner.tail_chars",
+      "namespace": "plugins.hook-tool-result-pruner",
+      "owner": "hook-tool-result-pruner",
+      "title": "Characters kept from the end, where test failures and stack traces are.",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "8192",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.hook-tool-result-pruner.threshold_chars",
+      "namespace": "plugins.hook-tool-result-pruner",
+      "owner": "hook-tool-result-pruner",
+      "title": "Results up to this length pass through untouched.",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "true",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.hook-tool-result-spill.enabled",
+      "namespace": "plugins.hook-tool-result-spill",
+      "owner": "hook-tool-result-spill",
+      "title": "Copy oversized tool results into the session directory.",
+      "type": "boolean",
+      "widget": "boolean"
+    },
+    {
+      "alias": false,
+      "default": "[\"view_file\"]",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.hook-tool-result-spill.exempt_tools",
+      "namespace": "plugins.hook-tool-result-spill",
+      "owner": "hook-tool-result-spill",
+      "title": "Tools whose results are never spilled (they are already paginated).",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "200",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.hook-tool-result-spill.max_files_per_session",
+      "namespace": "plugins.hook-tool-result-spill",
+      "owner": "hook-tool-result-spill",
+      "title": "Cap on spool files kept per session; older ones are deleted.",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "8192",
+      "group": "Plugins & Integrations",
+      "in_ui": true,
+      "key": "plugins.hook-tool-result-spill.threshold_chars",
+      "namespace": "plugins.hook-tool-result-spill",
+      "owner": "hook-tool-result-spill",
+      "title": "Only results longer than this many characters are spilled.",
       "type": "integer",
       "widget": "number"
     },
@@ -2831,7 +3233,9 @@
       "model.started",
       "model.tool_call",
       "plugin.error",
-      "plugin.loaded"
+      "plugin.loaded",
+      "tool.repeat_detected",
+      "tool.result.pruned"
     ],
     "routes": [
       "/",

@@ -1,0 +1,258 @@
+[
+  {
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "Rename greet() to hello() in app.py"
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "replay-v1",
+    "system_chars": 1471,
+    "system_head": "You are Harness-Zero, an advanced agentic software engineering system. You operate with absolute precision, rigorous test-driven verification, and minimal disruption. Always inspect files thoroughly before editing, write clean production-grade code, and verify all changes with automated tests.\n\nTool Execution Rules:\n1. Read before writing: inspect files using view_file before editing.\n2. Precise e",
+    "system_sections": [
+      "# Available Skills (Progressive Disclosure)",
+      "## Codebase Map:"
+    ],
+    "tools": [
+      "checkpoint_restore",
+      "create_artifact",
+      "edit_file",
+      "manage_task",
+      "read_resource",
+      "remember",
+      "run_command",
+      "search_codebase",
+      "search_memory",
+      "view_file",
+      "view_skill",
+      "write_to_file"
+    ]
+  },
+  {
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "Rename greet() to hello() in app.py"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "input": {
+              "diff": "<<<<<<< SEARCH\ndef greet():\n    return 'hi'\n=======\ndef hello():\n    return 'hi'\n>>>>>>> REPLACE\n",
+              "file_path": "app.py"
+            },
+            "tool_use": "edit_file"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "is_error": true,
+            "tool_result": "blocked by hook read_before_edit: edit_file blocked: app.py has not been read in this session. Read it first."
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "replay-v1",
+    "system_chars": 1471,
+    "system_head": "You are Harness-Zero, an advanced agentic software engineering system. You operate with absolute precision, rigorous test-driven verification, and minimal disruption. Always inspect files thoroughly before editing, write clean production-grade code, and verify all changes with automated tests.\n\nTool Execution Rules:\n1. Read before writing: inspect files using view_file before editing.\n2. Precise e",
+    "system_sections": [
+      "# Available Skills (Progressive Disclosure)",
+      "## Codebase Map:"
+    ],
+    "tools": [
+      "checkpoint_restore",
+      "create_artifact",
+      "edit_file",
+      "manage_task",
+      "read_resource",
+      "remember",
+      "run_command",
+      "search_codebase",
+      "search_memory",
+      "view_file",
+      "view_skill",
+      "write_to_file"
+    ]
+  },
+  {
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "Rename greet() to hello() in app.py"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "input": {
+              "diff": "<<<<<<< SEARCH\ndef greet():\n    return 'hi'\n=======\ndef hello():\n    return 'hi'\n>>>>>>> REPLACE\n",
+              "file_path": "app.py"
+            },
+            "tool_use": "edit_file"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "is_error": true,
+            "tool_result": "blocked by hook read_before_edit: edit_file blocked: app.py has not been read in this session. Read it first."
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "input": {
+              "file_path": "app.py"
+            },
+            "tool_use": "view_file"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "is_error": false,
+            "tool_result": "    1 | def greet():\n    2 |     return 'hi'\n"
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "replay-v1",
+    "system_chars": 1471,
+    "system_head": "You are Harness-Zero, an advanced agentic software engineering system. You operate with absolute precision, rigorous test-driven verification, and minimal disruption. Always inspect files thoroughly before editing, write clean production-grade code, and verify all changes with automated tests.\n\nTool Execution Rules:\n1. Read before writing: inspect files using view_file before editing.\n2. Precise e",
+    "system_sections": [
+      "# Available Skills (Progressive Disclosure)",
+      "## Codebase Map:"
+    ],
+    "tools": [
+      "checkpoint_restore",
+      "create_artifact",
+      "edit_file",
+      "manage_task",
+      "read_resource",
+      "remember",
+      "run_command",
+      "search_codebase",
+      "search_memory",
+      "view_file",
+      "view_skill",
+      "write_to_file"
+    ]
+  },
+  {
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "Rename greet() to hello() in app.py"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "input": {
+              "diff": "<<<<<<< SEARCH\ndef greet():\n    return 'hi'\n=======\ndef hello():\n    return 'hi'\n>>>>>>> REPLACE\n",
+              "file_path": "app.py"
+            },
+            "tool_use": "edit_file"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "is_error": true,
+            "tool_result": "blocked by hook read_before_edit: edit_file blocked: app.py has not been read in this session. Read it first."
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "input": {
+              "file_path": "app.py"
+            },
+            "tool_use": "view_file"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "is_error": false,
+            "tool_result": "    1 | def greet():\n    2 |     return 'hi'\n"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "input": {
+              "diff": "<<<<<<< SEARCH\ndef greet():\n    return 'hi'\n=======\ndef hello():\n    return 'hi'\n>>>>>>> REPLACE\n",
+              "file_path": "app.py"
+            },
+            "tool_use": "edit_file"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "is_error": false,
+            "tool_result": "Successfully applied 1 search/replace block(s) to app.py"
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "replay-v1",
+    "system_chars": 1471,
+    "system_head": "You are Harness-Zero, an advanced agentic software engineering system. You operate with absolute precision, rigorous test-driven verification, and minimal disruption. Always inspect files thoroughly before editing, write clean production-grade code, and verify all changes with automated tests.\n\nTool Execution Rules:\n1. Read before writing: inspect files using view_file before editing.\n2. Precise e",
+    "system_sections": [
+      "# Available Skills (Progressive Disclosure)",
+      "## Codebase Map:"
+    ],
+    "tools": [
+      "checkpoint_restore",
+      "create_artifact",
+      "edit_file",
+      "manage_task",
+      "read_resource",
+      "remember",
+      "run_command",
+      "search_codebase",
+      "search_memory",
+      "view_file",
+      "view_skill",
+      "write_to_file"
+    ]
+  }
+]

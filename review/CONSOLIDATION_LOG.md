@@ -603,6 +603,39 @@ kernel and gating them.
 
 ---
 
+### P8 — WS-03: loop hygiene — **DONE**
+
+*Why it is in this plan*: WS-02 removed parallel *descriptions* of the kernel; WS-03 removes the
+parallel *behaviour* the model has to work around. Three failures were visible in the replay goldens:
+a 200 KB test log arriving with its failure summary cut off (head-only truncation), the model re-running
+an identical command with nobody pointing that out, and `edit_file` guesses against files never read.
+Plus one that only showed up under load: a timed-out `run_command` left its child process running.
+
+*What was built*
+
+| Piece | Detail |
+| :-- | :-- |
+| `HookEvent.TOOL_RESULT_FINALIZE` + `HookOutcome.result` | Gate step 8b, after the handler and before sanitisation/truncation; ordered by the new `Hook.order` (spill 800, pruner 900). `POST_TOOL_USE` was the wrong place: appends there were truncated away. |
+| Cooperative timeout | `ToolContext.deadline` / `cancel_event`, `kernel.limits.tool_grace_s`, `track_process()` + `terminate_tracked()`, streamed output reused as the partial result. |
+| `HookContext.turn_state` | Per-turn scratch seeded with `records` (the live transcript list): repeat counters and the read ledger need cross-call memory with no module globals. |
+| Four hook plugins | `tool_result_spill`, `tool_result_pruner`, `repeat_call_reminder`, `read_before_edit` under `harness/plugins/hooks/`, each with manifest + `settings.schema.json` + 5-section README; 17 new declared settings. |
+| Read ledger | Derived from transcript records in `read_before_edit` (a call counts only once a non-error result exists), so it survives a restart and ignores failed reads; `fs` tools publish `metadata.path`/`read_sha256` to make that derivation possible. |
+| Tests | `tests/kernel/test_tool_result_finalize_hook.py` (5), `test_cooperative_timeout.py` (6), `test_loop_hygiene_through_kernel.py` (5), `tests/plugins/test_loop_hygiene_hooks.py` (25); scenarios `huge_tool_output_pruned_and_spilled`, `repeat_call_reminder`, `edit_without_read_blocked`. |
+
+*Deviations from the spec (deliberate)*
+
+* Setting namespaces follow the repo's `<kind>-<name>` plugin names — `plugins.hook-tool-result-pruner.*`,
+  not `plugins.hooks-tool-result-pruner.*`; the spec's teeth test is `…enabled: false` either way.
+* Conformance/unit tests live in `tests/plugins/test_loop_hygiene_hooks.py` (one test estate, P5) instead
+  of `tests/test_conformance.py` inside each plugin directory; `harness plugin test --all` runs them.
+* No scenario for the timeout: `run_command`'s `ToolSpec.timeout_s` is 600 s and not configurable, so a
+  scenario would either wait ten minutes or fake the tool. The behaviour is pinned by
+  `tests/kernel/test_cooperative_timeout.py` and by `test_a_stuck_tool_returns_partial_output_instead_of_nothing`
+  through a booted kernel with a 0.3 s tool. Making the timeout operator-tunable is left to WS-06.
+* `read_before_edit` uses one switch (`mode: block|warn|off`) rather than `enabled` plus `mode`, and the
+  other three hooks have `enabled` because they have no mode.
+
+
 ## 3. Defects found while executing (continuing the review's numbering)
 
 | # | Where | What | Status |
@@ -638,6 +671,8 @@ kernel and gating them.
 | R37 | `plugins/bridges/mcp_client` | A third fallback, `settings.get("extensions.mcp_servers")`, was dead for the same reason (the view re-prefixed it to a key that does not exist). | P7: removed rather than declared — nothing could ever have been using it |
 | R38 | `kernel/runner.py` | `kernel.max_tool_iterations` was in the settings panel and in `KERNEL_SCHEMA`, but the strategies used their own literal `20`, so the control changed nothing. | P7: `TurnRunner.execute_turn` seeds `max_iterations` from the setting when the caller did not pass one (a per-turn override still wins); 21 goldens gained the key in `turn.started.options`, which is the point — the recorded turn now shows the cap that applied |
 | R39 | `plugins/providers/gemini` | The panel offered `secrets.GEMINI_API_KEY` only, while the provider also accepts `GOOGLE_API_KEY`. | P7: both declared via `x-secrets`, so the list is generated |
+| R40 | `kernel/gate.py`, `plugins/tools/shell` | `asyncio.timeout(spec.timeout_s)` cancelled the *handler coroutine* only: the subprocess it had started kept running (pipe still open, work still burning CPU), any output it had streamed was thrown away, and the model got `Tool 'run_command' timed out after 600s` with nothing else. | P8: `cancel_event` + `kernel.limits.tool_grace_s` grace period, `ToolContext.track_process()`/`terminate_tracked()`, streamed deltas become the partial result; `run_command` registers its child and returns early when signalled |
+| R41 | `plugins/hooks/repeat_call_reminder` | The new plugin declared `enabled` in its schema but never read it — a settings row that changes nothing (the exact bug class WS-02 was built to catch, reintroduced by new code). | P8: caught by `test_settings_are_declared_under_the_manifest_namespace`, which every hook plugin now pins; the flag is read and honoured |
 | R31 | `tests/scenarios/_lib/normalize.py` | Goldens pinned `model.started.request_tokens_estimate` = prompt chars ÷ 4, which includes the tmp workspace path — flipped 73 → 74 when the pytest tmp counter reached three digits (the unexplained transient failure of P3). | P6: key dropped from goldens (22 files, only those lines) |
 
 ---

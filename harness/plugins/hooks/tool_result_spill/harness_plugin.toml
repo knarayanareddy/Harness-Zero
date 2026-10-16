@@ -1,0 +1,11 @@
+[plugin]
+name = "hook-tool-result-spill"
+version = "1.0.0"
+api_version = "1"
+summary = "Copies oversized tool results into the session directory before truncation, so nothing is lost"
+provides = ["hook"]
+capabilities = ["fs:write"]
+entry = "harness.plugins.hooks.tool_result_spill.plugin:ToolResultSpillPlugin"
+
+[settings]
+schema = "settings.schema.json"

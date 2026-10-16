@@ -1,0 +1,11 @@
+[plugin]
+name = "hook-read-before-edit"
+version = "1.0.0"
+api_version = "1"
+summary = "Blocks edit_file/write_to_file on files the model never read or that changed since it did"
+provides = ["hook"]
+capabilities = ["fs:read"]
+entry = "harness.plugins.hooks.read_before_edit.plugin:ReadBeforeEditPlugin"
+
+[settings]
+schema = "settings.schema.json"

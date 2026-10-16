@@ -60,6 +60,7 @@ Recommended sequence: **WS-01 → WS-02 → WS-03 → WS-04 → WS-05 → WS-07 
 |---|---|---|
 | WS-01 | specified | — |
 | WS-02 | **executed** (consolidation P7, PR #5 `933cda6`+) — `harness catalog gen/--check/readme`, `docs/catalog/*`, settings ownership; `readmes` and `scenarios` checks ship as warnings, `--strict` turns them into failures; scaffold kinds deferred | PR #5 |
+| WS-03 | **executed** (consolidation P8, PR #5) — `TOOL_RESULT_FINALIZE` + `HookOutcome.result` + `Hook.order`, cooperative timeout (`kernel.limits.tool_grace_s`, `ToolContext.cancel_event`/`track_process`), `HookContext.turn_state`, read-ledger metadata on `fs` tools, four `hook-*` plugins, 2 live events, 3 scenarios | PR #5 |
 | WS-03 | specified | — |
 | WS-04 | specified | — |
 | WS-05 | specified | — |

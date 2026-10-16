@@ -135,10 +135,23 @@ LIVE_NOISE = frozenset({"model.text.delta", "model.thinking.delta", "tool.output
 
 
 def collapse_deltas(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Merges consecutive ``model.text.delta`` events into one with the joined text
-    so goldens do not depend on chunk boundaries."""
+    """Merges consecutive streamed deltas into one event with the joined text, so goldens do not
+    depend on chunk boundaries (`model.text.delta`, `model.thinking.delta`, `tool.output.delta`)."""
     out: list[dict[str, Any]] = []
     for e in events:
+        # Tool output streams out of a pipe, so its chunk boundaries are a property of the OS buffer,
+        # not of the kernel. Merge per (call, stream): without this a golden records a race, and the
+        # identity check keeps two concurrent commands' streams from being fused into one.
+        if e.get("type") == "tool.output.delta" and out and out[-1].get("type") == "tool.output.delta":
+            prev_data, data = out[-1].get("data", {}), e.get("data", {})
+            same_call = prev_data.get("call_id") == data.get("call_id")
+            same_stream = prev_data.get("stream") == data.get("stream")
+            if same_call and same_stream:
+                merged = dict(out[-1])
+                merged["data"] = dict(prev_data)
+                merged["data"]["text"] = (prev_data.get("text") or "") + (data.get("text") or "")
+                out[-1] = merged
+                continue
         if e.get("type") in ("model.text.delta", "model.thinking.delta") and out and out[-1].get("type") == e.get("type"):
             prev = out[-1]
             prev_text = prev.get("data", {}).get("text", "") or prev.get("data", {}).get("delta", "")

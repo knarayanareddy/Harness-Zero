@@ -804,6 +804,12 @@ class TurnRunner:
                 logger.warning(f"Could not load session transcript history: {e}")
                 services.transcript_records = []
 
+        # WS-03: hooks that need session history (read-before-edit) read it from here instead of
+        # keeping a private copy. `turn_state` is per turn — services are rebuilt each turn — and
+        # this is the same list object the runner appends to, so the ledger a guard sees includes the
+        # read that happened two steps ago in this very turn, and nothing from the next turn.
+        services.turn_state["records"] = services.transcript_records
+
         turn_ctx = TurnContextImpl(
             session=session,
             turn_id=turn_id,

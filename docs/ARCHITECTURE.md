@@ -148,6 +148,8 @@ generated JSON schema (`harness events schema`).
 | `approval.resolved` | `ApprovalResolved` | approval_id, approved, by, reason |
 | `tool.output.delta` | `ToolOutputDelta` | call_id, stream, text |
 | `tool.result` | `ToolCallResult` | call_id, name, is_error, duration_ms, preview, metadata |
+| `tool.result.pruned` | `ToolResultPruned` | call_id, name, original_chars, shown_chars, spill_path (live-only, WS-03 size guard) |
+| `tool.repeat_detected` | `ToolRepeatDetected` | call_id, name, count, blocked (live-only, WS-03 spin brake) |
 
 *Background & compaction*
 

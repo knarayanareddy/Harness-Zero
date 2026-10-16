@@ -91,7 +91,15 @@
     "data": {
       "call_id": "call#1",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },
@@ -164,7 +172,15 @@
     "data": {
       "call_id": "call#2",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },
@@ -237,7 +253,15 @@
     "data": {
       "call_id": "call#3",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },
@@ -310,7 +334,15 @@
     "data": {
       "call_id": "call#4",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },
@@ -383,7 +415,15 @@
     "data": {
       "call_id": "call#5",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },
@@ -456,7 +496,15 @@
     "data": {
       "call_id": "call#6",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },
@@ -529,7 +577,15 @@
     "data": {
       "call_id": "call#7",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },
@@ -602,7 +658,15 @@
     "data": {
       "call_id": "call#8",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },
@@ -675,7 +739,15 @@
     "data": {
       "call_id": "call#9",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },
@@ -748,7 +820,15 @@
     "data": {
       "call_id": "call#10",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },
@@ -821,7 +901,15 @@
     "data": {
       "call_id": "call#11",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },
@@ -894,7 +982,15 @@
     "data": {
       "call_id": "call#12",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },
@@ -967,7 +1063,15 @@
     "data": {
       "call_id": "call#13",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },
@@ -1040,7 +1144,15 @@
     "data": {
       "call_id": "call#14",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },
@@ -1113,7 +1225,15 @@
     "data": {
       "call_id": "call#15",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },
@@ -1186,7 +1306,15 @@
     "data": {
       "call_id": "call#16",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },
@@ -1259,7 +1387,15 @@
     "data": {
       "call_id": "call#17",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },
@@ -1332,7 +1468,15 @@
     "data": {
       "call_id": "call#18",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },
@@ -1405,7 +1549,15 @@
     "data": {
       "call_id": "call#19",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },
@@ -1478,7 +1630,15 @@
     "data": {
       "call_id": "call#20",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          1
+        ],
+        "lines_total": 1,
+        "path": "<ws>/app.py",
+        "read_sha256": "96dd2db88b7dc8e28cabe68d8e766dde83570e8050ca995a1af38b609cec8395"
+      },
       "name": "view_file",
       "preview": "    1 | print('x')\n"
     },

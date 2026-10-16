@@ -45,6 +45,18 @@ def hello(name):
 >>>>>>> REPLACE
 """
 
+RENAME_DIFF = """<<<<<<< SEARCH
+def greet():
+    return 'hi'
+=======
+def hello():
+    return 'hi'
+>>>>>>> REPLACE
+"""
+
+#: 120 KB of log followed by the only line that matters, to prove the tail survives the size guards.
+NOISY_BUILD = "yes noise | head -n 20000; echo 'Build FAILED at the end'"
+
 RECORDINGS: dict[str, list[list]] = {
     # 1. A plain streamed answer; two deltas so chunk collapsing is exercised.
     "plain_answer_kernel": [text("The capital of the Netherlands ", "is Amsterdam.")],
@@ -129,6 +141,25 @@ RECORDINGS: dict[str, list[list]] = {
         text("Saved."),
         tool("c2", "search_memory", {"query": "Falcon"}),
         text("Found it: the codename is Falcon."),
+    ],
+    # 19. WS-03 loop hygiene: an oversized result is spilled + pruned, and the tail survives.
+    "huge_tool_output_pruned_and_spilled": [
+        tool("c1", "run_command", {"command": NOISY_BUILD}),
+        text("The build failed at the end of the log; fixing that."),
+    ],
+    # 20. WS-03: three identical calls in one turn, the third is pointed out to the model.
+    "repeat_call_reminder": [
+        tool("c1", "run_command", {"command": "echo build-status: unchanged"}),
+        tool("c2", "run_command", {"command": "echo build-status: unchanged"}),
+        tool("c3", "run_command", {"command": "echo build-status: unchanged"}),
+        text("Same output every time; stopping the repetition."),
+    ],
+    # 21. WS-03: a blind edit is blocked until the file has been read.
+    "edit_without_read_blocked": [
+        tool("c1", "edit_file", {"file_path": "app.py", "diff": RENAME_DIFF}),
+        tool("c2", "view_file", {"file_path": "app.py"}),
+        tool("c3", "edit_file", {"file_path": "app.py", "diff": RENAME_DIFF}),
+        text("Read first, then renamed greet() to hello()."),
     ],
     # 18. Edit through the real client: the diff card must render; after a refresh the file content survives.
     "read_then_edit_web_dom": [

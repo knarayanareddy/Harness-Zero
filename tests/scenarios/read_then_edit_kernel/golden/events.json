@@ -97,7 +97,15 @@
     "data": {
       "call_id": "call#1",
       "is_error": false,
-      "metadata": {},
+      "metadata": {
+        "lines_shown": [
+          1,
+          5
+        ],
+        "lines_total": 5,
+        "path": "<ws>/app.py",
+        "read_sha256": "4f3081b1b745848253201abfdba640f49307e65b5fd9470fae5ed11193e5be49"
+      },
       "name": "view_file",
       "preview": "    1 | def greet(name):\n    2 |     return f\"Hello, {name}!\"\n    3 | \n    4 | if __name__ == \"__main__\":\n    5 |     print(greet(\"world\"))\n"
     },
@@ -193,7 +201,9 @@
       "metadata": {
         "changed_files": [
           "<ws>/app.py"
-        ]
+        ],
+        "path": "<ws>/app.py",
+        "read_sha256": "ba04f6e2d789bfc75131a6e180ec9dfa4bd8d59b128d3bfdd1d6330116753735"
       },
       "name": "edit_file",
       "preview": "Successfully applied 1 search/replace block(s) to app.py"

@@ -127,7 +127,9 @@
       "metadata": {
         "changed_files": [
           "<ws>/notes.txt"
-        ]
+        ],
+        "path": "<ws>/notes.txt",
+        "read_sha256": "bf06fa71566b3528923411c8cb4f5e000de5767a11b22fb1fd40667d0719dd56"
       },
       "name": "write_to_file",
       "preview": "Successfully wrote 15 characters to <ws>/notes.txt"

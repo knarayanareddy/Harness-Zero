@@ -96,7 +96,7 @@ workstreams:
   - id: WS-03
     title: Loop hygiene (pruner, spill, repeat reminder, cooperative timeout, read-before-edit)
     doc: WS-03_loop_hygiene.md
-    status: specified
+    status: executed        # consolidation P8 (WS-03a seams + WS-03b hooks); namespaces are hook-*, no 600 s timeout scenario
     effort_days: 2
     depends_on: [WS-01]
     split: [WS-03a kernel seams, WS-03b hook plugins]

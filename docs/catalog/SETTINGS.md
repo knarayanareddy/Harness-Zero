@@ -63,6 +63,23 @@ Aggregated from the schemas the loader registered — `KERNEL_SCHEMA` and every 
 | `plugins.bridge-shell-hooks.hooks` | object | `{}` | json | bridge-shell-hooks | yes |
 | `plugins.context-repo-map.context.repo_map.force` | boolean | `false` | boolean | context-repo-map | yes |
 | `plugins.context-repo-map.context.repo_map.max_tokens` | integer | `1024` | number | context-repo-map | yes |
+| `plugins.hook-read-before-edit.exempt_globs` | array | `[]` | json | hook-read-before-edit | yes |
+| `plugins.hook-read-before-edit.guarded_tools` | array | `["edit_file", "write_to_file"]` | json | hook-read-before-edit | yes |
+| `plugins.hook-read-before-edit.mode` | string | `"block"` | text | hook-read-before-edit | yes |
+| `plugins.hook-read-before-edit.read_tools` | array | `["view_file"]` | json | hook-read-before-edit | yes |
+| `plugins.hook-repeat-call-reminder.block_after` | integer | `0` | number | hook-repeat-call-reminder | yes |
+| `plugins.hook-repeat-call-reminder.enabled` | boolean | `true` | boolean | hook-repeat-call-reminder | yes |
+| `plugins.hook-repeat-call-reminder.exempt_tools` | array | `["manage_task", "view_file"]` | json | hook-repeat-call-reminder | yes |
+| `plugins.hook-repeat-call-reminder.repeat_after` | integer | `3` | number | hook-repeat-call-reminder | yes |
+| `plugins.hook-tool-result-pruner.enabled` | boolean | `true` | boolean | hook-tool-result-pruner | yes |
+| `plugins.hook-tool-result-pruner.exempt_tools` | array | `["view_file"]` | json | hook-tool-result-pruner | yes |
+| `plugins.hook-tool-result-pruner.head_chars` | integer | `4096` | number | hook-tool-result-pruner | yes |
+| `plugins.hook-tool-result-pruner.tail_chars` | integer | `1024` | number | hook-tool-result-pruner | yes |
+| `plugins.hook-tool-result-pruner.threshold_chars` | integer | `8192` | number | hook-tool-result-pruner | yes |
+| `plugins.hook-tool-result-spill.enabled` | boolean | `true` | boolean | hook-tool-result-spill | yes |
+| `plugins.hook-tool-result-spill.exempt_tools` | array | `["view_file"]` | json | hook-tool-result-spill | yes |
+| `plugins.hook-tool-result-spill.max_files_per_session` | integer | `200` | number | hook-tool-result-spill | yes |
+| `plugins.hook-tool-result-spill.threshold_chars` | integer | `8192` | number | hook-tool-result-spill | yes |
 
 ## Secrets
 

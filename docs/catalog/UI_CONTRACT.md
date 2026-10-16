@@ -37,7 +37,7 @@ Parsed statically from `harness/frontends/web/static/` and the daemon's route ta
 
 ## Events with no client renderer
 
-`hook.fired`, `model.completed`, `model.notice`, `model.started`, `model.tool_call`, `plugin.error`, `plugin.loaded`
+`hook.fired`, `model.completed`, `model.notice`, `model.started`, `model.tool_call`, `plugin.error`, `plugin.loaded`, `tool.repeat_detected`, `tool.result.pruned`
 
 ## `data-*` bindings in the client
 

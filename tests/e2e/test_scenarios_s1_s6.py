@@ -156,6 +156,14 @@ async def test_scenario_s3_surgical_edit_no_commit(tmp_path: Path):
     provider = ScriptedProvider(
         models=[ModelInfo(id="gpt-4o", display_name="GPT-4o", context_tokens=128000)]
     )
+    # WS-03's read-before-edit guard is on by default, so a surgical edit has to be preceded by a
+    # read. That is the flow this scenario now documents (the blocked case is its own scenario,
+    # `edit_without_read_blocked`), and `view_file` is one step of extra scripting.
+    provider.add_response([
+        TextDelta(text="Reading math_utils.py before editing it."),
+        ToolCallEnd(id="call_read_1", name="view_file", arguments={"file_path": "math_utils.py"}),
+        Done(stop_reason="tool_use"),
+    ])
     provider.add_response([
         TextDelta(text="Adding type hints and docstring to math_utils.py."),
         ToolCallEnd(id="call_edit_1", name="edit_file", arguments={"file_path": "math_utils.py", "diff": diff_patch}),

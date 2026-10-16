@@ -272,6 +272,35 @@ class ToolCallResult(EventPayload):
 
 @event_payload
 @dataclass(slots=True)
+class ToolResultPruned(EventPayload):
+    """Live-only (WS-03): a finalize guard shortened what the model reads for this call.
+
+    Not durable — the pruned text is what the transcript records, and re-deriving the original from
+    an event replay would be a second source of truth. The UI uses it for a "pruned" badge.
+    """
+
+    EVENT_TYPE: ClassVar[str] = "tool.result.pruned"
+    call_id: str
+    name: str
+    original_chars: int
+    shown_chars: int
+    spill_path: str = ""
+
+
+@event_payload
+@dataclass(slots=True)
+class ToolRepeatDetected(EventPayload):
+    """Live-only (WS-03): this turn repeated an identical call whose result had not changed."""
+
+    EVENT_TYPE: ClassVar[str] = "tool.repeat_detected"
+    call_id: str
+    name: str
+    count: int
+    blocked: bool = False
+
+
+@event_payload
+@dataclass(slots=True)
 class TaskStarted(EventPayload):
     EVENT_TYPE: ClassVar[str] = "task.started"
     task_id: str

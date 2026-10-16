@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Read before edit settings",
+  "x-namespace": "plugins.hook-read-before-edit",
+  "properties": {
+    "mode": {
+      "type": "string",
+      "default": "block",
+      "enum": [
+        "block",
+        "warn",
+        "off"
+      ],
+      "description": "'block' refuses the call, 'warn' appends a note, 'off' keeps the guard loaded but idle."
+    },
+    "exempt_globs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Glob patterns (workspace-relative) the guard ignores."
+    },
+    "guarded_tools": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [
+        "edit_file",
+        "write_to_file"
+      ],
+      "description": "Tools that must not blind-edit."
+    },
+    "read_tools": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [
+        "view_file"
+      ],
+      "description": "Tools whose use counts as having read the file."
+    }
+  },
+  "additionalProperties": false
+}
