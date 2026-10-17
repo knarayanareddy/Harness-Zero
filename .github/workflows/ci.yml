@@ -59,7 +59,34 @@ jobs:
         run: |
           export HOME=$(mktemp -d)
           export HARNESS_CONFIG_DIR=$HOME/.harness
-          pytest -q -rs
+          report="$RUNNER_TEMP/pytest-results.xml"
+          if pytest -q -rs --junitxml="$report"; then
+            exit 0
+          else
+            pytest_status=$?
+          fi
+          python - "$report" <<'PY' || true
+          import sys
+          import xml.etree.ElementTree as ET
+
+          try:
+              root = ET.parse(sys.argv[1]).getroot()
+          except (OSError, ET.ParseError) as exc:
+              print(f"::error title=Pytest diagnostics unavailable::{exc}")
+          else:
+              failures = [
+                  (case, result)
+                  for case in root.iter("testcase")
+                  for result in (*case.findall("failure"), *case.findall("error"))
+              ]
+              for case, result in failures[:25]:
+                  reason = result.get("message") or ((result.text or "").strip().splitlines() or [""])[0]
+                  message = f"{case.get('classname', '')}::{case.get('name', '')}: {reason}"
+                  message = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                  print(f"::error title=Pytest failure::{message[:1000]}")
+              print(f"::notice title=Pytest failure summary::{len(failures)} failing tests; details follow in annotations")
+          PY
+          exit "$pytest_status"
 
       - name: Run plugin doctor
         run: |
