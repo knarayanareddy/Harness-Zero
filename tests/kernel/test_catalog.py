@@ -10,6 +10,7 @@ no longer match what a boot produces.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -151,9 +152,13 @@ async def test_plugin_owned_panels_and_renderers_are_in_the_static_ui_contract()
     assert "`workspace.changes`" in contract
 
 
+@pytest.mark.skipif(
+    sys.platform == "darwin",
+    reason="the committed catalogue is generated on Linux; macOS-only tools add host-specific rows",
+)
 @pytest.mark.asyncio
 async def test_committed_documents_match_a_fresh_boot():
-    """The freshness gate itself, so `pytest -q` catches drift before CI does."""
+    """The Linux freshness gate itself, so `pytest -q` catches drift before CI does."""
     result = _check_drift(await _catalog(), REPO_ROOT)
     assert result["status"] == "pass", result["detail"] + "\n" + "\n".join(result["lines"])
 

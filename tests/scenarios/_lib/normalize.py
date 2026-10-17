@@ -107,6 +107,8 @@ class Normalizer:
 
     def value(self, v: Any, key: str | None = None) -> Any:
         if isinstance(v, dict):
+            if key == "sandbox" and v.get("backend") == "bwrap" and v.get("available") is False:
+                v = {**v, "reason": "<bwrap unavailable on this host>"}
             out: dict[str, Any] = {}
             for k in sorted(v):
                 if k in DROP_KEYS:

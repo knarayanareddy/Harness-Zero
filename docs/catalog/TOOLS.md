@@ -6,6 +6,8 @@
 
 18 tools, read from `registry.get_all_tool_specs()`. Risk classes drive the gate: `read` runs unattended, `write`/`exec`/`net` need a permission mode or approval that allows them.
 
+The committed catalogue is generated from the Linux runtime. Plugins that register host-specific tools may expose additional tools on other systems; see their plugin READMEs.
+
 | Tool | Plugin | Risk | Timeout | Streams | Annotations | Inputs |
 |---|---|---|---|---|---|---|
 | `ask_user` | `tool-ask-user` | read | 1800s | — | — | `questions` |

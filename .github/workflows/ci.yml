@@ -97,6 +97,7 @@ jobs:
           harness plugin test --all
 
       - name: Verify generated catalogues and freshness gates (WS-02)
+        if: runner.os == 'Linux'
         run: |
           harness catalog --check --section drift --section settings --section ui
 

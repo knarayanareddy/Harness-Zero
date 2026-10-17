@@ -59,9 +59,23 @@ def scenario_model(sc: Any) -> ModelInfo:
     return replace(MODEL, id=model_id)
 
 
+_PLATFORM_SPECIFIC_TOOLS = frozenset({"take_screenshot"})
+
+
 def golden_view(summaries: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The request summaries as stored in requests.json (without the volatile full system text)."""
-    return [{k: v for k, v in s.items() if k != "system_text"} for s in summaries]
+    """Project requests without volatile prompts or host-only tool registrations.
+
+    Screenshot availability is macOS-specific and is covered by its plugin tests. The flow goldens describe
+    the portable tool surface, so the same request fixture remains valid on Linux and macOS.
+    """
+    out = []
+    for summary in summaries:
+        row = {key: value for key, value in summary.items() if key != "system_text"}
+        tools = row.get("tools")
+        if isinstance(tools, list):
+            row["tools"] = [name for name in tools if name not in _PLATFORM_SPECIFIC_TOOLS]
+        out.append(row)
+    return out
 
 
 __all__ = [

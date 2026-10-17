@@ -56,7 +56,7 @@
           "enforcement": "none",
           "mode": "required",
           "network": false,
-          "reason": "bubblewrap (bwrap) not found on PATH; install bubblewrap to enable process confinement"
+          "reason": "<bwrap unavailable on this host>"
         }
       },
       "plugin": "shell-tools",

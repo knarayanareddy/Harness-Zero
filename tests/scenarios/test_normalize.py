@@ -10,10 +10,36 @@ from __future__ import annotations
 from pathlib import Path
 
 from _lib.normalize import LIVE_NOISE, Normalizer, collapse_deltas
+from _lib.replay_provider import golden_view
 
 
 def _norm(tmp_path: Path, **kw) -> Normalizer:
     return Normalizer(workspace=tmp_path / "ws", session_id="session_0f2b1c9d", **kw)
+
+
+def test_bwrap_unavailability_reason_is_host_independent(tmp_path: Path):
+    n = _norm(tmp_path)
+    missing = {
+        "backend": "bwrap",
+        "available": False,
+        "reason": "bubblewrap (bwrap) not found on PATH; install bubblewrap to enable process confinement",
+    }
+    blocked = {
+        "backend": "bwrap",
+        "available": False,
+        "reason": "bwrap is present but the required user/PID/network namespaces are unavailable: permission denied",
+    }
+
+    assert n.value({"sandbox": missing})["sandbox"]["reason"] == "<bwrap unavailable on this host>"
+    assert n.value({"sandbox": blocked})["sandbox"]["reason"] == "<bwrap unavailable on this host>"
+    assert n.value({"reason": missing["reason"]})["reason"] == missing["reason"]
+
+
+def test_request_goldens_ignore_host_only_tools_without_mutating_requests():
+    request = {"system_text": "volatile", "tools": ["run_command", "take_screenshot", "view_file"]}
+
+    assert golden_view([request]) == [{"tools": ["run_command", "view_file"]}]
+    assert request["tools"] == ["run_command", "take_screenshot", "view_file"]
 
 
 def test_paths_and_the_session_id_become_placeholders(tmp_path: Path):

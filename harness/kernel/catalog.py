@@ -12,8 +12,8 @@ Two rules keep this module honest:
 * It never invents a fact. Every row is read from the object that serves it at runtime; anything
   derived by scanning source text is labelled ``heuristic`` in the generated document and in
   ``catalog.json``.
-* It is deterministic: sorted output, repo-relative paths, no timestamps, no absolute tmp paths — so
-  the generated files are reviewable diffs, not noise.
+* The committed catalogue is generated on Linux; platform-gated plugins may register additional tools on other hosts.
+* Output is deterministic for that canonical runtime: sorted rows, repo-relative paths, no timestamps, no absolute tmp paths.
 """
 
 from __future__ import annotations
@@ -733,7 +733,9 @@ def render_markdown(cat: dict[str, Any], name: str) -> str:
     elif name == "TOOLS.md":
         body.append(f"# Tool catalogue (v{cat['version']})\n\n{len(cat['tools'])} tools, read from "
                     "`registry.get_all_tool_specs()`. Risk classes drive the gate: `read` runs unattended, "
-                    "`write`/`exec`/`net` need a permission mode or approval that allows them.\n")
+                    "`write`/`exec`/`net` need a permission mode or approval that allows them.\n\n"
+                    "The committed catalogue is generated from the Linux runtime. Plugins that register "
+                    "host-specific tools may expose additional tools on other systems; see their plugin READMEs.\n")
         body.append(
             _table(
                 ["Tool", "Plugin", "Risk", "Timeout", "Streams", "Annotations", "Inputs"],

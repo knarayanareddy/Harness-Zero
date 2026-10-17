@@ -365,6 +365,7 @@ def test_seatbelt_profile_is_workspace_scoped_and_network_off_by_default(tmp_pat
 def test_bwrap_builder_is_argv_based_workspace_only_and_network_off_by_default(tmp_path: Path, monkeypatch):
     import subprocess
 
+    monkeypatch.setattr("harness.sdk.sandbox_bwrap.platform.system", lambda: "Linux")
     monkeypatch.setattr("harness.sdk.sandbox_bwrap.shutil.which", lambda _name: "/usr/bin/bwrap")
     monkeypatch.setattr(
         "harness.sdk.sandbox_bwrap.subprocess.run",
