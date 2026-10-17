@@ -42,7 +42,8 @@ jobs:
 
       - name: Install Node dependencies (jsdom for the scenario DOM lane, tailwindcss)
         run: |
-          npm ci
+          npm ci --include=dev
+          npm ls --depth=0 jsdom tailwindcss
 
       - name: Lint with ruff
         run: |
