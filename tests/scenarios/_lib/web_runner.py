@@ -27,7 +27,13 @@ from harness.frontends.web.server import HarnessWebServer
 from harness.kernel.bootstrap import bootstrap_kernel
 
 from . import record
-from .kernel_runner import ScriptedApprover, base_overrides, seed_tree, seed_workspace
+from .kernel_runner import (
+    ScriptedApprover,
+    ScriptedQuestionResponder,
+    base_overrides,
+    seed_tree,
+    seed_workspace,
+)
 from .normalize import Normalizer, collapse_deltas
 from .replay_provider import PROVIDER_NAME, golden_view, request_summary, scenario_model
 from .scenario import Scenario
@@ -108,6 +114,14 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
     approver = (
         ScriptedApprover(rt.bus, rt.commands, sc.approvals)
         if sc.approvals and not (dom and sc.expect.get("dom_approves"))
+        else None
+    )
+    dom_answers_questions = bool(
+        dom and sc.expect.get("dom_answers_questions") and dom_lane_available()[0]
+    )
+    question_responder = (
+        ScriptedQuestionResponder(rt.bus, rt.commands, sc.question_answers)
+        if sc.question_answers and not dom_answers_questions
         else None
     )
 
@@ -205,6 +219,8 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
             await sse.close()
             if approver:
                 await approver.close()
+            if question_responder:
+                await question_responder.close()
             await server.stop()
             await rt.registry.unload_all()
 
@@ -253,6 +269,39 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
         for e in sse.events
         if e.get("type") == "tool.call"
     ]
+    for event in sse.events:
+        if event.get("type") == "turn.error":
+            message = (event.get("data") or {}).get("message") or "turn.error event"
+            errors.append(f"turn.error: {message}")
+
+    dom_approved = sum(
+        int(turn.get("approved", 0))
+        for turn in ((dom_report or {}).get("turns") or [])
+        if isinstance(turn, dict)
+    )
+    approval_consumed = approver.consumed if approver else min(len(sc.approvals), dom_approved)
+    approval_remaining = len(approver.decisions) if approver else max(0, len(sc.approvals) - approval_consumed)
+    question_dom_consumed = int((dom_report or {}).get("questions_answered", 0) or 0)
+    question_consumed = question_responder.consumed if question_responder else min(
+        len(sc.question_answers), question_dom_consumed
+    )
+    question_remaining = len(question_responder.answers) if question_responder else max(
+        0, len(sc.question_answers) - question_consumed
+    )
+    interaction_inputs = {
+        "approvals": {
+            "provided": len(sc.approvals),
+            "consumed": approval_consumed,
+            "remaining": approval_remaining,
+            "unanswered": approver.unanswered if approver else 0,
+        },
+        "question_answers": {
+            "provided": len(sc.question_answers),
+            "consumed": question_consumed,
+            "remaining": question_remaining,
+            "unanswered": question_responder.unanswered if question_responder else 0,
+        },
+    }
     return WebRunResult(
         session_id=sid,
         workspace=ws,
@@ -270,6 +319,7 @@ async def run_web_scenario(sc: Scenario, tmp: Path, *, env_conf: Path, dom: bool
             "named_sse_frames": sum(1 for f in sse.frames if f["event"] != "message"),
             "unauthenticated": unauth,
             "live_vs_reloaded_equal": live_vs_reloaded_equal,
+            "interaction_inputs": interaction_inputs,
             **({"restart": {k: v for k, v in restart.items() if k != "dom"}} if restart else {}),
         },
     )
@@ -331,6 +381,7 @@ async def _run_dom_lane(base: str, sc: Scenario, token: str, *, reload: bool = F
             "WAIT_MS": os.environ.get("SCENARIO_DOM_WAIT_MS", "6000"),
             "NEW_SESSION": "0" if reload else ("1" if sc.expect.get("dom_new_session", True) else "0"),
             "APPROVE": "1" if sc.expect.get("dom_approves") else "0",
+            "QUESTION_ANSWERS": "[]" if reload else json.dumps(sc.question_answers),
             "RELOAD": "1" if reload else "0",
             "MODEL": record.record_model_id() if record.is_recording() else scenario_model(sc).id,
             # Which provider the chip must pick when more than one lists that id (see headless_timeline.mjs).

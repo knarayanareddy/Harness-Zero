@@ -57,15 +57,78 @@ def hello():
 #: 120 KB of log followed by the only line that matters, to prove the tail survives the size guards.
 NOISY_BUILD = "yes noise | head -n 20000; echo 'Build FAILED at the end'"
 
+ASK_USER_QUESTION = {
+    "id": "format",
+    "question": "Which format should I use?",
+    "options": [
+        {"id": "markdown", "label": "Markdown", "description": "Readable plain text"},
+        {"id": "html", "label": "HTML", "description": "Rich browser layout"},
+    ],
+    "allow_custom": True,
+}
+
 RECORDINGS: dict[str, list[list]] = {
+    "ask_user_answered": [
+        tool("c1", "ask_user", {"questions": [ASK_USER_QUESTION]}),
+        text("I will use Markdown."),
+    ],
+    "ask_user_headless": [
+        tool("c1", "ask_user", {"questions": [ASK_USER_QUESTION]}),
+        text("I will proceed with the best assumption."),
+    ],
     # 1. A plain streamed answer; two deltas so chunk collapsing is exercised.
     "plain_answer_kernel": [text("The capital of the Netherlands ", "is Amsterdam.")],
+    # WS-10a: start a durable job, let the turn complete independently, then surface its completion next turn.
+    "job_finishes_between_turns": [
+        tool(
+            "job-start-1",
+            "job_start",
+            {"command": "printf 'job finished between turns\\n'", "label": "short-job"},
+        ),
+        text("The short job has been started."),
+        text("The background job is still running."),
+        text("The background job finished successfully."),
+    ],
     "plain_answer_web": [text("The capital of the Netherlands ", "is Amsterdam.")],
     # The two WS-05c scenarios are about the *surfaces* a plugin owns, but a web scenario needs a session to
     # paint, so each carries one throwaway turn. The answer is a sentence, not a claim about the system: the
     # numbers a plugin contributes are asserted from `ui.contributions` and `plugins.list`, never from here.
     "plugin_panel_appears_when_enabled": [text("The capital of the Netherlands ", "is Amsterdam.")],
     "settings_tab_from_plugin_schema": [text("Hello — what should I look at?")],
+    # 1b. WS-07 per-turn workspace summary: read first, make two changes, then finish the turn.
+    "turn_changes_summary": [
+        tool("c0", "view_file", {"file_path": "app.py"}),
+        tool("c1", "write_to_file", {"file_path": "app.py", "content": "new value\n"}),
+        tool("c2", "write_to_file", {"file_path": "notes.txt", "content": "line one\nline two\n"}),
+        text("Both files are ready."),
+    ],
+    # WS-07 artifact flow: the user-facing artifact is created, then explicitly presented and opened.
+    "present_artifact": [
+        tool(
+            "c1",
+            "create_artifact",
+            {
+                "name": "final.md",
+                "content": "# Final report\n\nThe requested result.\n",
+                "media_type": "text/markdown",
+                "user_facing": True,
+                "request_feedback": False,
+                "summary": "Final report",
+            },
+        ),
+        tool("c2", "present", {"path": "final.md", "caption": "Final report"}),
+        text("The final report is ready."),
+    ],
+    "present_workspace_file": [
+        tool("c1", "present", {"path": "report.md", "caption": "Final report"}),
+        text("The workspace report is ready."),
+    ],
+    # WS-07 restore flow: a write followed by the destructive, explicitly approved turn-start restore.
+    "restore_turn": [
+        tool("c1", "write_to_file", {"file_path": "draft.txt", "content": "after\n"}),
+        tool("c2", "checkpoint_restore", {"checkpoint_id": "turn-start"}),
+        text("Restored draft.txt to its original contents."),
+    ],
     # 2. Read → edit → confirm (diff card, checkpoint hook, file on disk).
     "read_then_edit_kernel": [
         tool("c1", "view_file", {"file_path": "app.py"}, preface="Let me look at the file first."),
@@ -133,6 +196,23 @@ RECORDINGS: dict[str, list[list]] = {
         tool("c1", "run_command", {"command": "touch ran.txt"}),
         text("The command was not permitted, nothing was executed."),
     ],
+    # 13b. The `locked` preset is a one-setting route to plan mode; the denial is written by the kernel before
+    # the executor exists in this call, so even an installed and available sandbox cannot soften it.
+    "preset_locked_denies_exec": [
+        tool("c1", "run_command", {"command": "touch ran.txt"}),
+        text("The command was denied in plan mode; nothing was executed."),
+    ],
+    # 13c. Browser status is sourced from security.status / /health, not from a client-side list of presets or
+    # an optimistic guess from settings.schema. `backend=none` makes the enforcement label deterministic on CI.
+    "security_preset_badge_web_dom": [text("Hello — what should I look at?")],
+    # 13d. An unavailable required backend is a deterministic kernel deny; the setting `backend=none` makes this
+    # true even on Linux CI after bubblewrap is installed, and explicit `bypass` proves policy cannot weaken it.
+    "sandbox_unavailable_required_denies": [
+        tool("c1", "run_command", {"command": "touch ran.txt"}),
+        text("The command was denied because the required OS sandbox is unavailable; nothing ran."),
+    ],
+    # 13e. This web scenario is skipped with a reason when the host's bubblewrap probe cannot enforce namespaces.
+    "sandbox_bwrap_full_badge": [text("Hello — what should I look at?")],
     # 14. Two turns through the real client, then a page refresh: the history must be visible again.
     "session_reload_web_dom": [text("Answer one: Amsterdam."), text("Answer two: Rotterdam.")],
     # 14b. The same two turns, but the *daemon* restarts before the page reloads: one session row, full

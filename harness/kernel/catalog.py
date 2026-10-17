@@ -27,6 +27,7 @@ from typing import Any
 
 from harness.kernel.commands import BUILTIN_COMMANDS
 from harness.kernel.plugin_paths import plugin_dir
+from harness.kernel.registry import RegisteredPluginCommand
 from harness.kernel.settings import KERNEL_SCHEMA
 from harness.kernel.settings_schema import flatten_schema_properties, settings_owner_index, with_ui_defaults
 from harness.sdk.cards import CARD_FIELDS
@@ -59,8 +60,14 @@ _ROOT_NAMESPACES = ("kernel", "plugins", "providers", "extensions", "secrets", "
 SETTING_READ_RE = re.compile(
     r"""(?:(?P<recv>[A-Za-z_]\w*)\.)?settings\.get\(\s*f?["'](?P<key>[a-zA-Z0-9_.\-]+)["']"""
 )
+# Some plugins validate a dynamic settings value through a typed helper such as
+# `_setting(ctx, "max_files", default)`; the literal helper argument is still an actual read.
+SETTING_HELPER_READ_RE = re.compile(
+    r"""\b(?:_setting|_positive_setting)\(\s*[^,]+,\s*["'](?P<key>[a-zA-Z0-9_.\-]+)["']"""
+)
 _CLIENT_ON_RE = re.compile(r"""\.on\(\s*['"]([a-z_.]+)['"]""")
 _CLIENT_CMD_RE = re.compile(r"""command\(\s*['"]([a-z_.]+)['"]""")
+_NAMESPACED_COMMAND_RE = re.compile(r"""['"](plugins\.[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)+)['"]""")
 _ROUTE_RE = re.compile(r"""add_(?:get|post|put|delete)\(\s*["']([^"']+)["']""")
 _DATA_ATTR_RE = re.compile(r"""data-(command|setting|action|event)\s*=\s*["']?([a-zA-Z0-9_.\-]+)""")
 
@@ -164,9 +171,10 @@ def setting_reads(repo_root: Path = REPO_ROOT) -> list[SettingRead]:
     """Every literal settings read in the shipped code, resolved to the key it becomes at runtime.
 
     The resolution mirrors ``PluginSettingsView.get``: inside a plugin, a key that does not already
-    start with ``kernel.``/``plugins.`` is read relative to that plugin's own namespace — a bare read
-    of ``servers`` in ``bridge-mcp-client`` really is ``plugins.bridge-mcp-client.servers``. Outside
-    plugins (kernel, CLI, frontends) keys are absolute. Skipping that step is how provider base URLs
+    start with ``kernel.``, ``plugins.`` or ``extensions.`` is read relative to that plugin's own
+    namespace — a bare read of ``servers`` in ``bridge-mcp-client`` really is
+    ``plugins.bridge-mcp-client.servers``. Outside plugins (kernel, CLI, frontends) keys are absolute.
+    Skipping that step is how provider base URLs
     ended up configurable under a key the store never looked at.
 
     This module is excluded: its docstrings quote reads to explain the rule, and prose is not a call
@@ -188,10 +196,17 @@ def setting_reads(repo_root: Path = REPO_ROOT) -> list[SettingRead]:
             key = raw.rstrip(".")
             if not re.search(r"[a-z0-9]", key):
                 continue  # prose, not a key
-            if in_plugin and plugin and not key.startswith(("kernel.", "plugins.")):
+            if in_plugin and plugin and not key.startswith(("kernel.", "plugins.", "extensions.")):
                 key = f"plugins.{plugin}.{key}"
             line = text[: match.start()].count("\n") + 1
             reads.append(SettingRead(key, f"{rel}:{line}", plugin, raw.endswith(".")))
+        for match in SETTING_HELPER_READ_RE.finditer(text):
+            raw = match.group("key")
+            key = raw.rstrip(".")
+            if in_plugin and plugin and not key.startswith(("kernel.", "plugins.", "extensions.")):
+                key = f"plugins.{plugin}.{key}"
+            line = text[: match.start()].count("\n") + 1
+            reads.append(SettingRead(key, f"{rel}:{line}", plugin, False))
     return reads
 
 
@@ -202,7 +217,10 @@ def settings_report(repo_root: Path = REPO_ROOT) -> dict[str, Any]:
     reads = setting_reads(repo_root)
 
     def is_declared(key: str) -> bool:
-        if key in declared:
+        # A plugin may read an object setting as a whole (for example `reconnect`) and inspect its fields
+        # itself. The flattened catalogue stores the declared leaves, so a read of an ancestor path is
+        # declared when it is a schema container of those leaves.
+        if key in declared or any(declared_key.startswith(f"{key}.") for declared_key in declared):
             return True
         return any(key.startswith(f"{prefix}.") for prefix in opens)
 
@@ -424,29 +442,90 @@ async def build_catalog(runtime: Any = None, repo_root: Path | None = None) -> d
     ]
 
     # ---- commands ----
-    client_cmds = set(_CLIENT_CMD_RE.findall((client / "api.js").read_text(encoding="utf-8")))
+    # Built-ins call the kernel API module; namespaced plugin commands may be called by their own client modules
+    # (or by a core panel such as Diffs), so inspect the shipped client and plugin static modules together.
+    command_sources = [
+        path.read_text(encoding="utf-8")
+        for path in sorted(client.rglob("*.js"))
+        if "vendor" not in path.relative_to(client).parts
+    ]
+    plugin_root = root / "harness" / "plugins"
+    command_sources.extend(
+        path.read_text(encoding="utf-8")
+        for path in sorted(plugin_root.rglob("*.js"))
+        if "static" in path.relative_to(plugin_root).parts
+    )
+    command_source = "\n".join(command_sources)
+    client_cmds = set(_CLIENT_CMD_RE.findall(command_source))
+    client_cmds.update(_NAMESPACED_COMMAND_RE.findall(command_source))
+
+    command_rows = await commands.commands_list()
+    command_row_by_name = {row["name"]: row for row in command_rows}
+    command_order = [*BUILTIN_COMMANDS, *sorted(name for name in command_row_by_name if name not in BUILTIN_COMMANDS)]
     cmds = []
-    for name in BUILTIN_COMMANDS:
-        handler = getattr(commands, name.replace(".", "_").replace("-", "_"), None)
-        doc = inspect.getdoc(handler) if handler else ""
+    schema_types = {
+        "string": "str",
+        "integer": "int",
+        "number": "float",
+        "boolean": "bool",
+        "object": "dict",
+        "array": "list",
+    }
+    for name in command_order:
+        row = command_row_by_name[name]
+        registration = commands._custom_commands.get(name)
+        if isinstance(registration, RegisteredPluginCommand):
+            handler = registration.handler
+            owner = registration.plugin
+            args_schema = registration.args_schema or {}
+        else:
+            handler = getattr(commands, name.replace(".", "_").replace("-", "_"), None) or registration
+            owner = None
+            args_schema = {}
+
+        signature = inspect.signature(handler) if handler is not None else None
+        properties = args_schema.get("properties") or {}
         args = []
-        if handler:
-            args = [
-                {"name": p.name, "type": (p.annotation if isinstance(p.annotation, str) else getattr(p.annotation, "__name__", "Any")),
-                 "default": None if p.default is inspect.Parameter.empty else repr(p.default)}
-                for p in inspect.signature(handler).parameters.values()
-                if p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)
-            ]
+        for arg_name in row["args"]:
+            parameter = signature.parameters.get(arg_name) if signature else None
+            annotation = parameter.annotation if parameter else inspect.Parameter.empty
+            arg_type = (
+                annotation
+                if isinstance(annotation, str)
+                else getattr(annotation, "__name__", "Any")
+            )
+            schema_type = properties.get(arg_name, {}).get("type")
+            if schema_type in schema_types:
+                arg_type = schema_types[schema_type]
+            args.append(
+                {
+                    "name": arg_name,
+                    "type": arg_type,
+                    "default": None
+                    if parameter is None or parameter.default is inspect.Parameter.empty
+                    else repr(parameter.default),
+                }
+            )
+
+        source = inspect.getsourcefile(handler) if handler is not None else None
+        handler_path = _rel(source, root) if source else "missing"
+        handler_name = getattr(handler, "__name__", "") if handler is not None else ""
+        handler_ref = f"{handler_path}:{handler_name}" if handler is not None else "missing"
+        doc = inspect.getdoc(handler) if handler else ""
+        summary = _first_line(doc) or (f"Plugin command registered by `{owner}`." if owner else "")
         cmds.append(
             {
                 "name": name,
-                "alias": "_" in name and name.replace("_", ".", 1) in set(BUILTIN_COMMANDS),
-                "handler": f"harness/kernel/commands.py:{getattr(handler, '__name__', '')}" if handler else "missing",
-                "summary": _first_line(doc),
+                "plugin": owner,
+                "alias": row["alias_of"] is not None,
+                "exposed": row["exposed"],
+                "handler": handler_ref,
+                "summary": summary,
                 "args": args,
                 "called_by_web_client": name in client_cmds,
             }
         )
+    exposed_commands = {row["name"] for row in command_rows if row["exposed"]}
 
     # ---- web client / routes ----
     server_py = (root / "harness" / "frontends" / "web" / "server.py").read_text(encoding="utf-8")
@@ -459,7 +538,7 @@ async def build_catalog(runtime: Any = None, repo_root: Path | None = None) -> d
             continue
         for kind, value in _DATA_ATTR_RE.findall(_code_only(js.read_text(encoding="utf-8"))):
             ui_attrs.setdefault(kind, []).append(f"{js.relative_to(client)}:{value}")
-    builtins = set(BUILTIN_COMMANDS)
+    dispatchable_commands = exposed_commands
 
     # ---- UI contributions (WS-05): what the client mounts, and whether the markup agrees ----
     # The kernel's answer (`ui.contributions`) and the static HTML are compared rather than one derived from
@@ -467,7 +546,7 @@ async def build_catalog(runtime: Any = None, repo_root: Path | None = None) -> d
     # markup is a feature promising a tab it never renders. Neither looks wrong in isolation, so the pairing
     # is what makes the evidence.
     contributions = await commands.ui_contributions()
-    commands_exposed = {row["name"] for row in await commands.commands_list() if row["exposed"]}
+    commands_exposed = dispatchable_commands
     html_text = (client / "index.html").read_text(encoding="utf-8")
     js_text = "\n".join(
         js.read_text(encoding="utf-8") for js in sorted(client.rglob("*.js")) if "vendor" not in js.relative_to(client).parts
@@ -492,7 +571,7 @@ async def build_catalog(runtime: Any = None, repo_root: Path | None = None) -> d
     ui = {
         "routes": routes,
         "client_commands": sorted(client_cmds),
-        "unknown_client_commands": sorted(c for c in client_cmds if c not in builtins),
+        "unknown_client_commands": sorted(c for c in client_cmds if c not in dispatchable_commands),
         "data_attributes": {k: sorted(set(v)) for k, v in sorted(ui_attrs.items())},
         "events_without_renderer": sorted(t for t, e in ((e["type"], e) for e in events) if e["client_renderer"].startswith("none")),
         "panels": [{**panel, "in_client_markup": panel["id"] in tabs_in_html} for panel in contributions["panels"]],
@@ -500,6 +579,9 @@ async def build_catalog(runtime: Any = None, repo_root: Path | None = None) -> d
         "unbacked_panels": contributions["unbacked_panels"],
         "data_command_bindings": [{"command": c, "registered": c in commands_exposed} for c in bound],
         "client_modules": contributions["client_modules"],
+        "plugin_record_renderers": sorted(
+            contributions["record_renderers"], key=lambda row: (row["plugin"], row["kind"])
+        ),
         "renderer_modules": renderer_modules,
         "durable_kinds": sorted(durable),
         "settings_groups": contributions["settings_groups"],
@@ -529,8 +611,8 @@ async def build_catalog(runtime: Any = None, repo_root: Path | None = None) -> d
     coverage = {
         "tools_covered": sorted(covered_tools & tool_names),
         "tools_uncovered": sorted(tool_names - covered_tools),
-        "commands_exercised": sorted(client_cmds & builtins),
-        "commands_unexercised": sorted(builtins - client_cmds),
+        "commands_exercised": sorted(client_cmds & dispatchable_commands),
+        "commands_unexercised": sorted(dispatchable_commands - client_cmds),
     }
 
     if owned:
@@ -554,7 +636,7 @@ async def build_catalog(runtime: Any = None, repo_root: Path | None = None) -> d
             "tools": "registry.get_all_tool_specs()",
             "settings": "registered JSON Schemas (kernel + plugin settings.schema.json)",
             "events": "harness.sdk.events.EVENT_PAYLOADS; producers are a heuristic source scan",
-            "commands": "harness.kernel.commands.BUILTIN_COMMANDS",
+            "commands": "BUILTIN_COMMANDS + runtime commands.commands_list()",
             "record_kinds": "harness.sdk.types.RECORD_KINDS + harness.kernel.transcript.MESSAGE_KINDS + "
                             "EventPayload.record_kind + tests/scenarios/*/golden/transcript.json",
             "ui": "static parse of the shipped client and the aiohttp route table",
@@ -749,17 +831,23 @@ def render_markdown(cat: dict[str, Any], name: str) -> str:
         body.append("\n## Card kinds (`harness.sdk.cards.CARD_FIELDS`)\n")
         body.append(_table(["Kind", "Fields"], [[f"`{k}`", ", ".join(f"`{f}`" for f in v)] for k, v in cat["cards"].items()]))
     elif name == "COMMANDS.md":
-        body.append("# Command catalogue\n\n`POST /commands/<name>` on the web daemon, `execute()` on the kernel. The list is "
-                    "`harness.kernel.commands.BUILTIN_COMMANDS`; `dispatch` resolves through it, so nothing else is callable "
-                    "over HTTP.\n")
+        body.append(
+            "# Command catalogue\n\n`POST /commands/<name>` on the web daemon and `execute()` on the kernel use "
+            "the same dispatcher. `commands.list` includes built-ins and plugin commands registered through "
+            "`PluginContext.register_command`; plugin names are namespaced as `plugins.<manifest-id>.<name>`. "
+            "Only exposed plugin commands can be called by a frontend. `Web client calls it` is a source scan of the "
+            "shipped client and plugin modules, including namespaced command constants.\n"
+        )
         body.append(
             _table(
-                ["Command", "Handler", "Arguments", "Web client calls it"],
+                ["Command", "Plugin", "Handler", "Arguments", "Exposed", "Web client calls it"],
                 [
                     [
                         f"`{c['name']}`",
+                        f"`{c['plugin']}`" if c["plugin"] else "kernel",
                         f"`{c['handler']}`",
                         ", ".join(f"`{a['name']}: {a['type']}`" for a in c["args"]) or "—",
+                        "yes" if c["exposed"] else "no",
                         "yes" if c["called_by_web_client"] else "no",
                     ]
                     for c in cat["commands"]
@@ -794,9 +882,11 @@ def render_markdown(cat: dict[str, Any], name: str) -> str:
         )
     elif name == "UI_CONTRACT.md":
         ui = cat["ui"]
-        body.append("# Web client contract\n\nParsed statically from `harness/frontends/web/static/` and the daemon's route "
-                    "table (no browser involved). `tests/frontends/test_static_contract.py` enforces the handler/event parts; "
-                    "this document shows the whole surface.\n")
+        body.append(
+            "# Web client contract\n\nParsed from the shipped files under `harness/frontends/web/static/`, the daemon's "
+            "route table, and the booted kernel's `ui.contributions` (no browser involved). "
+            "`tests/frontends/test_static_contract.py` enforces the handler/event parts; this document shows the whole surface.\n"
+        )
         body.append("\n## Routes\n")
         body.append(_table(["Route"], [[f"`{r}`"] for r in ui["routes"]]))
         body.append("\n## Commands the client calls\n")
@@ -809,11 +899,12 @@ def render_markdown(cat: dict[str, Any], name: str) -> str:
         body.append(
             "\n## Panels the client mounts\n\nFrom `ui.contributions`: a panel is a declaration in a manifest's "
             "`[ui]` block (the shipped client's are in `harness/frontends/web/ui.toml`) plus a dispatchable command. "
-            "Disabling the feature removes its row, which is the point.\n"
+            "Disabling the feature removes its row, which is the point. `Static tab markup` distinguishes a tab already "
+            "present in HTML from a plugin or client panel the `PanelRegistry` mounts at runtime.\n"
         )
         body.append(
             _table(
-                ["Panel", "Title", "Backed by", "Renderer", "Owner", "In client markup"],
+                ["Panel", "Title", "Backed by", "Renderer", "Owner", "Static tab markup"],
                 [
                     [
                         f"`{panel['id']}`",
@@ -850,8 +941,16 @@ def render_markdown(cat: dict[str, Any], name: str) -> str:
         body.append(
             "- modules under `static/renderers/`: " + (", ".join(f"`{m}.js`" for m in ui["renderer_modules"]) or "none yet")
         )
+        if ui["plugin_record_renderers"]:
+            body.append("\n### Plugin-owned record renderers\n")
+            body.append(
+                _table(
+                    ["Plugin", "Record kind"],
+                    [[row["plugin"], f"`{row['kind']}`"] for row in ui["plugin_record_renderers"]],
+                )
+            )
         body.append(
-            f"- **no renderer**: {', '.join('`' + k + '`' for k in ui['kinds_without_renderer']) or 'none'}"
+            f"\n- **no renderer**: {', '.join('`' + k + '`' for k in ui['kinds_without_renderer']) or 'none'}"
             f" (of {len(ui['durable_kinds'])} durable kinds)"
         )
         if ui["data_command_bindings"]:

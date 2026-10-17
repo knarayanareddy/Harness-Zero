@@ -402,6 +402,50 @@ class AuditHookPlugin:
 
 ---
 
+## Recipe 6: Permission presets and process confinement (WS-06)
+
+`kernel.security.preset` is a resolution layer, not a macro that writes the other settings. The order is explicit
+user value → preset expansion → schema default; `settings.get()` returns that effective value to the policy,
+command and Studio. Choose one through the UI or:
+
+```bash
+harness security show
+harness security set-preset careful     # locked | careful | standard | open
+harness security show --json
+```
+
+A pinned key keeps its value when the preset changes; `security.status` reports both `customised` (values that
+differ from the preset) and `pinned` (values explicitly written). `bypass` is not a preset. It remains an explicit
+`kernel.security.permission_mode` for tests/automation, and it cannot make a `required` but unavailable OS
+sandbox run unconfined.
+
+Every tool that requests `ctx.executor` crosses the gate's executor adapter. On Linux, the built-in
+`sandbox-bwrap` plugin probes bubblewrap's user, PID, and network namespaces before it reports `available`;
+on macOS, `sandbox-seatbelt` probes `sandbox-exec` and reports its narrower `partial` enforcement honestly. The
+workspace is the only writable host tree; the default runtime paths are read-only, `/tmp` is private, the user's
+home is not mounted, and networking is off by default. Absolute `kernel.sandbox.extra_readable` paths are an
+explicit read-only grant and change the badge to `partial` — do not add credential directories unless the model is
+meant to read them. `.venv`, SDKs or language managers outside the workspace may need a deliberate extra path.
+
+The three modes are intentionally different:
+
+* `required`: if the backend probe or path policy fails, executor calls are denied before the host executor starts.
+* `preferred`: use the OS backend when available; if not, ask a connected approver before an unconfined fallback.
+  With no interactive subscriber the broker denies immediately.
+* `off`: run without OS confinement (the `open` preset is the explicit choice that also allows networking).
+
+`standard` permits EXEC only while an actual backend probe succeeds; missing confinement changes that decision to
+ASK. `careful` still asks before mutating actions, and the result records whether the command was confined or
+explicitly approved unconfined. The `/health` security block, `security.status`, `harness security show`, and the
+Studio badge all consume the same kernel answer; the badge says `careful · bwrap full`, `careful · bwrap partial`,
+or `careful · sandbox unavailable` rather than displaying a browser-side guess.
+
+The built-in backend implementations live in `harness.sdk.sandbox_bwrap` and
+`harness.sdk.sandbox_seatbelt`; their plugin wrappers register them with `ctx.register_sandbox_backend`. Ordinary
+tool/policy plugins must still route process execution through `ctx.executor` and must not import `subprocess`.
+`SandboxBackend.available()` is a reported host fact, `wrap()` returns a new `ExecRequest`, and any exception from
+wrapping is a hard failure — never a cue to retry the original host command.
+
 ## 2. Testing and Conformance Tooling
 
 ### Scaffolding a New Plugin

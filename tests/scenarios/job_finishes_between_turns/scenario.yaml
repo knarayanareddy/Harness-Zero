@@ -1,0 +1,23 @@
+name: job_finishes_between_turns
+kind: kernel
+summary: A background job emits durable lifecycle records and its completion is announced to the next turn.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: bypass
+  kernel.sandbox.mode: "off"
+turns:
+  - prompt: "Start the background job."
+  - prompt: "Check on the background job."
+  - prompt: "What happened with the background job?"
+expect:
+  # The detached job can exit on either side of the turn's transient cost update; assert event semantics below,
+  # not the nondeterministic relative order of those two events.
+  events_golden: false
+  tools_called: [job_start]
+  event_types_include: [job.started, job.output, job.exited, system.notice]
+  event_types_exclude: [task.started, task.completed]
+  events_match:
+    - {type: job.exited, data: {reason: exit, exit_code: 0}}
+    - {type: system.notice, data: {code: jobs.finished_since_last_turn}}
+  model_saw: ["Jobs finished since your last turn", "job finished between turns"]
+  no_errors: true

@@ -32,6 +32,28 @@ stateDiagram-v2
 
 ---
 
+## 1a. Current implementation status (WS-06, 2026-10-16)
+
+The older sections below are research/design notes, not an assertion that every listed guardrail was already
+implemented. WS-06 now adds a named permission preset resolver (`locked`, `careful`, `standard`, `open`) in
+`harness/kernel/presets.py`; explicit settings remain pinned, derived values are not written to disk, and
+`security.status` reports the resolved values and customisations. The `bypass` mode is not a preset.
+
+OS confinement is enforced at the executor seam (`harness/kernel/sandbox.py`), after policy/approval and before
+any `Process` starts. Linux bubblewrap is namespace-probed; macOS Seatbelt is implemented and labelled `partial`.
+Required-but-unavailable denies; preferred-but-unavailable asks before any unconfined fallback; the process result
+reports the backend and enforcement fact in `ExecResult.metadata.sandbox`. The schema-driven Studio exposes the
+preset and backend state, and its badge is sourced from the same status command as the CLI and `/health`.
+
+It is not a VM: only child processes routed through `ctx.executor` are confined. Provider HTTP clients, MCP
+servers and the kernel itself are outside this boundary. See `review/CONSOLIDATION_LOG.md` §P15 and
+`docs/research/05_EXECUTION_SANDBOX_AND_GIT_WORKTREES.md` §5 for the exact mechanisms, fail-closed tests, and the
+host-specific evidence limits. In this Linux environment no bubblewrap package is installed and dpkg cannot be
+used without root, so real bwrap integration tests report a skip; the CI Linux job installs it. Seatbelt is not
+claimed as locally verified.
+
+---
+
 ## 2. Reverse-Engineered Risk Classification
 
 ### Tier 1: Zero-Friction Auto-Approved (Read & Workspace Write)

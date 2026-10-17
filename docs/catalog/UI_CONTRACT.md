@@ -4,7 +4,7 @@
 
 # Web client contract
 
-Parsed statically from `harness/frontends/web/static/` and the daemon's route table (no browser involved). `tests/frontends/test_static_contract.py` enforces the handler/event parts; this document shows the whole surface.
+Parsed from the shipped files under `harness/frontends/web/static/`, the daemon's route table, and the booted kernel's `ui.contributions` (no browser involved). `tests/frontends/test_static_contract.py` enforces the handler/event parts; this document shows the whole surface.
 
 
 ## Routes
@@ -19,6 +19,7 @@ Parsed statically from `harness/frontends/web/static/` and the daemon's route ta
 | `/health` |
 | `/preview` |
 | `/ui` |
+| `/workspace-files/{path:.+}` |
 
 ## Commands the client calls
 
@@ -26,18 +27,31 @@ Parsed statically from `harness/frontends/web/static/` and the daemon's route ta
 |---|---|
 | `cancel_turn` | yes |
 | `economics` | yes |
+| `form.submit` | yes |
 | `models.list` | yes |
+| `plugins.hook-checkpoints.changes` | yes |
+| `plugins.hook-checkpoints.diff` | yes |
+| `plugins.hook-checkpoints.restore` | yes |
+| `plugins.list` | yes |
+| `plugins.tools-jobs.kill` | yes |
+| `plugins.tools-jobs.list` | yes |
+| `plugins.tools-jobs.output` | yes |
+| `question.answer` | yes |
 | `resolve_approval` | yes |
+| `security.status` | yes |
 | `sessions.create` | yes |
+| `sessions.get` | yes |
 | `sessions.list` | yes |
 | `sessions.switch` | yes |
 | `settings.get` | yes |
+| `settings.schema` | yes |
 | `settings.set` | yes |
 | `submit_turn` | yes |
+| `ui.contributions` | yes |
 
 ## Events with no client renderer
 
-`hook.fired`, `model.completed`, `model.notice`, `model.started`, `model.tool_call`, `plugin.error`, `plugin.loaded`, `tool.repeat_detected`, `tool.result.pruned`
+`checkpoint.created`, `hook.fired`, `job.exited`, `job.output`, `job.started`, `mcp.server.status`, `mcp.tools.changed`, `model.completed`, `model.notice`, `model.started`, `model.tool_call`, `plugin.error`, `plugin.loaded`, `tool.repeat_detected`, `tool.result.pruned`
 
 ## `data-*` bindings in the client
 
@@ -46,12 +60,14 @@ Parsed statically from `harness/frontends/web/static/` and the daemon's route ta
 
 ## Panels the client mounts
 
-From `ui.contributions`: a panel is a declaration in a manifest's `[ui]` block (the shipped client's are in `harness/frontends/web/ui.toml`) plus a dispatchable command. Disabling the feature removes its row, which is the point.
+From `ui.contributions`: a panel is a declaration in a manifest's `[ui]` block (the shipped client's are in `harness/frontends/web/ui.toml`) plus a dispatchable command. Disabling the feature removes its row, which is the point. `Static tab markup` distinguishes a tab already present in HTML from a plugin or client panel the `PanelRegistry` mounts at runtime.
 
-| Panel | Title | Backed by | Renderer | Owner | In client markup |
+| Panel | Title | Backed by | Renderer | Owner | Static tab markup |
 |---|---|---|---|---|---|
 | `artifact` | Artifacts | `sessions.get` | markdown | web | yes |
+| `diffs` | Diffs | `plugins.hook-checkpoints.changes` | list | hook-checkpoints | **no** |
 | `economics` | Spend | `economics` | table | web | yes |
+| `jobs` | Jobs | `plugins.tools-jobs.list` | list | tools-jobs | **no** |
 | `plugins` | Plugins | `plugins.list` | list | web | **no** |
 | `sessions` | Sessions | `sessions.list` | list | web | yes |
 
@@ -59,8 +75,17 @@ From `ui.contributions`: a panel is a declaration in a manifest's `[ui]` block (
 
 Durable kinds — records a session log keeps and a reloaded page must show — are painted by a module under `static/renderers/` (one file per kind, named for it), by a plugin module named in `[ui].record_renderers`, or by a `case` in a record switch (read for a client that still keeps one). A kind with neither a renderer nor an excuse in `NO_RENDERER` prints a notice in the timeline rather than vanishing, so the gap is visible in the page and not only here.
 
-- modules under `static/renderers/`: `approval.requested.js`, `approval.resolved.js`, `assistant.message.js`, `compaction.summary.js`, `system.notice.js`, `tool.decision.js`, `tool.result.js`, `turn.cancelled.js`, `turn.error.js`, `ui.card.js`, `user.message.js`
-- **no renderer**: `turn.completed` (of 11 durable kinds)
+- modules under `static/renderers/`: `approval.requested.js`, `approval.resolved.js`, `assistant.message.js`, `checkpoint_restored.js`, `compaction.summary.js`, `deliverable.js`, `question.answered.js`, `question.asked.js`, `system.notice.js`, `tool.decision.js`, `tool.result.js`, `turn.cancelled.js`, `turn.error.js`, `ui.card.js`, `user.message.js`, `workspace_changes.js`
+
+### Plugin-owned record renderers
+
+| Plugin | Record kind |
+|---|---|
+| hook-checkpoints | `checkpoint.restored` |
+| hook-checkpoints | `workspace.changes` |
+| tools-deliverables | `deliverable.presented` |
+
+- **no renderer**: `checkpoint.created`, `job.exited`, `job.output`, `job.started`, `turn.completed` (of 21 durable kinds)
 
 ## `data-command` bindings
 
@@ -69,6 +94,14 @@ Durable kinds — records a session log keeps and a reloaded page must show — 
 | `plugins.disable` | yes |
 | `plugins.enable` | yes |
 
+## Plugin client modules
+
+| Plugin | Module | Served at |
+|---|---|---|
+| hook-checkpoints | `static/ui.js` | /static/plugins/hook-checkpoints/ui.js |
+| tools-deliverables | `static/ui.js` | /static/plugins/tools-deliverables/ui.js |
+| tools-jobs | `static/panel.js` | /static/plugins/tools-jobs/panel.js |
+
 ## Settings tabs
 
-`Models & Providers`, `Security & Sandboxing`, `Execution & Strategies`, `Economics & Spend`, `Secrets`, `Bridges & Integrations`, `Context`, `Hooks`
+`Security & Sandboxing`, `Checkpoints`, `Jobs`, `Models & Providers`, `Execution & Strategies`, `Economics & Spend`, `Secrets`, `Bridges & Integrations`, `Context`, `Hooks`

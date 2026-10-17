@@ -49,6 +49,7 @@ STATIC = ROOT / "harness" / "frontends" / "web" / "static"
 # class touched only from `static/panels/sessions.js` is still the page's id and the stylesheet's class, so the
 # audit that claims to catch dead ids has to read those files too. `vendor/` is third-party and excluded.
 _JS_FILES = sorted(p for p in STATIC.rglob("*.js") if "vendor" not in p.relative_to(STATIC).parts)
+_PLUGIN_JS_FILES = sorted((ROOT / "harness" / "plugins").rglob("static/**/*.js"))
 _HTML = STATIC / "index.html"
 _CSS = STATIC / "styles.css"
 _EXPECTED_STYLESHEETS = ["/static/styles.css", "/static/vendor/tw.css"]
@@ -85,6 +86,8 @@ def audit() -> dict:
     html = _HTML.read_text(encoding="utf-8")
     css = _CSS.read_text(encoding="utf-8") if _CSS.exists() else ""
     js = {str(p.relative_to(STATIC)): p.read_text(encoding="utf-8") for p in _JS_FILES}
+    plugin_js = {str(p.relative_to(ROOT)): p.read_text(encoding="utf-8") for p in _PLUGIN_JS_FILES}
+    all_client_js = {**js, **plugin_js}
     stylesheets = re.findall(r'<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"', html)
     sheets: dict[str, str] = {}
     for href in stylesheets:
@@ -100,6 +103,7 @@ def audit() -> dict:
         for m in re.findall(r"querySelector(?:All)?\(\s*['\"`]#([A-Za-z0-9_-]+)", src):
             js_id_refs.setdefault(m, set()).add(name)
     all_js = "\n".join(js.values())
+    all_client_js_text = "\n".join(all_client_js.values())
     # ids the page itself points at (labels, ARIA relationships) are not mock-ups either
     html_id_refs = set(re.findall(r'\b(?:for|aria-labelledby|aria-controls|aria-describedby)="([^"]+)"', html))
     html_id_refs |= set(re.findall(r'href="#([^"]+)"', html))
@@ -117,7 +121,7 @@ def audit() -> dict:
         used_html |= _classes_in_attr(m)
     used_js: dict[str, set[str]] = {}
     prefixes: set[str] = set()
-    for name, src in js.items():
+    for name, src in all_client_js.items():
         s: set[str] = set()
         for m in re.findall(r"class(?:Name)?\s*=\s*[`\"']([^`\"']*)[`\"']", src):
             s |= _classes_in_attr(m)
@@ -133,7 +137,7 @@ def audit() -> dict:
     used_all = used_html | set().union(*used_js.values()) if used_js else used_html
     # Conservative "unused": a class is considered used if its literal name occurs anywhere
     # in the page or the JS, or if a template string builds names with its prefix.
-    corpus = html + "\n" + all_js
+    corpus = html + "\n" + all_client_js_text
     used_all |= {c for c in defined_hand if c in corpus}
     used_all |= {c for c in defined_hand if any(c.startswith(p) for p in prefixes)}
     undefined = {
@@ -144,13 +148,13 @@ def audit() -> dict:
 
     # --- inline styling & scripts ----------------------------------------------------
     inline_styles = {"index.html": len(re.findall(r'\bstyle="', html))}
-    inline_styles.update({name: len(re.findall(r'\bstyle="', src)) for name, src in js.items()})
+    inline_styles.update({name: len(re.findall(r'\bstyle="', src)) for name, src in all_client_js.items()})
     scripts = re.findall(r'<script[^>]*\bsrc="([^"]+)"', html)
     foreign_scripts = [u for u in scripts if not u.startswith("/static/")]
 
     lines = {"index.html": html.count("\n") + 1, "styles.css": css.count("\n") + 1}
     lines.update({href.removeprefix("/static/"): body.count("\n") + 1 for href, body in sheets.items() if href != "/static/styles.css"})
-    lines.update({n: s.count("\n") + 1 for n, s in js.items()})
+    lines.update({n: s.count("\n") + 1 for n, s in all_client_js.items()})
     return {
         "static_dir": str(STATIC.relative_to(ROOT)),
         "lines": lines,

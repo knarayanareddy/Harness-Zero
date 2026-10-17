@@ -4,7 +4,7 @@
 
 # Plugin catalogue (v0.2.1)
 
-39 built-in plugins, read from `registry.discovered` of a booted kernel. `Loaded` is whether `setup()` succeeded — a plugin that raises is reported and skipped, it never aborts the boot.
+44 built-in plugins, read from `registry.discovered` of a booted kernel. `Loaded` is whether `setup()` succeeded — a plugin that raises is reported and skipped, it never aborts the boot.
 
 
 ## `bridges/`
@@ -12,7 +12,7 @@
 | Plugin | Version | Provides | Capabilities | Settings namespace | README sections | Loaded |
 |---|---|---|---|---|---|---|
 | `bridge-acp` | 1.0.0 | `bridge` | exec | — | 0/5 | ✓ |
-| `bridge-mcp-client` | 1.0.0 | `tool` | exec, net | `plugins.bridge-mcp-client` | 5/5 | ✓ |
+| `bridge-mcp-client` | 1.0.0 | `tool` | exec, net, secrets | `plugins.bridge-mcp-client` | 5/5 | ✓ |
 | `bridge-mcp-server` | 1.0.0 | `bridge` | exec | `plugins.bridge-mcp-server` | 0/5 | ✓ |
 | `bridge-shell-hooks` | 1.0.0 | `hook` | exec | `plugins.bridge-shell-hooks` | 0/5 | ✓ |
 
@@ -33,12 +33,14 @@
 |---|---|---|---|---|---|---|
 | `executor-worktree` | 1.0.0 | `executor` | exec | — | 0/5 | ✓ |
 | `local-executor` | 1.0.0 | `executor` | exec | — | 0/5 | ✓ |
+| `sandbox-bwrap` | 1.0.0 | `sandbox` | — | — | 5/5 | ✓ |
+| `sandbox-seatbelt` | 1.0.0 | `sandbox` | — | — | 5/5 | ✓ |
 
 ## `hooks/`
 
 | Plugin | Version | Provides | Capabilities | Settings namespace | README sections | Loaded |
 |---|---|---|---|---|---|---|
-| `hook-checkpoints` | 1.0.0 | `hook`, `tool` | fs:write, exec | — | 0/5 | ✓ |
+| `hook-checkpoints` | 1.0.0 | `hook`, `tool`, `command` | fs:write, exec | `plugins.hook-checkpoints` | 0/5 | ✓ |
 | `hook-read-before-edit` | 1.0.0 | `hook` | fs:read | `plugins.hook-read-before-edit` | 5/5 | ✓ |
 | `hook-repeat-call-reminder` | 1.0.0 | `hook` | — | `plugins.hook-repeat-call-reminder` | 5/5 | ✓ |
 | `hook-tool-result-pruner` | 1.0.0 | `hook` | — | `plugins.hook-tool-result-pruner` | 5/5 | ✓ |
@@ -87,13 +89,16 @@
 | `search-tools` | 1.0.0 | `tool` | fs:read, exec | — | 0/5 | ✓ |
 | `shell-tools` | 1.0.0 | `tool` | exec | — | 0/5 | ✓ |
 | `tool-artifacts` | 1.0.0 | `tool` | fs:write | — | 0/5 | ✓ |
+| `tool-ask-user` | 1.0.0 | `tool` | — | — | 0/5 | ✓ |
 | `tool-memory` | 1.0.0 | `tool` | — | — | 0/5 | ✓ |
 | `tool-screenshot-macos` | 1.0.0 | `tool` | fs:read, exec | — | 0/5 | ✓ |
 | `tool-skills` | 1.0.0 | `tool` | — | — | 0/5 | ✓ |
+| `tools-deliverables` | 1.0.0 | `tool` | fs:read | — | 0/5 | ✓ |
+| `tools-jobs` | 0.3.0 | `tool`, `command` | exec | `plugins.tools-jobs` | 5/5 | ✓ |
 
 ## README contract
 
 Every plugin should ship a `README.md` with the five sections of `review/dsh-integration/templates/PLUGIN_TEMPLATE.md` (Summary, Configuration, Extension points, Model experience, Known limitations).
 
-Missing sections: `bridge-acp`, `bridge-mcp-server`, `bridge-shell-hooks`, `context-identity`, `context-instructions`, `context-memories`, `context-repo-map`, `context-skills-catalog`, `context-tool-guidance`, `executor-worktree`, `fs-tools`, `hook-checkpoints`, `local-executor`, `openai-compat`, `policy-permission-modes`, `policy-risk-classifier`, `policy-tirith`, `policy-workspace-jail`, `provider-anthropic`, `provider-gemini`, `provider-mock`, `provider-ollama`, `search-tools`, `shell-tools`, `store-cost-ledger`, `store-fs-artifacts`, `store-fts5-search`, `store-jsonl-transcript`, `strategy-architect-editor`, `strategy-single-loop`, `tool-artifacts`, `tool-memory`, `tool-screenshot-macos`, `tool-skills`.
+Missing sections: `bridge-acp`, `bridge-mcp-server`, `bridge-shell-hooks`, `context-identity`, `context-instructions`, `context-memories`, `context-repo-map`, `context-skills-catalog`, `context-tool-guidance`, `executor-worktree`, `fs-tools`, `hook-checkpoints`, `local-executor`, `openai-compat`, `policy-permission-modes`, `policy-risk-classifier`, `policy-tirith`, `policy-workspace-jail`, `provider-anthropic`, `provider-gemini`, `provider-mock`, `provider-ollama`, `search-tools`, `shell-tools`, `store-cost-ledger`, `store-fs-artifacts`, `store-fts5-search`, `store-jsonl-transcript`, `strategy-architect-editor`, `strategy-single-loop`, `tool-artifacts`, `tool-ask-user`, `tool-memory`, `tool-screenshot-macos`, `tool-skills`, `tools-deliverables`.
 

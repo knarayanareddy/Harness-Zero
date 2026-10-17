@@ -1,0 +1,307 @@
+[
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay",
+      "session_id": "<session>",
+      "strategy": "single_loop"
+    },
+    "type": "session.started"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "options": {
+        "max_iterations": 20,
+        "media": [],
+        "model": "replay-v1",
+        "prompt": "Create ran.txt with the shell.",
+        "provider": "replay"
+      },
+      "prompt_preview": "Create ran.txt with the shell.",
+      "provider": "replay",
+      "strategy": "single_loop"
+    },
+    "record": {
+      "content": "Create ran.txt with the shell.",
+      "kind": "user.message",
+      "role": "user",
+      "step_index": 1,
+      "v": 2
+    },
+    "type": "turn.started"
+  },
+  {
+    "data": {
+      "label": "turn-start:turn#1",
+      "sha": "sha#1"
+    },
+    "record": {
+      "content": "Checkpoint created: turn-start:turn#1.",
+      "kind": "checkpoint.created",
+      "metadata": {
+        "label": "turn-start:turn#1",
+        "sha": "sha#1",
+        "workspace_bytes": 0
+      },
+      "role": "system",
+      "step_index": 2,
+      "v": 2
+    },
+    "type": "checkpoint.created"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "arguments": {
+        "command": "touch ran.txt"
+      },
+      "call_id": "call#1",
+      "name": "run_command"
+    },
+    "type": "model.tool_call"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "tool_use",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 3,
+      "tool_calls": [
+        {
+          "arguments": {
+            "command": "touch ran.txt"
+          },
+          "id": "evt#1",
+          "name": "run_command"
+        }
+      ],
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "arguments": {
+        "command": "touch ran.txt"
+      },
+      "call_id": "call#1",
+      "name": "run_command",
+      "plugin": "shell-tools",
+      "risk": "exec"
+    },
+    "type": "tool.call"
+  },
+  {
+    "data": {
+      "action": "deny",
+      "call_id": "call#1",
+      "metadata": {
+        "sandbox": {
+          "available": false,
+          "backend": "bwrap",
+          "enforcement": "none",
+          "mode": "required",
+          "network": false,
+          "reason": "bubblewrap (bwrap) not found on PATH; install bubblewrap to enable process confinement"
+        }
+      },
+      "plugin": "shell-tools",
+      "policy": "permission_modes",
+      "reason": "Execution of 'run_command' denied in plan mode.",
+      "risk": "exec"
+    },
+    "record": {
+      "call_id": "call#1",
+      "content": "Tool `run_command` denied by `permission_modes`: Execution of 'run_command' denied in plan mode.",
+      "kind": "tool.decision",
+      "metadata": {
+        "action": "deny",
+        "call_id": "call#1",
+        "metadata": {
+          "sandbox": {
+            "available": false,
+            "backend": "bwrap",
+            "enforcement": "none",
+            "mode": "required",
+            "network": false,
+            "reason": "bubblewrap (bwrap) not found on PATH; install bubblewrap to enable process confinement"
+          }
+        },
+        "plugin": "shell-tools",
+        "policy": "permission_modes",
+        "reason": "Execution of 'run_command' denied in plan mode.",
+        "risk": "exec"
+      },
+      "role": "system",
+      "step_index": 4,
+      "v": 2
+    },
+    "type": "tool.decision"
+  },
+  {
+    "data": {
+      "call_id": "call#1",
+      "is_error": true,
+      "metadata": {
+        "policy": "permission_modes",
+        "sandbox": {
+          "available": false,
+          "backend": "bwrap",
+          "enforcement": "none",
+          "mode": "required",
+          "network": false,
+          "reason": "bubblewrap (bwrap) not found on PATH; install bubblewrap to enable process confinement"
+        }
+      },
+      "name": "run_command",
+      "preview": "Action denied: Execution of 'run_command' denied in plan mode."
+    },
+    "type": "tool.result"
+  },
+  {
+    "data": {
+      "model": "replay-v1",
+      "provider": "replay"
+    },
+    "type": "model.started"
+  },
+  {
+    "data": {
+      "text": "The command was denied in plan mode; nothing was executed."
+    },
+    "type": "model.text.delta"
+  },
+  {
+    "data": {
+      "cap_usd": 5.0,
+      "lifetime_usd": 0.0,
+      "unknown_pricing": false,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "type": "cost.updated"
+  },
+  {
+    "data": {
+      "stop_reason": "end_turn",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "The command was denied in plan mode; nothing was executed.",
+      "kind": "assistant.message",
+      "metadata": {
+        "stop_reason": "end_turn",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "assistant",
+      "step_index": 6,
+      "v": 2
+    },
+    "type": "model.completed"
+  },
+  {
+    "data": {
+      "added": 0,
+      "base": "sha#1",
+      "files": [],
+      "head": "sha#1",
+      "removed": 0,
+      "snapshot_skipped": false,
+      "truncated": false,
+      "turn_id": "turn#1"
+    },
+    "record": {
+      "content": "No workspace changes this turn.",
+      "kind": "workspace.changes",
+      "metadata": {
+        "added": 0,
+        "base": "sha#1",
+        "files": [],
+        "head": "sha#1",
+        "removed": 0,
+        "snapshot_skipped": false,
+        "total_files": 0,
+        "truncated": false,
+        "turn_id": "turn#1"
+      },
+      "role": "system",
+      "step_index": 7,
+      "v": 2
+    },
+    "type": "workspace.changes"
+  },
+  {
+    "data": {
+      "stop_reason": "end_turn",
+      "tool_calls": 1,
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "record": {
+      "content": "Turn completed (end_turn) with 1 tool call(s).",
+      "kind": "turn.completed",
+      "metadata": {
+        "stop_reason": "end_turn",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "role": "system",
+      "step_index": 8,
+      "v": 2
+    },
+    "type": "turn.completed"
+  }
+]

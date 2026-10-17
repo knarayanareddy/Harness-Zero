@@ -73,7 +73,7 @@
         <div class="agent-header">
           <div class="agent-title-cluster">
             <span>Agent Chat</span>
-            <span class="titlebar-pill" id="permission-mode-badge" title="kernel.security.permission_mode">permissions: …</span>
+            <span class="titlebar-pill" id="permission-mode-badge" title="Effective security preset and process confinement" data-state="unknown">security: …</span>
           </div>
 
           <div class="header-actions">
@@ -112,6 +112,10 @@
             <div class="suggestion-chip" data-prompt="Create an interactive HTML artifact visualization.">🎨 Create</div>
             <div class="suggestion-chip" data-prompt="Run pytest tests/ -v and check our test coverage.">&lt;/&gt; Code</div>
             <div class="suggestion-chip" data-prompt="what can you do?">✨ What can you do?</div>
+          </div>
+
+          <div id="question-waiting" class="question-waiting hidden" role="status" aria-live="polite">
+            Waiting for your answer — submit the question card above, or press Stop to cancel this turn.
           </div>
 
           <form id="composer-form" class="composer-card">

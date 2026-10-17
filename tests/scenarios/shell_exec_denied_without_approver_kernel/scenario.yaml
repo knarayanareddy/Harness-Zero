@@ -4,6 +4,8 @@ summary: run_command (EXEC) in ask mode with no approver listening — fails clo
 recorded_from: synthetic
 settings:
   kernel.security.permission_mode: ask
+  # Isolate the approval-broker assertion from host-specific sandbox availability.
+  kernel.sandbox.mode: "off"
 turns:
   - prompt: "Create ran.txt with the shell."
 expect:

@@ -507,4 +507,3 @@ def test_registry_rejects_providers_that_skip_the_contract(registry: PluginRegis
     with pytest.raises(PluginLoadError, match="missing: is_configured, is_reachable"):
         registry.register_provider(HalfProvider(), plugin_name="half-plugin")
     assert registry.get_provider("half") is None
-

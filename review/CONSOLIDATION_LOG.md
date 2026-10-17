@@ -1201,3 +1201,73 @@ one by putting the bug back: unregister the static route → scenario fails
 `client module URLs the browser could not fetch: {'/static/plugins/probe-vault/probe.js': 404}`; revert the
 `accepts` conditional in `registry.js` → `panel 'probe-vault' does not show 'probe-vault'; it shows ''`; restore
 `"family": parent` → `test_an_installed_plugin_reports_no_capability_family` fails.
+
+## P15 — WS-06a/WS-06b: permission presets and OS process confinement behind the executor seam
+
+**Why this phase exists.** `workspace_jail` constrains tool arguments; it cannot contain a shell process that reads
+or writes host paths. The acceptance bar was a named, overridable security posture plus an OS boundary that is
+reported as a fact, not an optimistic configuration value. Missing/failed confinement must not silently become a
+host subprocess.
+
+**Built.**
+
+- `harness/kernel/presets.py` defines `locked`, `careful`, `standard`, and `open` over the SettingsStore resolver.
+  Resolution is in-memory override or explicit stored value → preset expansion → call-site default → schema
+  default; no expansion is materialised into `settings.json`. `bypass` remains explicit and is not a preset.
+  `locked` selects plan + required confinement + network off; `careful` asks and uses preferred confinement;
+  `standard` allows an EXEC fast path only after a successful confinement probe; `open` explicitly disables
+  confinement, allows network, and still blocks destructive commands.
+- `harness/kernel/sandbox.py` owns `SandboxService` and a transparent `SandboxedExecutor` / `SandboxedProcess`.
+  The policy gate wraps the selected executor after policy and approval, so `local`, `worktree`, and other
+  registered executors share the same seam. `required` + unavailable denies before spawn (including when
+  permission mode is explicitly `bypass`); `preferred` + unavailable asks before an unconfined fallback; the
+  fallback, `off`, and successful confined executions all report their true mode/backend/availability/enforcement/
+  network facts. The wrapper re-checks availability and does not swallow backend/wrapper errors into host execution.
+- Linux `sandbox-bwrap` probes the user/PID/IPC/UTS/network namespaces, binds the workspace writable and runtime
+  paths read-only, uses a private `/tmp` and cleared allowlisted environment, and isolates network by default.
+  Explicit extra-readable paths are validated and reported as `partial`. macOS `sandbox-seatbelt` builds a
+  workspace-scoped profile and reports `partial`; Windows/unknown systems are unavailable. The profile builder
+  has mocked coverage only.
+- `security.status`, `/health`, `harness security show`, tool-decision/result metadata, and the Studio security
+  pill share the kernel's resolved status. The settings group exposes preset, backend/mode/network, and
+  extra-readable paths; changing sandbox settings refreshes the pill. `/health` and CLI status do not infer
+  enforcement from settings alone.
+- Added conditional real-bwrap integration checks, fail-closed and malformed-fact tests, preset resolver tests,
+  the HTTP/daemon no-approver regression, four scenarios, SDK sandbox adapters/kit, plugin READMEs, CI bubblewrap
+  installation, and updated research/architecture/catalog documentation.
+
+**Flow-of-information findings and corrections.** An early full-suite run reported 14 failures. In addition to
+refreshing the changed scenario baselines and rebuilding the stale Tailwind output, the focused flow checks found
+that scenario YAML used bare `off`: PyYAML parses that token as boolean `False`, so the service correctly denied it
+as an invalid mode and the huge-output/repeat/approval scenarios never reached their hooks/policy expectations.
+The three fixture values are now quoted as `"off"`; the focused scenarios pass and the ordinary full-suite run
+replays them against the refreshed goldens. Gate invariant expectations and the architecture event table were also
+updated to retain/document `tool.decision.metadata` rather than treating that security fact as absent. A final
+status audit found that an inherently `partial` backend (Seatbelt) was given the *extra-readable-path* explanation
+even when no extra path was configured; status now preserves the backend's own reason and only substitutes the
+extra-path explanation when such a path exists. Non-boolean availability facts are also normalized to unavailable.
+Regression tests pin both corrections.
+
+**Gate at this point.**
+
+| Check | Result |
+|---|---|
+| `.venv/bin/pytest -q -rs` (temporary `HOME` / `HARNESS_CONFIG_DIR`) | **655 passed, 4 skipped** in 7:14 |
+| Scenario lane after intentional `HARNESS_REPLAY=update` | **30 passed, 1 skipped** in 4:34; the ordinary full suite then passed without update mode |
+| `.venv/bin/harness plugin test --all` | **220 passed** |
+| `.venv/bin/harness plugin doctor --all` | passed |
+| `.venv/bin/ruff check .` | clean |
+| `python tests/frontends/ui_audit.py --strict` | 0 used-but-undefined and 0 defined-but-unused classes |
+| `.venv/bin/harness catalog --check --section drift --section settings --section ui` | all three passed |
+| `.venv/bin/harness catalog --check --format json` | drift/refs/settings/UI passed; advisory debt remains: 34/41 plugin READMEs incomplete and 19 scenario coverage gaps |
+
+**Branch state.** This P15 implementation is a worktree delta on the existing `arena/cb0f051a-harness-zero`
+branch / PR #5. To synchronize the local checkout with the open PR before preparing the approved WS-06–WS-10a
+bundle, the branch pointer was moved to PR head `abf62b6` with `git reset --mixed`; the working tree was left
+untouched, and no branch switch or cleanup was performed.
+
+**Honest limits.** This host has no `bwrap`, and local installation was not possible without root. Three kernel
+confinement integration tests and the full-enforcement scenario skipped with the explicit reason; real Linux
+confinement has therefore **not** been verified in this run. CI now installs bubblewrap, but that CI job was not
+run here. Seatbelt has mocked profile-builder coverage and no real macOS confinement test was run. The npm
+install step earlier reported 7 audit findings (2 moderate, 5 high); no automatic audit fix was applied.

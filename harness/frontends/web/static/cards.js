@@ -250,7 +250,7 @@ export class CardRenderer {
     const safeUrl = escapeHtml(url);
     let preview = '';
     if (mediaType === 'text/html') {
-      preview = `<div class="artifact-preview mt-2"><iframe src="${safeUrl}" class="artifact-frame w-full h-64" sandbox="allow-same-origin" title="${name}"></iframe></div>`;
+      preview = `<div class="artifact-preview mt-2"><iframe src="${safeUrl}" class="artifact-frame w-full h-64" sandbox="" referrerpolicy="no-referrer" title="${name}"></iframe></div>`;
     } else if (mediaType.startsWith('image/')) {
       preview = `<div class="artifact-preview mt-2"><img src="${safeUrl}" alt="${name}" class="artifact-image max-h-64" /></div>`;
     }

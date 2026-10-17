@@ -7,6 +7,8 @@ summary: >-
 recorded_from: synthetic
 settings:
   kernel.security.permission_mode: allow
+  # This scenario tests output lifecycle, not sandbox enforcement; keep it portable to hosts without bwrap.
+  kernel.sandbox.mode: "off"
 turns:
   - prompt: "Run the noisy build"
 expect:

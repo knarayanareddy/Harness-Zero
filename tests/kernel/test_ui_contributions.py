@@ -120,11 +120,15 @@ def test_the_web_frontend_declares_its_panels_in_a_file_not_in_kernel_code():
 async def test_unloading_drops_contributions_so_disabling_removes_a_panel(tmp_path: Path):
     rt = await bootstrap_kernel(workspace=tmp_path / "ws", config_dir=tmp_path / "conf")
     try:
-        before = {p["id"] for p in (await rt.commands.ui_contributions())["panels"]}
+        before_panels = (await rt.commands.ui_contributions())["panels"]
+        before = {p["id"] for p in before_panels}
+        plugin_panels = {p["id"] for p in before_panels if p["plugin"] in {"hook-checkpoints", "tools-jobs"}}
+        core_before = {p["id"] for p in before_panels if p["plugin"] not in {"hook-checkpoints", "tools-jobs"}}
         assert before, "a booted kernel serves the built-in panels"
+        assert {"diffs", "jobs"} <= before - core_before <= plugin_panels
         await rt.registry.unload_all()
         after = {p["id"] for p in (await rt.commands.ui_contributions())["panels"]}
-        assert after == before, "unloading plugins leaves the client's own declaration in place"
+        assert after == core_before, "unloading the checkpoint plugin removes its panel but preserves the shipped client"
         # A plugin's contribution would be gone with it; that is the mechanism, not a special case in the UI.
         rt.registry.register_ui_contribution("demo-feature", UiContribution(panels=[_panel("vault")]))
         assert "vault" in {p["id"] for p in (await rt.commands.ui_contributions())["panels"]}
@@ -150,8 +154,14 @@ async def test_commands_list_is_the_dispatch_table(tmp_path: Path):
             "alias_of": "form.submit",
             "exposed": False,
         }, "an alias is reported as one and is not offered to a UI"
+        assert rows["approvals.list"]["alias_of"] == "interactions.list"
+        assert rows["approvals.list"]["args"] == rows["interactions.list"]["args"]
+        assert not rows["approvals.list"]["exposed"]
         for name, row in rows.items():
-            if row["alias_of"] is None:
+            if row["alias_of"] is None and row.get("plugin"):
+                assert name.startswith(f"plugins.{row['plugin']}.")
+                assert name in rt.commands._custom_commands, f"{name} is listed without a plugin handler"
+            elif row["alias_of"] is None:
                 assert hasattr(rt.commands, name.replace(".", "_").replace("-", "_")), f"{name} is listed without a handler"
     finally:
         await rt.registry.unload_all()
@@ -181,6 +191,12 @@ async def test_the_boot_response_names_the_vocabulary_the_client_needs(tmp_path:
         assert ui["record_kinds"] == sorted(RECORD_KINDS), "the client cannot refuse an unknown kind it was never told"
         assert ui["settings_groups"], "the settings tabs come from the aggregated schema"
         assert all(panel["plugin"] for panel in ui["panels"]), "every panel says who declared it"
+        diffs = next(panel for panel in ui["panels"] if panel["id"] == "diffs")
+        assert diffs["plugin"] == "hook-checkpoints"
+        assert diffs["command"] == "plugins.hook-checkpoints.changes", "the manifest ID is the command namespace"
+        command_rows = {row["name"]: row for row in await rt.commands.commands_list()}
+        assert command_rows[diffs["command"]]["plugin"] == diffs["plugin"]
+        assert command_rows[diffs["command"]]["exposed"]
     finally:
         await rt.registry.unload_all()
 
@@ -239,12 +255,29 @@ async def test_a_plugin_can_paint_a_kind_the_client_does_not_know(tmp_path: Path
         # client's own `/static/` tree, so a plugin module 404'd and its panel quietly fell back to the generic
         # renderer. It is namespaced by plugin id now, and `tests/frontends/test_plugin_static.py` fetches this
         # exact URL rather than a copy of it.
-        assert ui["client_modules"] == [
-            {
-                "plugin": "obsidian",
-                "path": "static/plugins/obsidian.js",
-                "url": "/static/plugins/obsidian/plugins/obsidian.js",
-            }
-        ]
+        obsidian_module = next(module for module in ui["client_modules"] if module["plugin"] == "obsidian")
+        assert obsidian_module == {
+            "plugin": "obsidian",
+            "path": "static/plugins/obsidian.js",
+            "url": "/static/plugins/obsidian/plugins/obsidian.js",
+        }
     finally:
         await rt.registry.unload_all()
+
+
+async def test_jobs_panel_is_owned_by_the_jobs_plugin(tmp_path: Path):
+    runtime = await bootstrap_kernel(workspace=tmp_path / "ws", config_dir=tmp_path / "conf")
+    try:
+        ui = await runtime.commands.ui_contributions()
+        jobs_panel = next(panel for panel in ui["panels"] if panel["id"] == "jobs")
+        assert jobs_panel["plugin"] == "tools-jobs"
+        assert jobs_panel["command"] == "plugins.tools-jobs.list"
+        assert jobs_panel["accepts"] == ["session_id"]
+        module = next(item for item in ui["client_modules"] if item["plugin"] == "tools-jobs")
+        assert module["path"] == "static/panel.js"
+        assert module["url"] == "/static/plugins/tools-jobs/panel.js"
+        commands = {row["name"] for row in await runtime.commands.commands_list()}
+        assert {"plugins.tools-jobs.list", "plugins.tools-jobs.output", "plugins.tools-jobs.kill"} <= commands
+        assert ui["unbacked_panels"] == []
+    finally:
+        await runtime.registry.unload_all()

@@ -21,6 +21,7 @@ from rich.table import Table
 from harness import __version__
 from harness.frontends.cli import CliApp
 from harness.kernel.bootstrap import bootstrap_kernel
+from harness.kernel.presets import PRESET_ORDER
 from harness.sdk.errors import HarnessError, ProviderError
 
 console = Console()
@@ -284,6 +285,57 @@ def events_schema():
     """Output JSON schema for Harness-Zero event envelopes."""
     from harness.sdk.events import schema
     click.echo(json.dumps(schema(), indent=2))
+
+
+@main.group()
+def security():
+    """Inspect and choose the kernel's resolved security posture."""
+    pass
+
+
+@security.command(name="show")
+@click.option("--workspace", "-w", default=".", help="Workspace path")
+@click.option("--json", "json_output", is_flag=True, help="Print the resolved posture as JSON")
+def security_show(workspace: str, json_output: bool):
+    """Show the active preset and effective settings (plus sandbox enforcement when available)."""
+    async def _show():
+        runtime = await bootstrap_kernel(workspace=workspace)
+        status = await runtime.commands.security_status()
+        if json_output:
+            click.echo(json.dumps(status, indent=2, sort_keys=True))
+            return
+        custom = " (customised)" if status.get("customised") else ""
+        console.print(f"[bold]Security preset:[/bold] {status['preset']}{custom}")
+        table = Table(title="Effective security settings")
+        table.add_column("Setting", style="cyan")
+        table.add_column("Value")
+        for key, value in sorted((status.get("settings") or {}).items()):
+            table.add_row(key, json.dumps(value, sort_keys=True))
+        console.print(table)
+        sandbox = status.get("sandbox")
+        if sandbox:
+            console.print("[bold]Sandbox:[/bold] " + json.dumps(sandbox, sort_keys=True))
+        if status.get("customised"):
+            console.print("[yellow]Preset differences:[/yellow] " + ", ".join(status["customised"]))
+
+    asyncio.run(_show())
+
+
+@security.command(name="set-preset")
+@click.argument("preset", type=click.Choice(list(PRESET_ORDER), case_sensitive=False))
+@click.option("--workspace", "-w", default=".", help="Workspace path")
+def security_set_preset(preset: str, workspace: str):
+    """Set one named preset; existing explicit security settings remain pinned."""
+    async def _set():
+        runtime = await bootstrap_kernel(workspace=workspace)
+        await runtime.commands.settings_set("kernel.security.preset", preset.lower())
+        status = await runtime.commands.security_status()
+        custom = " (customised)" if status.get("customised") else ""
+        console.print(f"[green]Security preset set to {status['preset']}{custom}.[/green]")
+        if status.get("customised"):
+            console.print("[yellow]Preset differences:[/yellow] " + ", ".join(status["customised"]))
+
+    asyncio.run(_set())
 
 
 @main.group()
@@ -564,13 +616,16 @@ def plugin_disable(name: str, workspace: str):
     asyncio.run(_do())
 
 
-@main.command()
+@main.group(invoke_without_command=True)
 @click.option("--workspace", "-w", default=".", help="Workspace path")
-def mcp(workspace: str):
-    """Run Harness as a Model Context Protocol stdio server for external AI tools."""
+@click.pass_context
+def mcp(ctx: click.Context, workspace: str):
+    """Run the MCP server (default) or inspect configured MCP client connections."""
+    if ctx.invoked_subcommand is not None:
+        return
     from harness.plugins.bridges.mcp_server import MCPServer, run_mcp_server_from_stdio
 
-    async def _run():
+    async def _run_server() -> None:
         runtime = await bootstrap_kernel(workspace=workspace)
         expose = runtime.settings.get("plugins.mcp-server.expose")
         server = MCPServer(
@@ -580,7 +635,50 @@ def mcp(workspace: str):
         )
         await run_mcp_server_from_stdio(server)
 
-    asyncio.run(_run())
+    asyncio.run(_run_server())
+
+
+@mcp.command(name="status")
+@click.option("--workspace", "-w", default=None, help="Workspace path (defaults to the MCP group workspace)")
+@click.pass_context
+def mcp_status(ctx: click.Context, workspace: str | None) -> None:
+    """Show configured MCP client transport, state, tool count and reconnect attempt."""
+    selected_workspace = workspace or (ctx.parent.params.get("workspace", ".") if ctx.parent else ".")
+
+    async def _show_status() -> None:
+        runtime = await bootstrap_kernel(workspace=selected_workspace)
+        try:
+            loaded = runtime.registry.get_loaded("bridge-mcp-client")
+            plugin = loaded.instance if loaded is not None else None
+            statuses = plugin.get_status() if plugin is not None and hasattr(plugin, "get_status") else {}
+            if not statuses:
+                console.print("[dim]No MCP client servers are configured.[/dim]")
+                return
+            table = Table(title="MCP Client Servers")
+            table.add_column("Server", style="cyan")
+            table.add_column("Transport")
+            table.add_column("State", style="bold")
+            table.add_column("Tools", justify="right")
+            table.add_column("Attempt", justify="right")
+            table.add_column("Session")
+            table.add_column("Last error")
+            for name, status in sorted(statuses.items()):
+                state = str(status.get("state") or status.get("status") or "unknown")
+                color = "green" if state == "connected" else ("yellow" if state == "reconnecting" else "red")
+                table.add_row(
+                    name,
+                    str(status.get("transport", "stdio")),
+                    f"[{color}]{state}[/{color}]",
+                    str(status.get("tools_count", status.get("tools", 0))),
+                    str(status.get("attempt", 0)),
+                    "yes" if status.get("session_id_present") else "no",
+                    str(status.get("last_error") or "—"),
+                )
+            console.print(table)
+        finally:
+            await runtime.registry.unload_all()
+
+    asyncio.run(_show_status())
 
 
 @main.command()

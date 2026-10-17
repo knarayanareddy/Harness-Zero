@@ -103,6 +103,7 @@ def test_transient_events_name_no_record() -> None:
         "compaction.started",
         "context.assembled",
         "cost.updated",
+        "mcp.server.status",
         "model.started",
         "model.text.delta",
         "model.thinking.delta",

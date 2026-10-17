@@ -211,17 +211,21 @@ RECORD_KINDS: tuple[str, ...] = (
     "tool.decision",
     "approval.requested",
     "approval.resolved",
+    "question.asked",
+    "question.answered",
     "tool.result",
     "ui.card",
     "compaction.summary",
     "system.notice",
     "settings.changed",
     "checkpoint.created",
-    # reserved for WS-10 (background jobs / goals); declared so the catalogue and the upgrader know them
+    "checkpoint.restored",
+    "workspace.changes",
+    "deliverable.presented",
+    # WS-10a: durable background job lifecycle and output references.
     "job.started",
-    "job.completed",
-    "goal.created",
-    "goal.completed",
+    "job.output",
+    "job.exited",
 )
 
 RecordKind = str  # Literal[RECORD_KINDS] is not expressible; validated by `infer_record_kind`
@@ -852,6 +856,7 @@ class Decision:
     risk: RiskClass | None = None
     arguments: dict[str, Any] | None = None
     policy: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @staticmethod
     def allow(reason: str = "") -> Decision:
@@ -866,13 +871,16 @@ class Decision:
         return Decision(action=Action.DENY, reason=reason, risk=risk)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data = {
             "action": self.action.value,
             "reason": self.reason,
             "risk": self.risk.value if self.risk else None,
             "arguments": self.arguments,
             "policy": self.policy,
         }
+        if self.metadata:
+            data["metadata"] = self.metadata
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Decision:
@@ -886,7 +894,37 @@ class Decision:
             risk=risk,
             arguments=data.get("arguments"),
             policy=data.get("policy", ""),
+            metadata=dict(data.get("metadata") or {}),
         )
+
+
+@dataclass(slots=True, frozen=True)
+class SandboxAvailability:
+    """A probed fact about an OS confinement backend, never an optimistic config value."""
+
+    backend: str
+    available: bool
+    reason: str = ""
+    enforcement: Literal["full", "partial", "none"] = "none"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "backend": self.backend,
+            "available": self.available,
+            "reason": self.reason,
+            "enforcement": self.enforcement,
+        }
+
+
+@dataclass(slots=True, frozen=True)
+class SandboxPolicy:
+    """The paths and network access the sandbox may grant to one process."""
+
+    workspace: Path
+    writable: tuple[Path, ...] = ()
+    readable_extra: tuple[Path, ...] = ()
+    network: bool = False
+    env_allow: tuple[str, ...] = ("PATH", "HOME", "LANG", "LC_ALL", "TERM", "USER", "SHELL", "TMPDIR")
 
 
 @dataclass(slots=True)
@@ -927,15 +965,21 @@ class ExecResult:
     stderr: str
     truncated: bool
     duration_ms: int
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data = {
             "exit_code": self.exit_code,
             "stdout": self.stdout,
             "stderr": self.stderr,
             "truncated": self.truncated,
             "duration_ms": self.duration_ms,
         }
+        # Keep the pre-WS-06 wire shape for ordinary (unconfined) executors; sandbox facts are present only when
+        # the executor wrapper has something to report.
+        if self.metadata:
+            data["metadata"] = self.metadata
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ExecResult:
@@ -945,6 +989,7 @@ class ExecResult:
             stderr=data.get("stderr", ""),
             truncated=bool(data.get("truncated", False)),
             duration_ms=int(data.get("duration_ms", 0)),
+            metadata=dict(data.get("metadata") or {}),
         )
 
 

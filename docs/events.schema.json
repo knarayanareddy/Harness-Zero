@@ -14,11 +14,19 @@
       "enum": [
         "approval.required",
         "approval.resolved",
+        "checkpoint.created",
+        "checkpoint.restored",
         "compaction.completed",
         "compaction.started",
         "context.assembled",
         "cost.updated",
+        "deliverable.presented",
         "hook.fired",
+        "job.exited",
+        "job.output",
+        "job.started",
+        "mcp.server.status",
+        "mcp.tools.changed",
         "model.completed",
         "model.notice",
         "model.started",
@@ -27,9 +35,12 @@
         "model.tool_call",
         "plugin.error",
         "plugin.loaded",
+        "question.answered",
+        "question.asked",
         "session.started",
         "session.switched",
         "settings.changed",
+        "system.notice",
         "task.completed",
         "task.started",
         "tool.call",
@@ -42,7 +53,8 @@
         "turn.completed",
         "turn.error",
         "turn.started",
-        "ui.card"
+        "ui.card",
+        "workspace.changes"
       ],
       "description": "Event topic identifier"
     },
@@ -96,6 +108,20 @@
       "carries_record": true,
       "transient": false
     },
+    "checkpoint.created": {
+      "payload": "CheckpointCreated",
+      "durable": true,
+      "record_kind": "checkpoint.created",
+      "carries_record": true,
+      "transient": false
+    },
+    "checkpoint.restored": {
+      "payload": "CheckpointRestored",
+      "durable": true,
+      "record_kind": "checkpoint.restored",
+      "carries_record": true,
+      "transient": false
+    },
     "compaction.completed": {
       "payload": "CompactionCompleted",
       "durable": true,
@@ -124,10 +150,52 @@
       "carries_record": true,
       "transient": true
     },
+    "deliverable.presented": {
+      "payload": "DeliverablePresented",
+      "durable": true,
+      "record_kind": "deliverable.presented",
+      "carries_record": true,
+      "transient": false
+    },
     "hook.fired": {
       "payload": "HookFired",
       "durable": false,
       "record_kind": null,
+      "carries_record": true,
+      "transient": false
+    },
+    "job.exited": {
+      "payload": "JobExited",
+      "durable": true,
+      "record_kind": "job.exited",
+      "carries_record": true,
+      "transient": false
+    },
+    "job.output": {
+      "payload": "JobOutput",
+      "durable": true,
+      "record_kind": "job.output",
+      "carries_record": true,
+      "transient": false
+    },
+    "job.started": {
+      "payload": "JobStarted",
+      "durable": true,
+      "record_kind": "job.started",
+      "carries_record": true,
+      "transient": false
+    },
+    "mcp.server.status": {
+      "payload": "McpServerStatus",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": true
+    },
+    "mcp.tools.changed": {
+      "payload": "McpToolsChanged",
+      "durable": true,
+      "record_kind": "system.notice",
       "carries_record": true,
       "transient": false
     },
@@ -187,6 +255,20 @@
       "carries_record": true,
       "transient": false
     },
+    "question.answered": {
+      "payload": "QuestionAnswered",
+      "durable": true,
+      "record_kind": "question.answered",
+      "carries_record": true,
+      "transient": false
+    },
+    "question.asked": {
+      "payload": "QuestionAsked",
+      "durable": true,
+      "record_kind": "question.asked",
+      "carries_record": true,
+      "transient": false
+    },
     "session.started": {
       "payload": "SessionStarted",
       "durable": false,
@@ -205,6 +287,13 @@
       "payload": "SettingsChanged",
       "durable": false,
       "record_kind": null,
+      "carries_record": true,
+      "transient": false
+    },
+    "system.notice": {
+      "payload": "SystemNotice",
+      "durable": true,
+      "record_kind": "system.notice",
       "carries_record": true,
       "transient": false
     },
@@ -298,6 +387,13 @@
       "record_kind": "ui.card",
       "carries_record": true,
       "transient": false
+    },
+    "workspace.changes": {
+      "payload": "WorkspaceChanges",
+      "durable": true,
+      "record_kind": "workspace.changes",
+      "carries_record": true,
+      "transient": false
     }
   },
   "allOf": [
@@ -329,6 +425,38 @@
         "properties": {
           "data": {
             "$ref": "#/$defs/payloads/approval.resolved"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "checkpoint.created"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/checkpoint.created"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "checkpoint.restored"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/checkpoint.restored"
           }
         }
       }
@@ -401,6 +529,22 @@
       "if": {
         "properties": {
           "type": {
+            "const": "deliverable.presented"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/deliverable.presented"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
             "const": "hook.fired"
           }
         }
@@ -409,6 +553,86 @@
         "properties": {
           "data": {
             "$ref": "#/$defs/payloads/hook.fired"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "job.exited"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/job.exited"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "job.output"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/job.output"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "job.started"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/job.started"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "mcp.server.status"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/mcp.server.status"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "mcp.tools.changed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/mcp.tools.changed"
           }
         }
       }
@@ -545,6 +769,38 @@
       "if": {
         "properties": {
           "type": {
+            "const": "question.answered"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/question.answered"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "question.asked"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/question.asked"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
             "const": "session.started"
           }
         }
@@ -585,6 +841,22 @@
         "properties": {
           "data": {
             "$ref": "#/$defs/payloads/settings.changed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "system.notice"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/system.notice"
           }
         }
       }
@@ -796,6 +1068,22 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "workspace.changes"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/workspace.changes"
+          }
+        }
+      }
     }
   ],
   "$defs": {
@@ -927,6 +1215,46 @@
           "by"
         ]
       },
+      "checkpoint.created": {
+        "title": "CheckpointCreated",
+        "type": "object",
+        "properties": {
+          "sha": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "sha",
+          "label"
+        ],
+        "description": "A commit in the private checkpoint repository, never in the user's own git repository."
+      },
+      "checkpoint.restored": {
+        "title": "CheckpointRestored",
+        "type": "object",
+        "properties": {
+          "sha": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "files_touched": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "sha",
+          "label",
+          "files_touched"
+        ],
+        "description": "A user-approved restore of the shadow repository to an earlier commit."
+      },
       "compaction.completed": {
         "title": "CompactionCompleted",
         "type": "object",
@@ -1010,6 +1338,44 @@
         "additionalProperties": false,
         "description": "``cost.updated`` carries the same ``EconomicsSnapshot`` the ``economics`` command returns."
       },
+      "deliverable.presented": {
+        "title": "DeliverablePresented",
+        "type": "object",
+        "properties": {
+          "turn_id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "caption": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "artifact",
+              "file"
+            ]
+          },
+          "size": {
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "turn_id",
+          "path",
+          "caption",
+          "kind",
+          "size",
+          "sha256"
+        ],
+        "description": "The file the agent marked as its user-facing result."
+      },
       "hook.fired": {
         "title": "HookFired",
         "type": "object",
@@ -1038,6 +1404,186 @@
           "outcome",
           "duration_ms"
         ]
+      },
+      "job.exited": {
+        "title": "JobExited",
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "exit_code": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "duration_ms": {
+            "type": "number"
+          },
+          "tail": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "job_id",
+          "label",
+          "exit_code",
+          "reason",
+          "duration_ms",
+          "tail"
+        ],
+        "description": "A durable terminal state for a completed, stopped, failed, or lost job."
+      },
+      "job.output": {
+        "title": "JobOutput",
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "offset_start": {
+            "type": "integer"
+          },
+          "offset_end": {
+            "type": "integer"
+          },
+          "stream": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "job_id",
+          "offset_start",
+          "offset_end",
+          "stream",
+          "text"
+        ],
+        "description": "A coalesced live chunk; its durable record points into the bounded spill file."
+      },
+      "job.started": {
+        "title": "JobStarted",
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "pid": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "started_at": {
+            "type": "number"
+          },
+          "sandbox": {
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "job_id",
+          "label",
+          "command",
+          "cwd",
+          "pid",
+          "started_at"
+        ],
+        "description": "A durable background process entered the jobs registry."
+      },
+      "mcp.server.status": {
+        "title": "McpServerStatus",
+        "type": "object",
+        "properties": {
+          "server": {
+            "type": "string"
+          },
+          "transport": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "connecting",
+              "connected",
+              "reconnecting",
+              "failed",
+              "stopped"
+            ]
+          },
+          "attempt": {
+            "type": "integer"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tools_count": {
+            "type": "integer"
+          },
+          "session_id_present": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "server",
+          "transport",
+          "state"
+        ],
+        "description": "Live status of one configured Model Context Protocol server."
+      },
+      "mcp.tools.changed": {
+        "title": "McpToolsChanged",
+        "type": "object",
+        "properties": {
+          "server": {
+            "type": "string"
+          },
+          "added": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "removed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "server"
+        ],
+        "description": "A durable notice that an MCP server's advertised tools changed."
       },
       "model.completed": {
         "title": "ModelCompleted",
@@ -1189,6 +1735,96 @@
           "trust"
         ]
       },
+      "question.answered": {
+        "title": "QuestionAnswered",
+        "type": "object",
+        "properties": {
+          "interaction_id": {
+            "type": "string"
+          },
+          "call_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "turn_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "answers": {
+            "type": "object"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "answered",
+              "cancelled",
+              "timeout"
+            ]
+          },
+          "by": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "interaction_id",
+          "call_id",
+          "turn_id",
+          "answers",
+          "status",
+          "by"
+        ],
+        "description": "The user's answer, cancellation, or timeout for a structured question."
+      },
+      "question.asked": {
+        "title": "QuestionAsked",
+        "type": "object",
+        "properties": {
+          "interaction_id": {
+            "type": "string"
+          },
+          "call_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "turn_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "timeout_s": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "interaction_id",
+          "call_id",
+          "turn_id",
+          "questions",
+          "timeout_s"
+        ],
+        "description": "A structured question the model is waiting for a human to answer."
+      },
       "session.started": {
         "title": "SessionStarted",
         "type": "object",
@@ -1250,6 +1886,35 @@
         "required": [
           "paths"
         ]
+      },
+      "system.notice": {
+        "title": "SystemNotice",
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "info",
+              "success",
+              "warn",
+              "error"
+            ]
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "message"
+        ],
+        "description": "Durable user-facing information emitted by a hook or plugin."
       },
       "task.completed": {
         "title": "TaskCompleted",
@@ -1352,6 +2017,12 @@
           },
           "plugin": {
             "type": "string"
+          },
+          "metadata": {
+            "type": [
+              "object",
+              "null"
+            ]
           }
         },
         "additionalProperties": false,
@@ -1570,6 +2241,55 @@
           "card"
         ],
         "description": "A card for the frontends; ``card`` is ``harness.sdk.cards.Card.to_dict()``."
+      },
+      "workspace.changes": {
+        "title": "WorkspaceChanges",
+        "type": "object",
+        "properties": {
+          "turn_id": {
+            "type": "string"
+          },
+          "base": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "head": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "added": {
+            "type": "integer"
+          },
+          "removed": {
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "snapshot_skipped": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "turn_id",
+          "base",
+          "head",
+          "files",
+          "added",
+          "removed"
+        ],
+        "description": "The net tracked workspace delta between the turn-start and turn-end snapshots."
       }
     }
   }

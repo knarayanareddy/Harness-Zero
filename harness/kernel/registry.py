@@ -12,6 +12,7 @@ import json
 import logging
 import re
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -19,6 +20,7 @@ from typing import Any, Literal
 
 from harness.kernel.bus import EventBus
 from harness.kernel.plugin_paths import client_module_url, plugin_dir
+from harness.kernel.sandbox import SandboxService
 from harness.kernel.secrets import Secrets
 from harness.kernel.settings import SettingsStore
 from harness.sdk.context import SecretsView, SettingsView
@@ -29,6 +31,7 @@ from harness.sdk.contracts import (
     Plugin,
     Policy,
     Provider,
+    SandboxBackend,
     Strategy,
     ToolHandler,
 )
@@ -112,6 +115,17 @@ class LoadedPlugin:
     context: PluginContextImpl
 
 
+@dataclass(frozen=True)
+class RegisteredPluginCommand:
+    """A plugin-owned frontend command, kept with its dispatch handler and public schema."""
+
+    name: str
+    handler: Callable[..., Any]
+    plugin: str
+    args_schema: dict[str, Any] | None = None
+    exposed: bool = True
+
+
 class PluginContextImpl:
     """Implementation of PluginContext provided to plugins during lifecycle."""
 
@@ -133,6 +147,9 @@ class PluginContextImpl:
         self.capabilities = capabilities
         self.log = logging.getLogger(f"harness.plugins.{name}")
         self._registry = registry
+        # This is a live registry-owned service: a sandbox backend plugin may be loaded after this context was
+        # created, and policies must query the current registration rather than capture an early empty snapshot.
+        self.sandbox = registry.sandbox
 
     @property
     def data_dir(self) -> Path:
@@ -155,6 +172,85 @@ class PluginContextImpl:
                 )
         self._registry._register_tool(spec, handler, self.name)
 
+    def unregister_tool(self, name: str) -> bool:
+        """Removes a tool owned by this plugin so a live integration can publish changed definitions."""
+        return self._registry._unregister_tool(name, self.name)
+
+    def emit_event(
+        self,
+        payload: Any,
+        *,
+        session_id: str | None = None,
+        turn_id: str | None = None,
+    ) -> None:
+        """Publishes a typed event produced by this plugin."""
+        event_type = getattr(type(payload), "EVENT_TYPE", None)
+        if not event_type:
+            raise PluginLoadError(f"Plugin '{self.name}' can only emit registered EventPayload values")
+        if self._registry.bus is not None:
+            self._registry.bus.publish(
+                Event(type=event_type, data=payload, session_id=session_id, turn_id=turn_id)
+            )
+
+    async def emit_record(
+        self,
+        payload: Any,
+        *,
+        content: str,
+        metadata: dict[str, Any],
+        session_id: str | None = None,
+        turn_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Append a plugin fact to the named session (or active session) before publishing it."""
+        from harness.kernel.context import append_and_publish_record
+
+        manager = getattr(self._registry, "session_manager", None)
+        if session_id is not None and manager is not None:
+            session = manager.get_session(session_id)
+        else:
+            session = getattr(manager, "active_session", None) if manager is not None else None
+        effective_session_id = session_id or getattr(session, "session_id", None)
+        return await append_and_publish_record(
+            log=getattr(session, "log", None),
+            bus=self._registry.bus,
+            session_id=effective_session_id,
+            turn_id=turn_id,
+            payload=payload,
+            content=content,
+            metadata=metadata,
+        )
+
+    def register_service(self, name: str, service: object) -> None:
+        """Registers a unique service consumed by kernel components by name."""
+        if not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", name):
+            raise PluginLoadError(f"Plugin '{self.name}' service name {name!r} is invalid")
+        if service is None:
+            raise PluginLoadError(f"Plugin '{self.name}' service '{name}' cannot be None")
+        self._registry._register_service(name, service, self.name)
+
+    def register_command(
+        self,
+        name: str,
+        handler: Callable[..., Any],
+        *,
+        args_schema: dict[str, Any] | None = None,
+        exposed: bool = True,
+    ) -> None:
+        """Registers a namespaced frontend command for this plugin."""
+        if not re.fullmatch(r"[a-z][a-z0-9_-]{0,39}", name):
+            raise PluginLoadError(
+                f"Plugin '{self.name}' command name {name!r} must be a local identifier without dots or aliases"
+            )
+        if not callable(handler):
+            raise PluginLoadError(f"Plugin '{self.name}' command '{name}' handler must be callable")
+        self._registry._register_command(
+            f"plugins.{self.name}.{name}",
+            handler,
+            self.name,
+            args_schema=args_schema,
+            exposed=exposed,
+        )
+
     def register_provider(self, p: Provider) -> None:
         self._registry._register_provider(p, self.name)
 
@@ -163,6 +259,9 @@ class PluginContextImpl:
 
     def register_executor(self, e: Executor) -> None:
         self._registry._register_executor(e, self.name)
+
+    def register_sandbox_backend(self, backend: SandboxBackend) -> None:
+        self._registry._register_sandbox_backend(backend, self.name)
 
     def register_context_source(self, s: ContextSource) -> None:
         self._registry._register_context_source(s, self.name)
@@ -198,6 +297,11 @@ class PluginRegistry:
         self.secrets = secrets
         self.bus = bus
         self.data_dir = data_dir or (workspace / ".harness")
+        # Attached by bootstrap after the registry has loaded plugins. Plugin contexts remain live, so an
+        # asynchronous integration can append a durable notice to the current session when its remote state changes.
+        self.session_manager: Any | None = None
+        # One live backend registry shared by policy evaluation, status reporting, and every executor context.
+        self.sandbox = SandboxService(settings=settings, workspace=workspace)
 
         # Discovered and loaded plugins
         self._discovered: dict[str, DiscoveredPlugin] = {}
@@ -215,11 +319,14 @@ class PluginRegistry:
         # renderer and a client module are only ever *names* resolved by the client, so nothing here runs.
         self._ui: dict[str, UiContribution] = {}
 
-        # Component collections: item -> (component, plugin_name)
+        # Component collections. Commands additionally retain their declared argument schema and owner so the
+        # generic dispatcher and `commands.list` stay one source of truth.
         self.tools: dict[str, tuple[ToolSpec, ToolHandler, str]] = {}
+        self.commands: dict[str, RegisteredPluginCommand] = {}
         self.providers: dict[str, tuple[Provider, str]] = {}
         self.policies: list[tuple[Policy, str]] = []
         self.executors: dict[str, tuple[Executor, str]] = {}
+        self.services: dict[str, tuple[object, str]] = {}
         self.context_sources: list[tuple[ContextSource, str]] = []
         self.stores: dict[str, tuple[object, str]] = {}
         self.strategies: dict[str, tuple[Strategy, str]] = {}
@@ -233,6 +340,68 @@ class PluginRegistry:
                 f"and already registered by plugin '{existing_origin}'"
             )
         self.tools[spec.name] = (spec, handler, plugin_name)
+
+    def _unregister_tool(self, name: str, plugin_name: str) -> bool:
+        """Removes a registered tool only when the requesting plugin owns it."""
+        entry = self.tools.get(name)
+        if entry is None:
+            return False
+        if entry[2] != plugin_name:
+            raise PluginLoadError(
+                f"Plugin '{plugin_name}' cannot unregister tool '{name}' owned by '{entry[2]}'"
+            )
+        del self.tools[name]
+        return True
+
+    def _register_service(self, name: str, service: object, plugin_name: str) -> None:
+        if name in self.services:
+            _, existing_origin = self.services[name]
+            raise PluginLoadError(
+                f"Duplicate service name '{name}' registered by plugin '{plugin_name}' "
+                f"and already registered by plugin '{existing_origin}'"
+            )
+        self.services[name] = (service, plugin_name)
+
+    def get_service(self, name: str) -> object | None:
+        """Returns the service registered under ``name``, or ``None`` when it is absent."""
+        entry = self.services.get(name)
+        return entry[0] if entry is not None else None
+
+    def _register_command(
+        self,
+        name: str,
+        handler: Callable[..., Any],
+        plugin_name: str,
+        *,
+        args_schema: dict[str, Any] | None = None,
+        exposed: bool = True,
+    ) -> None:
+        if not name.startswith(f"plugins.{plugin_name}."):
+            raise PluginLoadError(
+                f"Plugin '{plugin_name}' commands must be namespaced as 'plugins.{plugin_name}.<name>'"
+            )
+        if name in self.commands:
+            existing = self.commands[name]
+            raise PluginLoadError(
+                f"Duplicate command '{name}' registered by plugin '{plugin_name}' "
+                f"and already registered by plugin '{existing.plugin}'"
+            )
+        if name in {"plugins", "plugins.list"}:
+            raise PluginLoadError(f"Plugin command name {name!r} is reserved")
+        if args_schema is not None:
+            if not isinstance(args_schema, dict) or args_schema.get("type", "object") != "object":
+                raise PluginLoadError(f"Plugin command '{name}' args_schema must be a JSON Schema object")
+            if args_schema.get("additionalProperties") is not False:
+                raise PluginLoadError(
+                    f"Plugin command '{name}' args_schema must set additionalProperties=false"
+                )
+        self.commands[name] = RegisteredPluginCommand(
+            name=name,
+            handler=handler,
+            plugin=plugin_name,
+            args_schema=args_schema,
+            exposed=bool(exposed),
+        )
 
     #: Members every provider must have; checked at registration so a contract gap fails the plugin load
     #: loudly instead of surfacing as a missing picker entry or an AttributeError mid-turn.
@@ -267,6 +436,9 @@ class PluginRegistry:
                 f"and already registered by plugin '{existing_origin}'"
             )
         self.executors[name] = (e, plugin_name)
+
+    def _register_sandbox_backend(self, backend: SandboxBackend, plugin_name: str) -> None:
+        self.sandbox.register_backend(backend, plugin_name)
 
     def _register_context_source(self, s: ContextSource, plugin_name: str) -> None:
         self.context_sources.append((s, plugin_name))
@@ -303,6 +475,9 @@ class PluginRegistry:
 
     def register_executor(self, e: Executor, plugin_name: str = "builtin") -> None:
         self._register_executor(e, plugin_name)
+
+    def register_sandbox_backend(self, backend: SandboxBackend, plugin_name: str = "builtin") -> None:
+        self._register_sandbox_backend(backend, plugin_name)
 
     def register_strategy(self, s: Strategy, plugin_name: str = "builtin") -> None:
         self._register_strategy(s, plugin_name)
@@ -803,10 +978,13 @@ class PluginRegistry:
             except Exception as err:
                 logger.warning(f"Error during plugin '{name}' teardown: {err}")
         self._loaded.clear()
+        self.sandbox.clear_backends()
         self.tools.clear()
+        self.commands.clear()
         self.providers.clear()
         self.policies.clear()
         self.executors.clear()
+        self.services.clear()
         self.context_sources.clear()
         self.stores.clear()
         self.strategies.clear()

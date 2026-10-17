@@ -13,6 +13,8 @@ Verifies:
 from __future__ import annotations
 
 import asyncio
+import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -350,6 +352,51 @@ async def test_cliapp_in_flight_approval_prompt(mock_kernel):
     assert "Action Approved" in console.export_text()
 
 
+@pytest.mark.asyncio
+async def test_cliapp_prompts_for_structured_question(mock_kernel):
+    """The interactive CLI answers a pending structured question through the kernel command."""
+    console = Console(record=True)
+    inputs = iter(["1", ""])
+    app = CliApp(
+        commands=mock_kernel["commands"],
+        bus=mock_kernel["bus"],
+        console=console,
+        interactive=True,
+        input_fn=lambda _: next(inputs),
+    )
+    questions = [
+        {
+            "id": "format",
+            "question": "Which format should I use?",
+            "options": [
+                {"id": "markdown", "label": "Markdown"},
+                {"id": "html", "label": "HTML"},
+            ],
+        }
+    ]
+
+    await app.start_event_listener()
+    try:
+        answer = await asyncio.wait_for(
+            mock_kernel["approvals"].interactions.ask(
+                "question",
+                {"questions": questions, "call_id": "call-1"},
+                session_id="session-1",
+                turn_id="turn-1",
+                timeout_s=5.0,
+            ),
+            timeout=2.0,
+        )
+    finally:
+        await app.stop_event_listener()
+
+    assert answer == {"format": {"option_id": "markdown", "custom_text": ""}}
+    output = console.export_text()
+    assert "Which format should I use?" in output
+    assert "1. Markdown" in output
+    assert "Answers submitted" in output
+
+
 # =========================================================================
 # 5. Click CLI Integration & Subcommands Tests
 # =========================================================================
@@ -382,6 +429,38 @@ def test_cli_plugin_subcommands(tmp_path: Path, monkeypatch):
     assert "enabled" in res_en.output
 
 
+def test_cli_mcp_status_reports_client_transport_state(tmp_path: Path, monkeypatch) -> None:
+    """The MCP CLI status subcommand connects clients and reports their public diagnostics."""
+    ws = tmp_path / "ws-mcp"
+    ws.mkdir()
+    config = tmp_path / "mcp-config"
+    config.mkdir()
+    monkeypatch.setenv("HARNESS_CONFIG_DIR", str(config))
+    echo_server = Path(__file__).resolve().parents[1] / "fixtures" / "mcp_echo_server.py"
+    (config / "settings.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "plugins": {
+                    "bridge-mcp-client": {
+                        "servers": {
+                            "echo": {"command": sys.executable, "args": [str(echo_server)]},
+                        },
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(main, ["mcp", "status", "--workspace", str(ws)])
+    assert result.exit_code == 0, result.output
+    assert "MCP Client Servers" in result.output
+    assert "echo" in result.output
+    assert "stdio" in result.output
+    assert "connected" in result.output
+
+
 def test_cli_run_kernel_flag(tmp_path: Path, monkeypatch):
     """Verifies harness run --kernel flag boots kernel and runs turn."""
     ws = tmp_path / "ws"
@@ -393,3 +472,28 @@ def test_cli_run_kernel_flag(tmp_path: Path, monkeypatch):
     # Turn execution will proceed through bootstrap_kernel
     # If no provider is installed, it handles ProviderError gracefully
     assert res.exit_code == 0 or "Error" in res.output or "Turn" in res.output
+
+
+def test_cli_security_preset_commands_report_resolved_values(tmp_path: Path, monkeypatch):
+    """`security set-preset` writes one key; `security show --json` reads the resolver's effective values."""
+    import json
+
+    ws = tmp_path / "ws-security"
+    ws.mkdir()
+    config = tmp_path / "security-config"
+    monkeypatch.setenv("HARNESS_CONFIG_DIR", str(config))
+    runner = CliRunner()
+
+    changed = runner.invoke(main, ["security", "set-preset", "standard", "--workspace", str(ws)])
+    assert changed.exit_code == 0, changed.output
+    saved = SettingsStore(config / "settings.json")
+    assert saved.get("kernel.security.preset") == "standard"
+    assert saved.get("kernel.security.permission_mode") == "ask"
+    assert saved.get("kernel.security.exec_in_sandbox") == "allow"
+
+    shown = runner.invoke(main, ["security", "show", "--json", "--workspace", str(ws)])
+    assert shown.exit_code == 0, shown.output
+    status = json.loads(shown.output)
+    assert status["preset"] == "standard"
+    assert status["settings"]["kernel.security.exec_in_sandbox"] == "allow"
+    assert status["sandbox"]["mode"] == "preferred"

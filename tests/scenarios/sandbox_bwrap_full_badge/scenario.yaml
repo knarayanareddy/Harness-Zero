@@ -1,0 +1,20 @@
+name: sandbox_bwrap_full_badge
+kind: web
+summary: On a Linux host whose bubblewrap probe succeeds, the Studio labels the resolved standard preset with the verified backend enforcement.
+recorded_from: synthetic
+settings:
+  kernel.security.preset: standard
+  kernel.sandbox.backend: bwrap
+turns:
+  - prompt: "Say hello."
+expect:
+  # The backend status is host-dependent, so pin the semantic contract below rather than a machine-specific golden.
+  transcript_golden: false
+  events_golden: false
+  requests_golden: false
+  http_golden: false
+  timeline_golden: false
+  security_badge_contains: ["standard", "bwrap full"]
+  security_badge_state: full
+  dom_turns_completed: true
+  event_types_exclude: [turn.error, turn.cancelled]

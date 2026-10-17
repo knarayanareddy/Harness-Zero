@@ -17,10 +17,16 @@
       "# Available Skills (Progressive Disclosure)"
     ],
     "tools": [
+      "ask_user",
       "checkpoint_restore",
       "create_artifact",
       "edit_file",
+      "job_kill",
+      "job_list",
+      "job_output",
+      "job_start",
       "manage_task",
+      "present",
       "read_resource",
       "remember",
       "run_command",
@@ -80,10 +86,16 @@
       "# Available Skills (Progressive Disclosure)"
     ],
     "tools": [
+      "ask_user",
       "checkpoint_restore",
       "create_artifact",
       "edit_file",
+      "job_kill",
+      "job_list",
+      "job_output",
+      "job_start",
       "manage_task",
+      "present",
       "read_resource",
       "remember",
       "run_command",

@@ -1,0 +1,8 @@
+[plugin]
+name = "tool-ask-user"
+version = "1.0.0"
+api_version = "1"
+summary = "Ask users short structured questions and wait for their answers"
+provides = ["tool"]
+capabilities = []
+entry = "harness.plugins.tools.ask_user.plugin:AskUserPlugin"

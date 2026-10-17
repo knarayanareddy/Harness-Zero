@@ -157,3 +157,10 @@ async def test_checkpoints_plugin_registration(tmp_path: Path):
     assert "checkpoint_restore" in registry.tools
     spec, _, _ = registry.tools["checkpoint_restore"]
     assert spec.risk_class == RiskClass.DESTRUCTIVE
+    assert {
+        "plugins.hook-checkpoints.changes",
+        "plugins.hook-checkpoints.diff",
+        "plugins.hook-checkpoints.restore",
+    } <= set(registry.commands)
+    assert "present" in registry.tools
+    assert registry.tools["present"][0].risk_class == RiskClass.READ

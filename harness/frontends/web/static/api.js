@@ -139,6 +139,10 @@ export class HarnessAPI {
     });
   }
 
+  async answerQuestion(interactionId, answers) {
+    return this.command('question.answer', { interaction_id: interactionId, answers });
+  }
+
   async getSessions() {
     return this.command('sessions.list');
   }

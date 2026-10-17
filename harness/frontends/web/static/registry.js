@@ -37,12 +37,10 @@ export const NO_RENDERER = {
     'bookkeeping for the checkpoint plugin; WS-07 renders checkpoints as a diff view, not as timeline rows',
   'job.started':
     'background jobs are WS-10 rows with no turn to attach to; the jobs panel will show them',
-  'job.completed':
+  'job.output':
+    'background job output is retained in the spill file and projected in the Jobs panel rather than in the timeline',
+  'job.exited':
     'background jobs are WS-10 rows with no turn to attach to; the jobs panel will show them',
-  'goal.created':
-    'goal state belongs to the goal strip (WS-10), not to the conversation',
-  'goal.completed':
-    'goal state belongs to the goal strip (WS-10), not to the conversation',
 };
 
 /** Flattens a record's content blocks into text, the way every painter needs it. */

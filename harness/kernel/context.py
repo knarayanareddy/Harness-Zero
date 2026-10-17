@@ -18,7 +18,7 @@ from harness.kernel.registry import PluginRegistry
 from harness.kernel.settings import SettingsStore
 from harness.kernel.transcript import upgrade_record_v1
 from harness.sdk.contracts import ContextSource
-from harness.sdk.events import ContextAssembled, Event
+from harness.sdk.events import ContextAssembled, Event, EventPayload
 from harness.sdk.types import (
     Capability,
     ContentBlock,
@@ -42,6 +42,39 @@ from harness.sdk.types import (
 
 logger = logging.getLogger(__name__)
 
+
+async def append_and_publish_record(
+    *,
+    log: Any,
+    bus: EventBus | None,
+    session_id: str | None,
+    turn_id: str | None,
+    payload: EventPayload,
+    content: str,
+    metadata: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Append one durable record before publishing the typed event that mirrors it."""
+    event_type = getattr(type(payload), "EVENT_TYPE", None)
+    kind = getattr(type(payload), "record_kind", None)
+    if not event_type or not kind:
+        raise ValueError(f"{type(payload).__name__} is not a durable event payload")
+    record = None
+    if log is not None:
+        await log.append(TranscriptRecord(kind=kind, role="system", content=content, metadata=dict(metadata)))
+        record = log.records[-1]
+    if bus is not None:
+        bus.publish(
+            Event(
+                type=event_type,
+                data=payload,
+                session_id=session_id,
+                turn_id=turn_id,
+                record=record,
+            )
+        )
+    return record
+
+
 STABILITY_ORDER = {
     Stability.STATIC: 1,
     Stability.SESSION: 2,
@@ -54,18 +87,37 @@ class HookContextImpl:
     """Concrete implementation satisfying the HookContext protocol."""
     session_id: str
     workspace: Path
+    turn_id: str | None = None
     turn_state: dict[str, Any] = field(default_factory=dict)
     bus: Any = None
+    log: Any = None
+    settings: Any = None
 
     def emit(self, event_type: str, data: Any) -> None:
-        """Publishes a live, non-durable event for the UI (badges, notices).
-
-        Deliberately narrow: no session/turn routing, no replay, no `tool.*` channel the client
-        validates field-by-field. A hook that needs a durable fact writes a record, not an event.
-        """
+        """Publishes a live event for the UI without making it a transcript fact."""
         if self.bus is None:
             return
-        self.bus.publish(Event(type=event_type, session_id=self.session_id, data=data))
+        self.bus.publish(
+            Event(type=event_type, session_id=self.session_id, turn_id=self.turn_id, data=data)
+        )
+
+    async def emit_record(
+        self,
+        payload: EventPayload,
+        *,
+        content: str,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Write a durable fact to the session log before publishing its event."""
+        return await append_and_publish_record(
+            log=self.log,
+            bus=self.bus,
+            session_id=self.session_id,
+            turn_id=self.turn_id,
+            payload=payload,
+            content=content,
+            metadata=metadata,
+        )
 
 
 @dataclass

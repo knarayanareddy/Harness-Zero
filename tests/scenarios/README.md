@@ -66,7 +66,9 @@ export HOME=$(mktemp -d) HARNESS_CONFIG_DIR=$HOME/.harness
 
 The DOM lane types the prompt, clicks **Send**, waits for `turn.completed`, clicks **Approve**
 when `dom_approves: true`, and reports the visible timeline text, the SSE event names the
-browser saw, the exact `submit_turn` bodies it posted, and the fetch log.
+browser saw, the exact `submit_turn` bodies it posted, and the fetch log. It also fetches plugin client modules
+from the kernel-advertised URLs and executes those bytes in Node after resolving their `/static/` imports to the
+same shipped files; this exercises plugin-owned renderers and panels instead of silently falling back to generic UI.
 
 ## `scenario.yaml`
 
@@ -83,6 +85,8 @@ turns:
   - prompt: "Create notes.txt"
     model: replay-1            # optional, defaults to the replay model
 approvals: [approve, deny]     # scripted approver (kernel lane / API lane), in order
+question_answers:              # maps keyed by question id, answered in question.asked order
+  - format: {option_id: markdown, custom_text: ""}
 secrets:                       # seeded into the kernel's Secrets store (config dir) before the run
   INTERNAL_TOKEN: hunter2-super-secret-value
 xfail: "F-13 not fixed yet"    # documents a known bug; strict xfail until it is fixed
@@ -90,7 +94,9 @@ expect:
   tools_called: [write_to_file]            # exact ordered list
   tools_called_subset: [view_file]         # must appear
   files: {notes.txt: {contains: "approved"}, gone.txt: {exists: false}}
-  no_errors: true                          # default; set false for scenarios that must error
+  no_errors: true                          # default; includes returned TurnResult errors and web turn.error events
+  approvals_consumed: true                 # default; every scripted decision must be used exactly once
+  question_answers_consumed: true          # default; every scripted answer map must be used exactly once
   event_types_include: [approval.required, turn.completed]
   event_types_exclude: [turn.error, turn.cancelled]
   events_match:                            # JSON subset at least one event must match
@@ -102,6 +108,9 @@ expect:
   reload_equals_live: true                 # sessions.get after restart == live history
   dom_lane: true                           # web: run the jsdom lane (false = API lane only)
   dom_approves: true                       # web: the browser clicks Approve instead of the scripted approver
+  dom_answers_questions: true              # web: use the rendered question form instead of a scripted responder
+  dom_questions_answered: 1                 # expected number of question forms submitted in the DOM lane
+  dom_question_waiting_seen: true           # the composer showed the in-turn waiting state before the answer
   dom_turns_completed: true                # web: the client itself saw turn.completed for every turn
   timeline_contains: ["notes.txt written"] # visible text in the rendered timeline
   timeline_not_contains: ["undefined"]
@@ -114,6 +123,11 @@ expect:
   sessions_after_restart: 1                # sessions.list row count after the restart (the resumed one is `active`)
   auth_required: true                      # web, default: unauthenticated command/ticket/events -> 401
 ```
+
+`no_errors` covers both raised submission failures and fatal errors returned inside `TurnResult` (or emitted as a
+web `turn.error`). Scripted `approvals` and `question_answers` are inputs, not best-effort hints: by default each
+configured entry must be consumed exactly once. Set `approvals_consumed: false` or
+`question_answers_consumed: false` only when a scenario intentionally leaves that queue unused.
 
 Golden files are compared after the expectations: `transcript.json`, `events.json`,
 `requests.json` (what the model was shown), and for web `http.json` and `timeline.txt`.
@@ -154,6 +168,7 @@ lane and through the browser.
 | memory_remember_search_kernel | kernel | memory plugin write → search in the same turn |
 | mcp_echo_kernel | kernel | stdio MCP server tool `mcp__echo__echo` through PolicyGate |
 | runaway_tool_loop_kernel | kernel | iteration cap → `stop_reason: max_iterations`, replay strictness |
+| job_finishes_between_turns | kernel | `job_start` lifecycle records, output event, and a model-visible completion notice on a later turn |
 | plain_answer_web | web + DOM | ticket → SSE → submit from the real client → text rendered once |
 | thinking_then_answer_web | web + DOM | thinking deltas rendered as "Reasoning Process", turn completes |
 | approval_allow_web_dom | web + DOM | approval card rendered, **Approve** clicked in jsdom, write lands |
@@ -172,6 +187,12 @@ lane and through the browser.
 | repeat_call_reminder_kernel | kernel | WS-03 loop hygiene: the same call twice in a row gets a reminder instead of a second execution |
 | huge_tool_output_pruned_and_spilled_kernel | kernel | WS-03 loop hygiene: oversized output is truncated in the model's view and the full text spills to a file |
 | reload_equals_live_web_dom | web + DOM | WS-04c: the live DOM timeline and the reloaded one are the same set of lines, approvals and cards included |
+| turn_changes_summary | web + DOM | WS-07: two file edits produce one durable per-turn summary; Diffs lists files, fetches a unified diff on demand, and survives refresh |
+| present_artifact | web + DOM | WS-07: create_artifact → present emits a durable record and opens the same-origin sandboxed artifact viewer |
+| present_workspace_file | web + DOM | WS-07: present on a workspace file opens the same-origin sandboxed workspace-file viewer |
+| restore_turn | kernel | WS-07: two explicit approvals gate a turn-start restore; the workspace and checkpoint.restored record agree |
+| ask_user_answered | web + DOM | WS-08: the rendered question form blocks, submits through `question.answer`, and both durable records render after reload and restart |
+| ask_user_headless | kernel | WS-08: no interactive client returns the model-visible unavailable error without emitting a pending question |
 
 Every web scenario additionally records that unauthenticated `/commands/*`, `/auth/ticket`, `/events` and a
 bogus ticket are rejected with 401 (`http.json`, entry `unauthenticated`).

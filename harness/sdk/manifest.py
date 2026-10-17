@@ -39,6 +39,7 @@ VALID_PROVIDES = frozenset({
     "tool",
     "policy",
     "executor",
+    "sandbox",
     "context",
     "store",
     "strategy",

@@ -46,6 +46,11 @@ scenarios, `http.json` (the request/response pairs) and `timeline.txt` (the visi
 Everything in them is normalised first — ids, timestamps, workspace paths — so the same flow produces the
 same bytes on any machine; new volatile fields go in `_lib/normalize.py`, never in a scenario.
 
+Scenario inputs are checked too: `no_errors` (default `true`) sees failures returned in a kernel `TurnResult` and
+web `turn.error` events, not only exceptions raised by the command. Every configured `approvals` decision and
+`question_answers` map must be consumed exactly once by default; use `approvals_consumed: false` or
+`question_answers_consumed: false` only when intentionally leaving that input queue unused.
+
 ## Adding a scenario
 
 1. `mkdir tests/scenarios/<name>` and write `scenario.yaml` (prompts, `settings`, `workspace_files`,

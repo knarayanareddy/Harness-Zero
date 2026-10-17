@@ -31,6 +31,15 @@ def _get_imports(file_path: Path) -> list[tuple[int, str]]:
     return imports
 
 
+def _plugin_source_files(plugins_dir: Path):
+    """Return shipped plugin modules, excluding plugin-local tests that intentionally import the plugin under test."""
+    for py_file in plugins_dir.rglob("*.py"):
+        rel = py_file.relative_to(plugins_dir)
+        if "__pycache__" in rel.parts or "tests" in rel.parts or py_file.name.startswith("test_"):
+            continue
+        yield py_file
+
+
 def test_sdk_imports_no_external_harness_packages():
     """harness/sdk/** must never import any harness package outside harness.sdk."""
     sdk_dir = Path(__file__).resolve().parents[2] / "harness" / "sdk"
@@ -55,7 +64,7 @@ def test_plugins_import_only_sdk():
         return
 
     violations = []
-    for py_file in plugins_dir.rglob("*.py"):
+    for py_file in _plugin_source_files(plugins_dir):
         for lineno, mod in _get_imports(py_file):
             if mod == "harness" or (mod.startswith("harness.") and not mod.startswith("harness.sdk")):
                 violations.append(f"{py_file.name}:{lineno} -> {mod}")
@@ -124,9 +133,7 @@ def test_plugins_do_not_import_sibling_plugins():
         packages.add("harness.plugins." + ".".join(rel.parts))
 
     offenders: list[str] = []
-    for py_file in sorted(plugins_dir.rglob("*.py")):
-        if "__pycache__" in py_file.parts:
-            continue
+    for py_file in _plugin_source_files(plugins_dir):
         rel = py_file.relative_to(plugins_dir)
         own = "harness.plugins." + ".".join(rel.parts[:-1])
         for lineno, mod in _get_imports(py_file):

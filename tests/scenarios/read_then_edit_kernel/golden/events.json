@@ -33,6 +33,25 @@
   },
   {
     "data": {
+      "label": "turn-start:turn#1",
+      "sha": "sha#1"
+    },
+    "record": {
+      "content": "Checkpoint created: turn-start:turn#1.",
+      "kind": "checkpoint.created",
+      "metadata": {
+        "label": "turn-start:turn#1",
+        "sha": "sha#1",
+        "workspace_bytes": 100
+      },
+      "role": "system",
+      "step_index": 2,
+      "v": 2
+    },
+    "type": "checkpoint.created"
+  },
+  {
+    "data": {
       "model": "replay-v1",
       "provider": "replay"
     },
@@ -88,7 +107,7 @@
         }
       },
       "role": "assistant",
-      "step_index": 2,
+      "step_index": 3,
       "tool_calls": [
         {
           "arguments": {
@@ -136,7 +155,7 @@
         "risk": "read"
       },
       "role": "system",
-      "step_index": 3,
+      "step_index": 4,
       "v": 2
     },
     "type": "tool.decision"
@@ -211,7 +230,7 @@
         }
       },
       "role": "assistant",
-      "step_index": 5,
+      "step_index": 6,
       "tool_calls": [
         {
           "arguments": {
@@ -261,7 +280,7 @@
         "risk": "write"
       },
       "role": "system",
-      "step_index": 6,
+      "step_index": 7,
       "v": 2
     },
     "type": "tool.decision"
@@ -303,7 +322,7 @@
         }
       },
       "role": "system",
-      "step_index": 7,
+      "step_index": 8,
       "v": 2
     },
     "type": "ui.card"
@@ -371,10 +390,76 @@
         }
       },
       "role": "assistant",
-      "step_index": 9,
+      "step_index": 10,
       "v": 2
     },
     "type": "model.completed"
+  },
+  {
+    "data": {
+      "label": "turn-end:turn#1",
+      "sha": "sha#2"
+    },
+    "record": {
+      "content": "Checkpoint created: turn-end:turn#1.",
+      "kind": "checkpoint.created",
+      "metadata": {
+        "label": "turn-end:turn#1",
+        "sha": "sha#2",
+        "workspace_bytes": 100
+      },
+      "role": "system",
+      "step_index": 11,
+      "v": 2
+    },
+    "type": "checkpoint.created"
+  },
+  {
+    "data": {
+      "added": 1,
+      "base": "sha#1",
+      "files": [
+        {
+          "added_lines": 1,
+          "binary": false,
+          "path": "app.py",
+          "removed_lines": 1,
+          "status": "modified"
+        }
+      ],
+      "head": "sha#2",
+      "removed": 1,
+      "snapshot_skipped": false,
+      "truncated": false,
+      "turn_id": "turn#1"
+    },
+    "record": {
+      "content": "1 files changed · +1 −1",
+      "kind": "workspace.changes",
+      "metadata": {
+        "added": 1,
+        "base": "sha#1",
+        "files": [
+          {
+            "added_lines": 1,
+            "binary": false,
+            "path": "app.py",
+            "removed_lines": 1,
+            "status": "modified"
+          }
+        ],
+        "head": "sha#2",
+        "removed": 1,
+        "snapshot_skipped": false,
+        "total_files": 1,
+        "truncated": false,
+        "turn_id": "turn#1"
+      },
+      "role": "system",
+      "step_index": 12,
+      "v": 2
+    },
+    "type": "workspace.changes"
   },
   {
     "data": {
@@ -398,7 +483,7 @@
         }
       },
       "role": "system",
-      "step_index": 10,
+      "step_index": 13,
       "v": 2
     },
     "type": "turn.completed"

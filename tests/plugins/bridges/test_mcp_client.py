@@ -17,6 +17,7 @@ from harness.plugins.bridges.mcp_client import (
     derive_risk_class,
 )
 from harness.sdk.contracts import ToolSpec
+from harness.sdk.events import McpServerStatus, SystemNotice
 from harness.sdk.testing import ToolKit
 from harness.sdk.types import RiskClass, ToolResult
 
@@ -33,9 +34,13 @@ class MockPluginContext:
     def __init__(self, settings: dict | None = None) -> None:
         self.settings = settings or {}
         self.tools: list[tuple[ToolSpec, object]] = []
+        self.events: list[object] = []
 
     def register_tool(self, spec: ToolSpec, handler: object) -> None:
         self.tools.append((spec, handler))
+
+    def emit_event(self, payload: object) -> None:
+        self.events.append(payload)
 
 
 def test_derive_risk_class():
@@ -112,7 +117,7 @@ async def test_s14_mcp_bridge_plugin_and_disconnect_status(tmp_path: Path):
     1. Configure fixture stdio echo server in settings.
     2. Plugin registers tools as mcp__<server>__<tool> with real schemas.
     3. Tool execution round-trips.
-    4. Terminating the server updates status to 'error'.
+    4. Terminating the server enters reconnecting state, then recovers and serves tools again.
     """
     echo_server_py = Path(__file__).resolve().parents[2] / "fixtures" / "mcp_echo_server.py"
 
@@ -135,6 +140,8 @@ async def test_s14_mcp_bridge_plugin_and_disconnect_status(tmp_path: Path):
         status_map = plugin.get_status()
         assert "echo" in status_map
         assert status_map["echo"]["status"] == "connected"
+        assert any(isinstance(event, McpServerStatus) and event.state == "connected" for event in ctx.events)
+        assert any(isinstance(event, SystemNotice) and event.code == "mcp.settings.deprecated" for event in ctx.events)
 
         # Check registered tools
         tool_specs = [spec for spec, _ in ctx.tools]
@@ -166,17 +173,29 @@ async def test_s14_mcp_bridge_plugin_and_disconnect_status(tmp_path: Path):
         assert not res_result.is_error
         assert "memo://today" in res_result.content[0].text
 
-        # S14: Killing/disconnecting the server shows 'error' status
+        # S14: A killed stdio process is surfaced as a reconnecting status and is relaunched.
         echo_client = plugin.clients["echo"]
+        original_pid = echo_client._proc.pid if echo_client._proc else None
         if echo_client._proc:
             echo_client._proc.kill()
             await echo_client._proc.wait()
 
-        # Allow read loop to detect termination
-        await asyncio.sleep(0.1)
+        # A transient disconnect is visible immediately, then the same configured server is relaunched.
+        deadline = asyncio.get_running_loop().time() + 1.0
+        while echo_client.get_status()["state"] != "reconnecting":
+            assert asyncio.get_running_loop().time() < deadline, echo_client.get_status()
+            await asyncio.sleep(0.01)
+        assert echo_client.get_status()["attempt"] >= 0
+        assert any(isinstance(event, McpServerStatus) and event.state == "reconnecting" for event in ctx.events)
 
-        err_status = plugin.get_status()
-        assert err_status["echo"]["status"] == "error"
+        deadline = asyncio.get_running_loop().time() + 4.0
+        while echo_client.status != "connected" or (
+            original_pid is not None and echo_client._proc is not None and echo_client._proc.pid == original_pid
+        ):
+            assert asyncio.get_running_loop().time() < deadline, echo_client.get_status()
+            await asyncio.sleep(0.05)
+        recovered = await echo_client.call_tool("echo", {"message": "after reconnect"})
+        assert recovered["content"][0]["text"] == "echo: after reconnect"
 
     finally:
         await plugin.teardown()

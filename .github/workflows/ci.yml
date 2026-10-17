@@ -18,6 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install bubblewrap for Linux sandbox integration tests
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
@@ -52,7 +58,7 @@ jobs:
         run: |
           export HOME=$(mktemp -d)
           export HARNESS_CONFIG_DIR=$HOME/.harness
-          pytest -q
+          pytest -q -rs
 
       - name: Run plugin doctor
         run: |

@@ -31,6 +31,7 @@ from harness.sdk.events import (
     ModelTextDelta,
     ModelThinkingDelta,
     ModelToolCall,
+    SystemNotice,
     TurnCancelled,
     TurnCompleted,
     TurnError,
@@ -258,28 +259,37 @@ class KernelServicesImpl:
         return max(0.0, self.spend_cap_usd - self.turn_cost_usd)
 
     def pending_tasks(self) -> list[TaskInfo]:
-        """Returns list of actively running background tasks."""
+        """Returns running background jobs for this session."""
         if not self.inbox:
             return []
-        tasks: list[TaskInfo] = []
-        for bt in self.inbox._tasks.values():
-            if not bt.completed:
-                tasks.append(
-                    TaskInfo(
-                        id=bt.id,
-                        label=bt.label,
-                        running=True,
-                        exit_code=None,
-                        tail="\n".join(bt.output_lines[-5:]),
-                    )
-                )
-        return tasks
+        pending_list = getattr(self.inbox, "list_pending_tasks", None)
+        if callable(pending_list):
+            rows = pending_list(session_id=self.session.session_id)
+        else:
+            try:
+                rows = self.inbox.list_tasks(session_id=self.session.session_id)
+            except TypeError:
+                rows = self.inbox.list_tasks()
+        return [
+            TaskInfo(
+                id=str(row.get("job_id") or row.get("task_id") or ""),
+                label=str(row.get("label") or ""),
+                running=True,
+                exit_code=None,
+                tail=str(row.get("tail") or ""),
+            )
+            for row in rows
+            if row.get("running")
+        ]
 
     async def wait_for_wakeup(self, timeout_s: float = 600.0) -> WakeupEvent | None:
-        """Waits for next background process exit event."""
+        """Waits for the next background process exit event in this session."""
         if not self.inbox:
             return None
-        return await self.inbox.wait_for_wakeup(timeout_s)
+        try:
+            return await self.inbox.wait_for_wakeup(timeout_s, session_id=self.session.session_id)
+        except TypeError:
+            return await self.inbox.wait_for_wakeup(timeout_s)
 
     async def compact_if_needed(self) -> bool:
         """Triggers compaction if transcript exceeds token budget threshold."""
@@ -559,8 +569,10 @@ class KernelServicesImpl:
             call,
             options=self.options,
             session_id=self.session.session_id,
+            turn_id=self.turn_id,
             turn_state=self.turn_state,
             log=self.log,
+            cancel_event=self.cancel,
         )
 
     async def execute_tools(self, calls: list[ToolCall]) -> list[ToolResult]:
@@ -732,6 +744,63 @@ class TurnRunner:
         # Active turn cancellation tracking
         self._active_cancels: dict[str, asyncio.Event] = {}
 
+    async def _append_job_turn_notice(
+        self,
+        services: Any,
+        *,
+        session_id: str,
+        turn_id: str,
+    ) -> None:
+        """Record and publish the one-turn notice for jobs that finished since this session last ran."""
+        jobs = self.registry.get_service("jobs")
+        pending = getattr(jobs, "pending_turn_notice", None) if jobs is not None else None
+        if not callable(pending):
+            return
+        try:
+            notice = await pending(session_id)
+        except Exception as err:
+            logger.warning("Could not collect pending job notice for %s: %s", session_id, err)
+            return
+        if not notice:
+            return
+        message = str(notice.get("message") or "").strip()
+        job_ids = [str(job_id) for job_id in notice.get("job_ids", [])]
+        if not message:
+            return
+        metadata = {
+            "model_visible": True,
+            "code": "jobs.finished_since_last_turn",
+            "source": "jobs",
+            "job_ids": job_ids,
+        }
+        try:
+            await services.log.append_notice(message, metadata=metadata)
+        except TranscriptAppendError as err:
+            # Do not acknowledge the notice: the durable job state remains available for the next turn.
+            logger.warning("Could not persist pending job notice for %s: %s", session_id, err)
+            return
+        record = services.log.records[-1] if services.log.records else None
+        if self.bus is not None:
+            self.bus.publish(
+                Event(
+                    type="system.notice",
+                    session_id=session_id,
+                    turn_id=turn_id,
+                    data=SystemNotice(
+                        message=message,
+                        level="info",
+                        code="jobs.finished_since_last_turn",
+                    ),
+                    record=record,
+                )
+            )
+        acknowledge = getattr(jobs, "mark_reported", None)
+        if callable(acknowledge):
+            try:
+                acknowledge(session_id, job_ids)
+            except Exception as err:
+                logger.warning("Could not acknowledge job notice for %s: %s", session_id, err)
+
     async def _announce(
         self,
         *,
@@ -885,6 +954,8 @@ class TurnRunner:
         except Exception as e:
             logger.warning(f"Could not close unanswered tool calls: {e}")
 
+        await self._append_job_turn_notice(services, session_id=session.session_id, turn_id=turn_id)
+
         turn_ctx = TurnContextImpl(
             session=session,
             turn_id=turn_id,
@@ -919,7 +990,35 @@ class TurnRunner:
         )
 
         # 4. Fire USER_PROMPT_SUBMIT hooks
-        hook_ctx = HookContextImpl(session_id=session.session_id, workspace=session.workspace)
+        hook_ctx = HookContextImpl(
+            session_id=session.session_id,
+            workspace=session.workspace,
+            turn_id=turn_id,
+            turn_state=services.turn_state,
+            bus=self.bus,
+            log=services.log,
+            settings=self.settings,
+        )
+        stop_hooks_ran = False
+
+        async def run_stop_hooks(output: str = "", terminal: str = "") -> None:
+            """Run STOP hooks exactly once for every started turn, including early terminal paths."""
+            nonlocal stop_hooks_ran
+            if stop_hooks_ran:
+                return
+            stop_hooks_ran = True
+            stop_payload = {"output": output, "terminal": terminal, "turn_id": turn_id}
+            for stop_hook in self.registry.get_hooks_for_event(HookEvent.STOP):
+                try:
+                    await asyncio.wait_for(
+                        stop_hook.on(HookEvent.STOP, stop_payload, hook_ctx),
+                        timeout=stop_hook.timeout_s,
+                    )
+                except asyncio.CancelledError:
+                    logger.warning("STOP hook '%s' was cancelled", stop_hook.name)
+                except Exception as err:
+                    logger.warning("Error in STOP hook '%s': %s", stop_hook.name, err)
+
         hooks = self.registry.get_hooks_for_event(HookEvent.USER_PROMPT_SUBMIT)
         for h in hooks:
             try:
@@ -936,8 +1035,20 @@ class TurnRunner:
                         data=TurnError(message=err_msg, kind="hook_blocked", retryable=False),
                         marker=True,
                     )
+                    await run_stop_hooks(terminal="hook_blocked")
                     return TurnResult(output="", error=err_msg, stop_reason="cancelled")
+            except asyncio.CancelledError:
+                await self._announce(
+                    services=services,
+                    session_id=session.session_id,
+                    turn_id=turn_id,
+                    data=TurnCancelled(reason="Turn cancelled while running prompt hooks"),
+                    marker=True,
+                )
+                await run_stop_hooks(terminal="cancelled")
+                return TurnResult(output="Turn cancelled", stop_reason="cancelled")
             except TranscriptAppendError as e:
+                await run_stop_hooks(terminal="transcript_error")
                 return await self._fail_closed(session.session_id, turn_id, services, e)
             except Exception as e:
                 logger.warning(f"Error in hook '{h.name}': {e}")
@@ -963,6 +1074,7 @@ class TurnRunner:
                 data=TurnCancelled(reason="Turn cancelled by user"),
                 marker=True,
             )
+            await run_stop_hooks(terminal="cancelled")
             return TurnResult(output="Turn cancelled", stop_reason="cancelled")
         except SpendCapExceeded as e:
             await self._announce(
@@ -972,6 +1084,7 @@ class TurnRunner:
                 data=TurnError(message=str(e), kind="spend_cap", retryable=False),
                 marker=True,
             )
+            await run_stop_hooks(terminal="spend_cap_exceeded")
             return TurnResult(output="", error=str(e), stop_reason="spend_cap_exceeded")
         except ProviderError as e:
             logger.warning(f"Provider configuration error: {e}")
@@ -982,12 +1095,14 @@ class TurnRunner:
                 data=TurnError(message=str(e), kind=e.kind, retryable=False),
                 marker=True,
             )
+            await run_stop_hooks(terminal="provider_error")
             return TurnResult(output="", error=str(e), stop_reason="error")
         except TranscriptAppendError as e:
             # The log *is* the conversation. If a step cannot be written, the turn stops here instead of
             # carrying on over a history nobody will ever read again — the alternative is a session that
             # looks normal live and is missing turns on reload. Not retryable: earlier steps of this turn
             # are already logged, so re-running it would append them twice.
+            await run_stop_hooks(terminal="transcript_error")
             return await self._fail_closed(session.session_id, turn_id, services, e)
         except Exception as e:
             logger.exception(f"Turn execution error: {e}")
@@ -998,6 +1113,7 @@ class TurnRunner:
                 data=TurnError(message=str(e), kind="runtime_error", retryable=False),
                 marker=True,
             )
+            await run_stop_hooks(terminal="runtime_error")
             return TurnResult(output="", error=str(e), stop_reason="error")
         finally:
             # A model response that was streamed but never recorded (the strategy raised in between) still
@@ -1017,18 +1133,11 @@ class TurnRunner:
                 data=TurnCancelled(reason="Turn cancelled by user"),
                 marker=True,
             )
+            await run_stop_hooks(terminal="cancelled")
             return TurnResult(output="Turn cancelled", stop_reason="cancelled")
 
-        # 7. STOP hooks
-        stop_hooks = self.registry.get_hooks_for_event(HookEvent.STOP)
-        for h in stop_hooks:
-            try:
-                await asyncio.wait_for(
-                    h.on(HookEvent.STOP, {"output": result.output}, hook_ctx),
-                    timeout=h.timeout_s,
-                )
-            except Exception as e:
-                logger.warning(f"Error in STOP hook '{h.name}': {e}")
+        # 7. STOP hooks run on every terminal path, before the final marker on success.
+        await run_stop_hooks(result.output, terminal="completed")
 
         # 8. Record how the turn ended, then announce it (WS-04: log first, event second).
         duration_ms = int((time.time() - start_time) * 1000)

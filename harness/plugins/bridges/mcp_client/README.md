@@ -2,50 +2,78 @@
 
 ## Summary
 
-Connects external Model Context Protocol servers over stdio, discovers their tools and registers each
-one as a native Harness tool named `mcp__<server>__<tool>`. Calls cross the normal gate, so a server
-tool is subject to the same permission mode, approvals, jail and redaction as a built-in one. Servers
-that fail to start are logged and skipped; they never abort the boot.
+Connects external Model Context Protocol servers over stdio or Streamable HTTP, discovers their tools,
+and registers each one as a native Harness tool named `mcp__<server>__<tool>`. Calls cross the normal
+gate, so a server tool is subject to the same permission mode, approvals, jail and redaction as a
+built-in one. A failed initial connection is isolated to that server; configured reconnect attempts
+recover transient failures without aborting the kernel boot.
 
 ## Configuration
 
 <!-- GENERATED table — `harness catalog readme bridge-mcp-client` -->
 | Key | Default | Meaning |
 |---|---|---|
-| `plugins.bridge-mcp-client.servers` | `{}` | External MCP servers, keyed by server name. Tools appear as `mcp__<server>__<tool>`. `plugins.mcp-client.servers` is accepted as a legacy spelling. |
+| `plugins.bridge-mcp-client.servers` | `{}` | External MCP servers, keyed by server name. Tools appear as `mcp__<server>__<tool>`. The former `plugins.mcp-client.servers` and `extensions.mcp_servers` spellings are temporarily accepted with a deprecation notice. |
+| `plugins.bridge-mcp-client.call_timeout_s` | `60` | Default per-call timeout in seconds; a server entry may override it. |
+| `plugins.bridge-mcp-client.connect_timeout_s` | `15` | Connection and discovery request timeout in seconds. |
+| `plugins.bridge-mcp-client.reconnect` | `{"max_attempts":10,"max_backoff_s":60}` | Bounded exponential reconnect policy. |
+
+stdio example:
 
 ```json
 {"plugins": {"bridge-mcp-client": {"servers": {
-  "obsidian": {"command": "uvx", "args": ["mcp-obsidian"], "env": {"OBSIDIAN_API_KEY": "..."}}
-}}}
+  "local": {"command": "uvx", "args": ["mcp-server-example"], "env": {"EXAMPLE_CONFIG": "..."}}
+}}}}
 ```
 
-An MCP server over stdio is the way to reach Obsidian today (a `mcp-obsidian`-style server speaking to
-the Local REST API). A `settings.json` written by hand is read at boot; the settings panel edits the
-same key.
+Streamable HTTP example with secret-backed headers:
+
+```json
+{"plugins": {"bridge-mcp-client": {"servers": {
+  "hosted": {
+    "transport": "http",
+    "url": "https://mcp.example.test/mcp",
+    "headers": {"X-Api-Key": "${secrets.MCP_API_KEY}"},
+    "call_timeout_s": 30
+  }
+}}}}
+```
+
+For a bearer token supplied by the process environment, use `"auth": {"bearer_env": "MCP_BEARER_TOKEN"}`.
+The referenced variable must be present when the plugin starts. Header values and session IDs are not
+included in MCP status diagnostics. Configure secrets with Harness' secret store rather than writing
+credentials into ordinary settings. The settings panel edits the same `plugins.bridge-mcp-client`
+namespace.
 
 ## Extension points
 
-- Registers: `tool` provider for every discovered server tool, plus `list_resources` / `read_resource`
-  when a server advertises resources.
-- Replaces: nothing. Two plugins can register the same server name; the second is rejected with
-  `Tool already registered` (see `registry.register_tool`).
-- Consumes: `harness.sdk.contracts.ToolHandler` semantics on the way out, `MCPClient` (`client.py`) on
-  the way in — the JSON-RPC transport is a plain stdio loop, so an HTTP transport (WS-09) is additive.
+- Registers one Harness tool for each discovered server tool, plus `read_resource` for MCP resources.
+- Handles tool-list changes by unregistering removed or modified definitions and registering only the
+  additions or updated definitions. A durable `mcp.tools.changed` notice describes each actual change.
+- Emits `mcp.server.status` snapshots for connection, reconnect and terminal states. `harness mcp status`
+  displays each configured server's transport, connection state, tool count and reconnect attempt.
+- Uses a transport-independent JSON-RPC client with stdio and Streamable HTTP transports. HTTP supports
+  JSON responses, SSE responses, `Mcp-Session-Id` session headers and the optional GET notification stream.
 
 ## Model experience
 
-Tool names and descriptions come verbatim from the server's `tools/list`, so what the model sees is what
-the server author wrote. Results are the server's text content blocks joined with newlines; images are
-passed through as media. Risk class is derived from the server's `ToolAnnotations`:
-`readOnlyHint` → `read`, `destructiveHint` → `destructive`, `openWorldHint` → `network`, and an
-unannotated tool → `write` (which means approval is required in `ask` mode — an unlabelled tool is not
-trusted, it is treated as a mutation).
+Tool names remain `mcp__<server>__<tool>` and schemas come from the server's `tools/list`. Text content
+blocks are returned to the model and image content is passed through as media. Risk class is derived
+from the server's `ToolAnnotations`: `readOnlyHint` → `read`, `destructiveHint` → `destructive`,
+`openWorldHint` → `network`, and an unannotated tool → `write` (which means approval is required in
+`ask` mode — an unlabelled tool is not trusted, it is treated as a mutation).
+
+Tool calls use the configured per-call timeout. On kernel cancellation or timeout the client sends
+`notifications/cancelled` best-effort, drops the pending response, and ignores late replies. A lost
+connection enters bounded backoff, re-runs initialization and `tools/list`, and restores changed tool
+definitions. Calls made while disconnected fail promptly with the current connection state.
 
 ## Known limitations
 
-- stdio only: a server that speaks Streamable HTTP cannot be configured yet (WS-09), which is what
-  most hosted Obsidian bridges expose.
-- No reconnect: if a server process dies mid-session its tools keep being offered and the next call
-  fails; there is no backoff or resubscribe (WS-09).
-- `tools/list` is read once at boot; a server that changes its tool list needs a daemon restart.
+- stdio server environment inherits only the scrubbed Harness environment plus explicitly configured
+  server variables. Use the separate secret store for HTTP auth references; do not put credentials in
+  public tool descriptions or status data.
+- Reconnect attempts are bounded (10 by default); after exhaustion, the status becomes `failed` and a
+  process/daemon restart is required.
+- Servers with no resources still have the `read_resource` helper available; it reports when no
+  configured server can serve the requested URI.

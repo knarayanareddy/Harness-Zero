@@ -2,9 +2,9 @@
 name = "bridge-mcp-client"
 version = "1.0.0"
 api_version = "1"
-summary = "Model Context Protocol stdio client bridge connecting external MCP servers as tools and resources"
+summary = "Model Context Protocol stdio/HTTP client bridge connecting external MCP servers as tools and resources"
 provides = ["tool"]
-capabilities = ["exec", "net"]
+capabilities = ["exec", "net", "secrets"]
 entry = "harness.plugins.bridges.mcp_client.plugin:MCPClientBridgePlugin"
 
 [settings]

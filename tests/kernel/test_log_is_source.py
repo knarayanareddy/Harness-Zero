@@ -99,6 +99,7 @@ async def test_every_model_request_is_derivable_from_the_log(tmp_path: Path):
         records = await log.read(compact=False)
         assert [r["kind"] for r in records] == [
             "user.message",
+            "checkpoint.created",
             "assistant.message",
             # A decision is a record too (WS-04b): the log says *why* the call ran, not only that it did.
             "tool.decision",
@@ -107,6 +108,9 @@ async def test_every_model_request_is_derivable_from_the_log(tmp_path: Path):
             "tool.decision",
             "tool.result",
             "assistant.message",
+            # WS-07 records the terminal workspace snapshot before the turn marker.
+            "checkpoint.created",
+            "workspace.changes",
             # The turn ends with a marker record (WS-04 §3.3), so the log alone says how it finished —
             # and `derive_messages` ignores it, so it is not part of any request.
             "turn.completed",

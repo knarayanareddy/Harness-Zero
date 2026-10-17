@@ -7,6 +7,18 @@
     "v": 2
   },
   {
+    "content": "Checkpoint created: turn-start:turn#1.",
+    "kind": "checkpoint.created",
+    "metadata": {
+      "label": "turn-start:turn#1",
+      "sha": "sha#1",
+      "workspace_bytes": 0
+    },
+    "role": "system",
+    "step_index": 2,
+    "v": 2
+  },
+  {
     "content": "",
     "kind": "assistant.message",
     "metadata": {
@@ -18,7 +30,7 @@
       }
     },
     "role": "assistant",
-    "step_index": 2,
+    "step_index": 3,
     "tool_calls": [
       {
         "arguments": {
@@ -37,13 +49,23 @@
     "metadata": {
       "action": "allow",
       "call_id": "call#1",
+      "metadata": {
+        "sandbox": {
+          "available": false,
+          "backend": "none",
+          "enforcement": "none",
+          "mode": "off",
+          "network": false,
+          "reason": "Sandbox mode is off."
+        }
+      },
       "plugin": "shell-tools",
       "policy": "policy_gate",
       "reason": "OK",
       "risk": "exec"
     },
     "role": "system",
-    "step_index": 3,
+    "step_index": 4,
     "v": 2
   },
   {
@@ -53,7 +75,7 @@
       "tool_results": true
     },
     "role": "user",
-    "step_index": 4,
+    "step_index": 5,
     "tool_results": [
       {
         "content": [
@@ -80,7 +102,25 @@
       }
     },
     "role": "assistant",
-    "step_index": 5,
+    "step_index": 6,
+    "v": 2
+  },
+  {
+    "content": "No workspace changes this turn.",
+    "kind": "workspace.changes",
+    "metadata": {
+      "added": 0,
+      "base": "sha#1",
+      "files": [],
+      "head": "sha#1",
+      "removed": 0,
+      "snapshot_skipped": false,
+      "total_files": 0,
+      "truncated": false,
+      "turn_id": "turn#1"
+    },
+    "role": "system",
+    "step_index": 7,
     "v": 2
   },
   {
@@ -95,7 +135,7 @@
       }
     },
     "role": "system",
-    "step_index": 6,
+    "step_index": 8,
     "v": 2
   }
 ]

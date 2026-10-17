@@ -38,11 +38,12 @@ harness ui                       harness run / interactive
 | module | role |
 |---|---|
 | `bootstrap.py` | `bootstrap_kernel(workspace, config_dir, resume_session=True)` wires everything below and returns a `KernelRuntime` (`commands`, `bus`, `registry`, `session_manager`, …). |
-| `registry.py` | `PluginRegistry`: discovers `harness_plugin.toml` manifests (built-in `harness/plugins/**`, `$HARNESS_CONFIG_DIR/plugins`, `<workspace>/.harness/plugins`), loads entry points, holds providers / tools / policies / executors / stores / context sources / strategies / hooks; enforces the `Provider` contract at registration. |
-| `settings.py`, `secrets.py` | `SettingsStore` (`$HARNESS_CONFIG_DIR/settings.json`, default `~/.harness/`, layered with `<workspace>/.harness/settings.json`) and `Secrets` (`secrets.json`, 0600; env fallback). |
+| `registry.py` | `PluginRegistry`: discovers `harness_plugin.toml` manifests (built-in `harness/plugins/**`, `$HARNESS_CONFIG_DIR/plugins`, `<workspace>/.harness/plugins`), loads entry points, holds providers / tools / policies / executors / sandbox backends / stores / context sources / strategies / hooks; enforces the `Provider` contract at registration. |
+| `settings.py`, `presets.py`, `secrets.py` | `SettingsStore` (`$HARNESS_CONFIG_DIR/settings.json`, default `~/.harness/`) plus the permission-preset resolver (explicit key → preset expansion → schema default); `Secrets` (`secrets.json`, 0600; env fallback). |
+| `sandbox.py` | `SandboxService`: platform backend registry, availability probe, path/network policy, and the executor adapter that reports each process's actual enforcement. |
 | `jail.py` | `WorkspaceJail`: every path a tool touches resolves inside the workspace. |
-| `gate.py` | `PolicyGate.execute(call)`: the nine steps every tool call passes — resolve + validate args · `PRE_TOOL_USE` hooks · policy chain (`workspace_jail` 10 → `risk_classifier` 50 → `tirith` 60 → `permission_modes` 900) · approval when a policy says ASK · capability-gated `ToolContext` · handler under timeout · `POST_TOOL_USE` hooks · secret sanitisation + truncation. |
-| `approvals.py`, `inbox.py` | `ApprovalBroker` (`approval.required` / `resolve_approval`) and `BackgroundInbox` (background task wake-ups, no polling). |
+| `gate.py` | `PolicyGate.execute(call)`: the nine steps every tool call passes — resolve + validate args · `PRE_TOOL_USE` hooks · policy chain (`workspace_jail` 10 → `risk_classifier` 50 → `tirith` 60 → `permission_modes` 900) · approval when a policy says ASK · capability-gated `ToolContext` · handler under timeout · `POST_TOOL_USE` hooks · secret sanitisation + truncation. The selected executor is wrapped *after* approval; `required` never falls through to a host process, and an unconfined `preferred` fallback requires an approval or explicit `bypass`. |
+| `interactions.py`, `approvals.py`, `inbox.py` | `InteractionBroker` for approvals and structured user questions (`question.asked` / `question.answer`); `ApprovalBroker` is the compatibility facade; `BackgroundInbox` handles background task wake-ups without polling. |
 | `runner.py` | `TurnRunner`: resolves the provider, assembles context, runs the strategy, streams `model.*` events, enforces the circuit breaker and spend cap, records usage. |
 | `context.py`, `compaction.py` | `ContextAssembler` (blocks with `static` / `session` / `turn` stability for prompt caching) and `Compactor`. |
 | `session.py` | `SessionManager`: owns sessions (§5). |
@@ -51,10 +52,10 @@ harness ui                       harness run / interactive
 | `bus.py` | `EventBus`: fan-out to subscribers, delta coalescing for SSE. |
 | `sanitizer.py`, `validators.py` | Secret redaction; `validate_session_id`. |
 
-Plugins (35, nine families under `harness/plugins/`): `providers` (anthropic, gemini, mock, ollama,
-openai_compat → openai / openrouter / deepseek), `tools` (fs, shell, search, memory, skills, artifacts,
+Plugins (38, nine families under `harness/plugins/`): `providers` (anthropic, gemini, mock, ollama,
+openai_compat → openai / openrouter / deepseek), `tools` (fs, shell, search, memory, skills, artifacts, ask_user,
 screenshot_macos), `policy` (workspace_jail, risk_classifier, tirith, permission_modes), `executors` (local,
-worktree), `stores` (jsonl_transcript, cost_ledger, fts5_search, fs_artifacts), `context` (identity,
+worktree, sandbox_bwrap, sandbox_seatbelt), `stores` (jsonl_transcript, cost_ledger, fts5_search, fs_artifacts), `context` (identity,
 instructions_files, memories, repo_map, skills_catalog, tool_guidance), `strategies` (single_loop,
 architect_editor), `hooks` (checkpoints), `bridges` (mcp_client, mcp_server, acp, shell_hooks). The SDK
 contracts they implement are in [`architecture/CONTRACTS.md`](architecture/CONTRACTS.md); the catalogue in
@@ -70,7 +71,8 @@ contracts they implement are in [`architecture/CONTRACTS.md`](architecture/CONTR
 | `submit_turn` | `prompt`, `session_id?`, `model?`, `provider?`, `strategy?`, `options?` | Runs one turn (one active turn per session, else 409). Without `session_id` the active session is used or one is created (`session.started`). Returns `TurnResult`. |
 | `cancel_turn` | `session_id?` | Cancels the running turn (`turn.cancelled`). |
 | `resolve_approval` | `approval_id`, `approved`, `reason?` | Answers an `approval.required` (`approval.resolved`). |
-| `form.submit` | `form_id`, `data` | Submits a `form` card (`form_submit` is an underscore alias). |
+| `question.answer` | `interaction_id`, `answers` | Resolves a pending `ask_user` question (`question.answered`). |
+| `form.submit` | `form_id`, `data` | Submits a `form` card; while `form_id` names a pending question, it is a compatibility alias for `question.answer` (`form_submit` remains the underscore alias). |
 | `sessions.list` | — | `SessionRow[]`, newest activity first. |
 | `sessions.create` | — | Creates and activates an empty session. |
 | `sessions.get` | `session_id` | `{session_id, …, records: TranscriptRecord[]}` — the full history. |
@@ -85,10 +87,14 @@ contracts they implement are in [`architecture/CONTRACTS.md`](architecture/CONTR
 | `plugins.info` | `name` | One plugin's manifest and state. |
 | `plugins.enable` | `name` | Removes the plugin from `kernel.plugins.disabled`. |
 | `plugins.disable` | `name` | Adds the plugin to `kernel.plugins.disabled` (takes effect on next load). |
-| `approvals.list` | — | Pending approvals. |
+| `approvals.list` | `session_id?` | Pending approvals and structured questions (legacy alias of `interactions.list`). |
+| `interactions.list` | `session_id?` | Pending approvals and structured questions. |
 | `economics` | `session_id?` | `EconomicsSnapshot` (`turn_usd`, `session_usd`, `lifetime_usd`, `cap_usd`, `unknown_pricing`, `usage`). |
 | `commands.list` | — | Every dispatchable command with its argument names, `alias_of` and `exposed` (WS-05). |
 | `ui.contributions` | — | What the client mounts: declared panels (with their owner and backing command), `[ui].record_renderers`, plugin client modules, `settings_groups`, `record_kinds`. |
+| `security.status` | — | One resolved posture for the CLI, `/health`, and Studio: preset, customised/pinned keys, effective security settings, and sandbox backend availability/enforcement. |
+
+`harness security show` prints the same command result; `harness security set-preset <locked|careful|standard|open>` writes only `kernel.security.preset`, leaving explicit values pinned. The Studio badge reads `security.status` and labels the probed fact (for example, `careful · bwrap full` or `careful · sandbox unavailable`), never a client-side guess.
 
 Errors map to HTTP: a `HarnessError` with a `status_code` keeps it (`TurnInProgress` → 409); other
 `HarnessError` / `ValueError` → 400; `KeyError` / `FileNotFoundError` → 404; anything else → 500 with the
@@ -116,6 +122,8 @@ generated JSON schema (`harness events schema`).
 |---|---|---|
 | `plugin.loaded` | `PluginLoaded` | name, version, provides, capabilities, trust |
 | `plugin.error` | `PluginError` | name, error |
+| `mcp.server.status` | `McpServerStatus` | server, transport, state, attempt, error, tools_count, session_id_present (live-only) |
+| `mcp.tools.changed` | `McpToolsChanged` | server, added, removed (durable system.notice) |
 | `settings.changed` | `SettingsChanged` | paths |
 | `hook.fired` | `HookFired` | hook, event, command, outcome, duration_ms |
 
@@ -145,9 +153,11 @@ generated JSON schema (`harness events schema`).
 | event | payload class | keys |
 |---|---|---|
 | `tool.call` | `ToolCallStarted` | call_id, name, arguments, risk, plugin |
-| `tool.decision` | `ToolDecision` | call_id, action, plugin, policy, risk, reason |
+| `tool.decision` | `ToolDecision` | call_id, action, plugin, policy, risk, reason, metadata |
 | `approval.required` | `ApprovalRequired` | approval_id, call_id, kind, summary, details, timeout_s, options |
 | `approval.resolved` | `ApprovalResolved` | approval_id, approved, by, reason |
+| `question.asked` | `QuestionAsked` | interaction_id, call_id, turn_id, questions, timeout_s |
+| `question.answered` | `QuestionAnswered` | interaction_id, call_id, turn_id, answers, status, by, reason |
 | `tool.output.delta` | `ToolOutputDelta` | call_id, stream, text |
 | `tool.result` | `ToolCallResult` | call_id, name, is_error, duration_ms, preview, metadata |
 | `tool.result.pruned` | `ToolResultPruned` | call_id, name, original_chars, shown_chars, spill_path (live-only, WS-03 size guard) |
@@ -159,8 +169,27 @@ generated JSON schema (`harness events schema`).
 |---|---|---|
 | `task.started` | `TaskStarted` | task_id, label |
 | `task.completed` | `TaskCompleted` | task_id, label, exit_code, tail |
+| `job.started` | `JobStarted` | job_id, label, command, cwd, pid, started_at, sandbox |
+| `job.output` | `JobOutput` | job_id, offset_start, offset_end, stream, text |
+| `job.exited` | `JobExited` | job_id, label, exit_code, reason, duration_ms, tail |
 | `compaction.started` | `CompactionStarted` | estimated_tokens |
 | `compaction.completed` | `CompactionCompleted` | summary_tokens, duration_ms |
+
+`job.*` lifecycle/output facts are durable session records; output ranges point to the bounded session spill file. The `task.*` pair remains for legacy reactive `run_command` background tasks and is not emitted for detached `job_start` jobs.
+
+*Workspace review & deliverables*
+
+| event | payload class | keys |
+|---|---|---|
+| `system.notice` | `SystemNotice` | message, level, code |
+| `checkpoint.created` | `CheckpointCreated` | sha, label |
+| `workspace.changes` | `WorkspaceChanges` | turn_id, base, head, files, added, removed, truncated, snapshot_skipped |
+| `deliverable.presented` | `DeliverablePresented` | turn_id, path, caption, kind, size, sha256 |
+| `checkpoint.restored` | `CheckpointRestored` | sha, label, files_touched |
+
+`workspace.changes` persists the net workspace delta for a turn, while `deliverable.presented` records the
+user-facing file/artifact and `checkpoint.restored` records an explicitly approved restore. The web client's
+Diffs panel fetches file patches on demand from the private checkpoint repository.
 
 *Economics & UI*
 
@@ -244,7 +273,8 @@ generated JSON schema (`harness events schema`).
   `/`), and for `EventSource` a 60-second single-use ticket from `POST /auth/ticket`. Mutating requests must
   be `application/json` (else 415) with a same-origin `Origin` (else 403); the `Host` header must be an
   allowed host (else 421, DNS-rebinding guard). `/health` reports `version` (= `harness.__version__`),
-  `workspace`, `active_session`, `sandbox_origin`, `spend`.
+  `workspace`, `active_session`, `sandbox_origin`, `spend`, and the same resolved `security` block as
+  `security.status` (preset, customised keys, effective settings, backend availability/enforcement).
 * The client renders turns from `model.text.delta` / `model.thinking.delta`, tool cards from `tool.call` →
   `tool.output.delta` → `tool.result`, approvals from `approval.required`, cards from `ui.card`
   (artifacts also into the Artifacts tab), economics from `cost.updated` / `economics`, and the model picker

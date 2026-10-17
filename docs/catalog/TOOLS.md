@@ -4,14 +4,20 @@
 
 # Tool catalogue (v0.2.1)
 
-12 tools, read from `registry.get_all_tool_specs()`. Risk classes drive the gate: `read` runs unattended, `write`/`exec`/`net` need a permission mode or approval that allows them.
+18 tools, read from `registry.get_all_tool_specs()`. Risk classes drive the gate: `read` runs unattended, `write`/`exec`/`net` need a permission mode or approval that allows them.
 
 | Tool | Plugin | Risk | Timeout | Streams | Annotations | Inputs |
 |---|---|---|---|---|---|---|
+| `ask_user` | `tool-ask-user` | read | 1800s | — | — | `questions` |
 | `checkpoint_restore` | `hook-checkpoints` | destructive | 600s | — | — | `checkpoint_id` |
 | `create_artifact` | `tool-artifacts` | write | 600s | — | — | `content`, `media_type`, `name`, `request_feedback`, `summary`, `user_facing` |
 | `edit_file` | `fs-tools` | write | 600s | — | — | `diff`, `file_path` |
+| `job_kill` | `tools-jobs` | exec | 30s | — | — | `job_id` |
+| `job_list` | `tools-jobs` | read | 15s | — | — | — |
+| `job_output` | `tools-jobs` | read | 30s | — | — | `job_id`, `since_offset`, `tail_lines` |
+| `job_start` | `tools-jobs` | exec | 60s | — | — | `command`, `cwd`, `label` |
 | `manage_task` | `shell-tools` | exec | 300s | — | — | `Action`, `Input`, `TaskId`, `TimeoutMs`, `action`, `input`, `task_id`, `timeout_ms` |
+| `present` | `tools-deliverables` | read | 600s | — | — | `caption`, `path` |
 | `read_resource` | `bridge-mcp-client` | read | 600s | — | — | `server`, `uri` |
 | `remember` | `tool-memory` | read | 600s | — | — | `key`, `text` |
 | `run_command` | `shell-tools` | exec | 600s | — | — | `CommandLine`, `Cwd`, `WaitMsBeforeAsync`, `command`, `cwd`, `wait_ms_before_async` |
@@ -23,10 +29,16 @@
 
 ## Descriptions
 
-- **`checkpoint_restore`** — Restores the workspace to a previous checkpoint snapshot. Required: `checkpoint_id`.
+- **`ask_user`** — Ask the user up to 4 short multiple-choice questions when a decision materially changes what you will build. Prefer sensible defaults over asking; never ask what you can find out from the workspace. Required: `questions`.
+- **`checkpoint_restore`** — Restores the workspace to a previous shadow checkpoint. This is destructive and requires user approval. Use checkpoint_id 'turn-start' to restore to the beginning of the current turn. Required: `checkpoint_id`.
 - **`create_artifact`** — Creates a rich document or generative UI artifact with user-facing metadata. Required: `content`, `name`.
 - **`edit_file`** — Applies surgical SEARCH/REPLACE diff blocks to an existing file in the workspace. Required: `diff`, `file_path`.
-- **`manage_task`** — Manages background tasks: query status, wait for exit, kill, or send stdin input. Required: none.
+- **`job_kill`** — Stops a running background job. This is an execution action and follows normal approval policy. Required: `job_id`.
+- **`job_list`** — Lists jobs belonging to the current session, including running and recently exited jobs. Required: none.
+- **`job_output`** — Reads a job's recent output or output bytes after a durable offset. Required: `job_id`.
+- **`job_start`** — Starts a background process as a durable session job. Its output is spooled and survives the turn. Required: `command`.
+- **`manage_task`** — Deprecated compatibility alias for the durable job tools (retained for one minor version): query, wait, kill, or send stdin input. Required: none.
+- **`present`** — Mark an existing workspace file or artifact as a deliverable for the user and open it in the viewer. Use this when you finish producing the document, image, or result the user asked for. Required: `path`.
 - **`read_resource`** — Reads content from an external Model Context Protocol resource URI. Required: `uri`.
 - **`remember`** — Stores a persistent fact, preference, or architectural decision across sessions. Required: `text`.
 - **`run_command`** — Runs a shell command in the workspace via the executor with real-time output streaming and background transition. Required: none.

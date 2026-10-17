@@ -49,6 +49,8 @@ export class SettingsPanel {
       } else if (type === 'number') {
         val = parseFloat(input.value);
         if (isNaN(val)) return;
+      } else if (type === 'string-list') {
+        val = input.value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
       } else {
         val = input.value;
       }
@@ -227,6 +229,15 @@ export class SettingsPanel {
             <select id="input_${escapeHtml(key)}" data-setting-path="${escapeHtml(key)}" data-setting-type="string" class="px-3 py-1.5 rounded bg-gray-900 border border-gray-700 text-xs text-white">
               ${options}
             </select>
+          </div>
+        `;
+      } else if (widget === 'path-list') {
+        const lines = Array.isArray(val) ? val.join('\n') : '';
+        block += `
+          <div class="setting-item flex flex-col gap-1 py-3 border-b border-gray-800">
+            <label class="text-sm font-medium text-gray-200">${title}</label>
+            <textarea rows="3" spellcheck="false" id="input_${escapeHtml(key)}" data-setting-path="${escapeHtml(key)}" data-setting-type="string-list" class="px-3 py-1.5 rounded bg-gray-900 border border-gray-700 text-xs text-white font-mono">${escapeHtml(lines)}</textarea>
+            <span class="text-xs text-amber-300">${escapeHtml(prop.description || 'One absolute path per line. Extra paths reduce confinement.')}</span>
           </div>
         `;
       } else if (widget === 'number') {

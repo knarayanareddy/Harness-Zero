@@ -18,6 +18,8 @@ import renderToolDecision from './renderers/tool.decision.js';
 import renderUiCard from './renderers/ui.card.js';
 import renderApprovalRequested from './renderers/approval.requested.js';
 import renderApprovalResolved from './renderers/approval.resolved.js';
+import renderQuestionAsked from './renderers/question.asked.js';
+import renderQuestionAnswered from './renderers/question.answered.js';
 import renderCompactionSummary from './renderers/compaction.summary.js';
 import renderTurnError from './renderers/turn.error.js';
 import renderTurnCancelled from './renderers/turn.cancelled.js';
@@ -43,6 +45,8 @@ const RECORD_RENDERERS = {
   'ui.card': renderUiCard,
   'approval.requested': renderApprovalRequested,
   'approval.resolved': renderApprovalResolved,
+  'question.asked': renderQuestionAsked,
+  'question.answered': renderQuestionAnswered,
   'compaction.summary': renderCompactionSummary,
   'turn.error': renderTurnError,
   'turn.cancelled': renderTurnCancelled,
@@ -71,14 +75,17 @@ export class HarnessStudioApp {
     this.currentTextElement = null;
     this.currentThinkingBlock = null;
     this.currentThinkingElement = null;
+    this.pendingQuestions = new Map();
   }
 
   async init() {
     // 1. Initial health and environment check
     try {
       const health = await this.api.health();
-      this.sandboxOrigin = health.sandbox_origin || '';
-      cardRenderer.sandboxOrigin = this.sandboxOrigin;
+      // Presented files and artifacts use same-origin, authenticated viewer routes. The responses carry a
+      // restrictive CSP sandbox, so no browser-facing asset needs to call a localhost sandbox port.
+      this.sandboxOrigin = '';
+      cardRenderer.sandboxOrigin = '';
 
       if (health.active_session) {
         this.activeSessionId = health.active_session.session_id;
@@ -142,18 +149,78 @@ export class HarnessStudioApp {
     }
     const version = document.getElementById('version-display');
     if (version && health.version) version.textContent = `v${health.version}`;
+    this.renderSecurityStatus(health.security || {});
   }
 
-  /** `kernel.security.permission_mode` (ask | allow | deny) — the mode the PolicyGate enforces. */
+  /**
+   * Render the same resolved posture returned by `security.status` and `/health`.
+   *
+   * The label says the preset and the *reported enforcement fact* (`careful · bwrap full`, or
+   * `careful · sandbox unavailable`), not a green/red judgement detached from what the kernel will run. The
+   * tooltip carries the effective policy keys and the reason from the OS probe. If there is no sandbox payload
+   * yet (a compatibility response from an older daemon), we say the effective permission mode instead of
+   * implying confinement.
+   */
+  renderSecurityStatus(info) {
+    const badge = document.getElementById('permission-mode-badge');
+    if (!badge) return;
+    if (!info || !info.preset) {
+      badge.textContent = 'security: ?';
+      badge.dataset.state = 'unknown';
+      badge.title = 'Security posture was not reported by this daemon.';
+      return;
+    }
+
+    const settings = info.settings || {};
+    const mode = settings['kernel.security.permission_mode'] || 'unknown';
+    const sandbox = info.sandbox || null;
+    const customised = Array.isArray(info.customised) ? info.customised : [];
+    const presetLabel = customised.length ? `${info.preset} (customised)` : info.preset;
+    let suffix = mode;
+    let state = 'unknown';
+    if (sandbox && sandbox.mode === 'off') {
+      suffix = 'sandbox off';
+      state = 'off';
+    } else if (sandbox && sandbox.available === false) {
+      suffix = 'sandbox unavailable';
+      state = 'unavailable';
+    } else if (sandbox && sandbox.enforcement === 'full') {
+      suffix = `${sandbox.backend} full`;
+      state = 'full';
+    } else if (sandbox && sandbox.enforcement === 'partial') {
+      suffix = `${sandbox.backend} partial`;
+      state = 'partial';
+    }
+    badge.textContent = `${presetLabel} · ${suffix}`;
+    badge.dataset.state = state;
+    const lines = [
+      `Security preset: ${info.preset}`,
+      `Effective permission mode: ${mode}`,
+      `Execution inside an available sandbox: ${settings['kernel.security.exec_in_sandbox'] || 'ask'}`,
+      `Destructive blocking: ${settings['kernel.security.destructive_blocking'] === false ? 'off' : 'on'}`,
+      ...(sandbox ? [
+        `Sandbox mode: ${sandbox.mode || 'unknown'}`,
+        `Backend: ${sandbox.backend || 'none'}`,
+        `Available: ${sandbox.available === true ? 'yes' : 'no'}`,
+        `Enforcement: ${sandbox.enforcement || 'none'}`,
+        `Network: ${sandbox.network === true ? 'on' : 'off'}`,
+        ...(sandbox.reason ? [`Reason: ${sandbox.reason}`] : []),
+      ] : []),
+      ...(customised.length ? [`Preset differs at: ${customised.join(', ')}`] : []),
+    ];
+    badge.title = lines.join('\n');
+  }
+
+  /** The badge consumes the kernel's resolved posture; it never re-derives a preset from schema defaults. */
   async updatePermissionBadge() {
     const badge = document.getElementById('permission-mode-badge');
     if (!badge) return;
     try {
-      const mode = await this.api.getSettings('kernel.security.permission_mode', 'ask');
-      badge.textContent = `permissions: ${mode || 'ask'}`;
-      badge.dataset.warn = mode === 'allow' ? 'true' : 'false';
+      const info = await this.api.command('security.status');
+      this.renderSecurityStatus(info);
     } catch (_err) {
-      badge.textContent = 'permissions: ?';
+      badge.textContent = 'security: ?';
+      badge.dataset.state = 'unknown';
     }
   }
 
@@ -207,6 +274,38 @@ export class HarnessStudioApp {
       this.appendNotice(data.message, 'error');
     });
 
+    // Durable plugin facts carry their transcript record in the named SSE envelope. These listeners are
+    // registered before `connect()`, and events.js also subscribes to the SDK's complete event vocabulary.
+    this.events.on('system.notice', (data, envelope) => {
+      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.record) this.renderRecord(envelope.record);
+      else this.appendNotice(data?.message || 'The workspace operation needs attention.', data?.level || 'info');
+    });
+
+    for (const type of ['job.started', 'job.output', 'job.exited']) {
+      this.events.on(type, (_data, envelope) => {
+        if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+        this.panels?.refresh('jobs');
+      });
+    }
+
+    this.events.on('workspace.changes', (_data, envelope) => {
+      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.record) this.renderRecord(envelope.record);
+      this.panels?.refresh('diffs');
+    });
+
+    this.events.on('deliverable.presented', (_data, envelope) => {
+      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.record) this.renderRecord(envelope.record);
+    });
+
+    this.events.on('checkpoint.restored', (_data, envelope) => {
+      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.record) this.renderRecord(envelope.record);
+      this.panels?.refresh('diffs');
+    });
+
     // Streaming Deltas
     this.events.on('model.text.delta', (data) => {
       if (!this.currentAssistantBlock) {
@@ -235,7 +334,9 @@ export class HarnessStudioApp {
 
     this.events.on('settings.changed', (data) => {
       const paths = Array.isArray(data.paths) ? data.paths : [];
-      if (paths.some((p) => String(p).startsWith('kernel.security'))) this.updatePermissionBadge();
+      if (paths.some((p) => String(p).startsWith('kernel.security') || String(p).startsWith('kernel.sandbox'))) {
+        this.updatePermissionBadge();
+      }
       if (paths.includes('kernel.provider')) {
         document.getElementById('onboarding-banner')?.classList.add('hidden');
       }
@@ -288,6 +389,20 @@ export class HarnessStudioApp {
 
     this.events.on('approval.resolved', (data) => {
       this.resolveApprovalUI(data);
+    });
+
+    // A pending question and its answer are transcript records; paint the stored record so live and reload
+    // share the same renderer and never invent a second client-side copy of the payload.
+    this.events.on('question.asked', (data, envelope) => {
+      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.record) this.renderRecord(envelope.record);
+      else this.showQuestion(data);
+    });
+
+    this.events.on('question.answered', (data, envelope) => {
+      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.record) this.renderRecord(envelope.record);
+      else this.resolveQuestionUI(data);
     });
 
     // Economics
@@ -460,6 +575,12 @@ export class HarnessStudioApp {
       });
 
       timeline.addEventListener('submit', (e) => {
+        const questionForm = e.target.closest('form[data-question-form]');
+        if (questionForm) {
+          e.preventDefault();
+          this.submitQuestionForm(questionForm);
+          return;
+        }
         const formElem = e.target.closest('form[data-form-id]');
         if (!formElem) return;
         e.preventDefault();
@@ -572,7 +693,11 @@ export class HarnessStudioApp {
   async loadPluginModules() {
     for (const entry of this.ui.client_modules || []) {
       try {
-        const mod = await import(entry.url);
+        // The shipped page uses browser-native ESM. The scenario DOM lane may provide a loader that fetches
+        // the same declared module and resolves its `/static/` imports to the local shipped client files,
+        // because Node's ESM loader cannot import an HTTP URL.
+        const testLoader = globalThis.__harnessPluginModuleLoader;
+        const mod = typeof testLoader === 'function' ? await testLoader(entry) : await import(entry.url);
         const panels = mod.panels || mod.default?.panels || {};
         for (const [id, panel] of Object.entries(panels)) this.panels.register(id, panel);
         const renderers = mod.renderers || mod.default?.renderers || {};
@@ -911,6 +1036,134 @@ export class HarnessStudioApp {
     }
   }
 
+  showQuestion(data) {
+    const interactionId = String(data.interaction_id || '');
+    if (!interactionId) return;
+    this.pendingQuestions.set(interactionId, Array.isArray(data.questions) ? data.questions : []);
+    const selector = `.harness-card-question[data-interaction-id=${cssString(interactionId)}]`;
+    if (!document.querySelector(selector)) {
+      const safeId = escapeHtml(interactionId);
+      const questions = Array.isArray(data.questions) ? data.questions : [];
+      const groups = questions.map((question, index) => {
+        const questionId = escapeHtml(question.id);
+        const name = `question_${index}`;
+        const options = (question.options || []).map((option) => `
+          <label class="question-option">
+            <input type="radio" name="${name}" value="${escapeHtml(option.id)}" data-question-id="${questionId}" />
+            <span class="question-option-copy"><span class="question-option-label">${escapeHtml(option.label)}</span>
+              ${option.description ? `<span class="question-option-description">${escapeHtml(option.description)}</span>` : ''}
+            </span>
+          </label>`).join('');
+        const custom = question.allow_custom === false ? '' : `
+          <label class="question-option question-custom-option">
+            <input type="radio" name="${name}" value="custom" data-question-id="${questionId}" />
+            <span class="question-option-label">Other</span>
+          </label>
+          <input type="text" class="form-input question-custom-input" data-question-custom-id="${questionId}" maxlength="1000" placeholder="Type a custom answer" />`;
+        return `<fieldset class="question-group"><legend>${escapeHtml(question.question)}</legend>${options}${custom}</fieldset>`;
+      }).join('');
+      const timeout = data.timeout_s ? `<div class="question-timeout">Please answer within ${Math.round(data.timeout_s)} seconds.</div>` : '';
+      const body = `
+        <form class="question-form" data-question-form data-form-id="${safeId}">
+          ${groups}
+          ${timeout}
+          <div class="card-actions question-actions">
+            <button type="submit" class="btn btn-primary px-3 py-1.5 rounded text-sm font-medium">Submit answer</button>
+          </div>
+        </form>`;
+      const html = cardRenderer.shell(
+        { id: interactionId, title: 'Your input is needed' },
+        'question',
+        body,
+        { icon: '❓', attrs: `data-interaction-id="${safeId}"` },
+      );
+      this.appendCardHtml(html);
+    }
+    this.setQuestionWaiting();
+  }
+
+  resolveQuestionUI(data) {
+    const interactionId = String(data.interaction_id || '');
+    const questions = this.pendingQuestions.get(interactionId) || [];
+    const card = document.querySelector(`.harness-card-question[data-interaction-id=${cssString(interactionId)}]`);
+    this.pendingQuestions.delete(interactionId);
+    this.setQuestionWaiting();
+    if (!card) return;
+
+    card.classList.add('question-resolved');
+    card.dataset.status = data.status || 'answered';
+    const title = card.querySelector('.card-title');
+    if (title) {
+      title.textContent = data.status === 'cancelled'
+        ? 'Question cancelled'
+        : data.status === 'timeout'
+          ? 'Question timed out'
+          : 'Question answered';
+    }
+    const body = card.querySelector('.card-body');
+    if (!body) return;
+    body.replaceChildren();
+    const status = document.createElement('div');
+    status.className = 'question-resolution-status';
+    if (data.status === 'cancelled') status.textContent = 'Question cancelled.';
+    else if (data.status === 'timeout') status.textContent = 'Question timed out.';
+    else status.textContent = 'You chose:';
+    body.appendChild(status);
+
+    if (data.status && data.status !== 'answered') return;
+    const answers = data.answers || {};
+    for (const question of questions) {
+      const answer = answers[question.id] || {};
+      const option = (question.options || []).find((item) => item.id === answer.option_id);
+      const value = answer.option_id === 'custom'
+        ? String(answer.custom_text || '')
+        : String(option?.label || answer.option_id || '');
+      const customText = answer.option_id !== 'custom' ? String(answer.custom_text || '').trim() : '';
+      const line = document.createElement('div');
+      line.className = 'question-answer-summary';
+      line.textContent = `${question.question} → ${value}${customText ? ` — ${customText}` : ''}`;
+      body.appendChild(line);
+    }
+  }
+
+  setQuestionWaiting(waiting = this.pendingQuestions.size > 0) {
+    document.getElementById('question-waiting')?.classList.toggle('hidden', !waiting);
+  }
+
+  async submitQuestionForm(formElem) {
+    const interactionId = formElem.getAttribute('data-form-id') || '';
+    const questions = this.pendingQuestions.get(interactionId) || [];
+    const radios = [...formElem.querySelectorAll('input[type="radio"][data-question-id]')];
+    const customInputs = [...formElem.querySelectorAll('input[data-question-custom-id]')];
+    const answers = {};
+    for (const question of questions) {
+      const selected = radios.find((radio) => radio.dataset.questionId === question.id && radio.checked);
+      const customInput = customInputs.find((input) => input.dataset.questionCustomId === question.id);
+      const customText = String(customInput?.value || '').trim();
+      if (!selected) {
+        this.appendNotice(`Choose an answer for: ${question.question}`, 'warn');
+        return;
+      }
+      if (selected.value === 'custom' && !customText) {
+        this.appendNotice(`Enter a custom answer for: ${question.question}`, 'warn');
+        return;
+      }
+      answers[question.id] = { option_id: selected.value, custom_text: customText };
+    }
+
+    const submit = formElem.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = true;
+    try {
+      const result = await this.api.answerQuestion(interactionId, answers);
+      if (result?.status !== 'answered') {
+        throw new Error('This question is no longer pending.');
+      }
+    } catch (err) {
+      if (submit) submit.disabled = false;
+      this.appendNotice(`Failed to submit answer: ${err.message}`, 'error');
+    }
+  }
+
   async resolveApproval(requestId, decision, feedback = '') {
     try {
       await this.api.resolveApproval(requestId, decision, feedback);
@@ -941,6 +1194,7 @@ export class HarnessStudioApp {
     } else {
       sendBtn?.classList.remove('hidden');
       stopBtn?.classList.add('hidden');
+      this.setQuestionWaiting(false);
     }
   }
 

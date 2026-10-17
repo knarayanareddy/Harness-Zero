@@ -124,6 +124,10 @@ async def test_server_startup_and_daemon_json(
 
 @pytest.mark.asyncio
 async def test_health_and_host_guard(commands: Commands, event_bus: EventBus, workspace_dir: Path):
+    # The preset is a resolution layer, so this public status surface must read its effective value rather than
+    # repeat KERNEL_SCHEMA's default (`ask`).
+    commands.settings.set("kernel.security.preset", "open")
+    expected_security = await commands.security_status()
     server = HarnessWebServer(
         commands=commands,
         bus=event_bus,
@@ -146,6 +150,9 @@ async def test_health_and_host_guard(commands: Commands, event_bus: EventBus, wo
 
             assert data["version"] == __version__
             assert data["sandbox_origin"] == f"http://127.0.0.1:{server.sandbox_port}"
+            assert data["security"] == expected_security
+            assert data["security"]["preset"] == "open"
+            assert data["security"]["settings"]["kernel.security.permission_mode"] == "allow"
 
             # 2. Host guard rejects invalid Host header with 421
             bad_res = await client.get(f"{base_url}/health", headers={"Host": "evil.example.com"})
@@ -310,6 +317,81 @@ async def test_sandbox_origin_csp_and_artifact_serving(
             # 3. Path traversal attack blocked
             res_trav = await client.get(f"{sb_url}/artifacts/../../secret.txt")
             assert res_trav.status_code in (403, 404)
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_same_origin_viewer_routes_are_sandboxed_and_path_confined(
+    commands: Commands, event_bus: EventBus, workspace_dir: Path, tmp_path: Path
+):
+    server = HarnessWebServer(
+        commands=commands,
+        bus=event_bus,
+        host="127.0.0.1",
+        port=0,
+        sandbox_port=0,
+        workspace=workspace_dir,
+    )
+    await server.start()
+    base_url = f"http://127.0.0.1:{server.port}"
+    auth = {"Authorization": f"Bearer {server.auth_token}"}
+    try:
+        artifacts = workspace_dir / ".harness" / "artifacts"
+        artifacts.mkdir(parents=True)
+        (artifacts / "result.html").write_text("<script>alert(1)</script><h1>Safe</h1>", encoding="utf-8")
+        (workspace_dir / "report.py").write_text("print('safe')\n", encoding="utf-8")
+        outside = tmp_path / "secret.txt"
+        outside.write_text("secret", encoding="utf-8")
+        (workspace_dir / "outside-link.txt").symlink_to(outside)
+
+        async with httpx.AsyncClient() as client:
+            artifact = await client.get(f"{base_url}/artifacts/result.html", headers=auth)
+            assert artifact.status_code == 200
+            assert "<h1>Safe</h1>" in artifact.text
+            csp = artifact.headers.get("Content-Security-Policy", "")
+            assert "sandbox" in csp and "script-src 'none'" in csp
+            assert artifact.headers.get("X-Frame-Options") == "SAMEORIGIN"
+
+            source = await client.get(f"{base_url}/workspace-files/report.py", headers=auth)
+            assert source.status_code == 200 and "print('safe')" in source.text
+            assert "sandbox" in source.headers.get("Content-Security-Policy", "")
+
+            assert (await client.get(f"{base_url}/workspace-files/.harness/settings.json", headers=auth)).status_code == 404
+            assert (await client.get(f"{base_url}/workspace-files/outside-link.txt", headers=auth)).status_code == 404
+            traversal = await client.get(f"{base_url}/workspace-files/%2E%2E/%2E%2E/secret.txt", headers=auth)
+            assert traversal.status_code in (403, 404)
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_viewer_routes_reject_symlinked_private_harness_directories(
+    commands: Commands, event_bus: EventBus, workspace_dir: Path
+):
+    server = HarnessWebServer(
+        commands=commands,
+        bus=event_bus,
+        host="127.0.0.1",
+        port=0,
+        sandbox_port=0,
+        workspace=workspace_dir,
+    )
+    await server.start()
+    base_url = f"http://127.0.0.1:{server.port}"
+    auth = {"Authorization": f"Bearer {server.auth_token}"}
+    try:
+        private = workspace_dir / ".harness" / "private"
+        private.mkdir(parents=True)
+        (private / "secret.txt").write_text("private checkpoint data", encoding="utf-8")
+        (workspace_dir / ".harness" / "artifacts").symlink_to(private, target_is_directory=True)
+        (workspace_dir / "public-alias").symlink_to(private, target_is_directory=True)
+
+        async with httpx.AsyncClient() as client:
+            artifact = await client.get(f"{base_url}/artifacts/secret.txt", headers=auth)
+            alias = await client.get(f"{base_url}/workspace-files/public-alias/secret.txt", headers=auth)
+            assert artifact.status_code == 404
+            assert alias.status_code == 404
     finally:
         await server.stop()
 

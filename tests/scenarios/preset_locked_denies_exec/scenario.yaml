@@ -1,0 +1,18 @@
+name: preset_locked_denies_exec
+kind: kernel
+summary: The `locked` preset resolves to plan mode, so the model's shell call is denied before the executor is reached.
+recorded_from: synthetic
+settings:
+  kernel.security.preset: locked
+turns:
+  - prompt: "Create ran.txt with the shell."
+expect:
+  tools_called: [run_command]
+  files:
+    ran.txt: {exists: false}
+  events_match:
+    - {type: tool.decision, data: {action: deny, reason: "Execution of 'run_command' denied in plan mode."}}
+    - {type: tool.result, data: {is_error: true}}
+  model_saw: ["denied in plan mode"]
+  event_types_exclude: [turn.error]
+  stop_reasons: [end_turn]

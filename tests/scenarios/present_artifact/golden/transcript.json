@@ -1,0 +1,255 @@
+[
+  {
+    "content": "Create a short final report artifact, then present it with the caption Final report.",
+    "kind": "user.message",
+    "role": "user",
+    "step_index": 1,
+    "v": 2
+  },
+  {
+    "content": "Checkpoint created: turn-start:turn#1.",
+    "kind": "checkpoint.created",
+    "metadata": {
+      "label": "turn-start:turn#1",
+      "sha": "sha#1",
+      "workspace_bytes": 0
+    },
+    "role": "system",
+    "step_index": 2,
+    "v": 2
+  },
+  {
+    "content": "",
+    "kind": "assistant.message",
+    "metadata": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "role": "assistant",
+    "step_index": 3,
+    "tool_calls": [
+      {
+        "arguments": {
+          "content": "# Final report\n\nThe requested result.\n",
+          "media_type": "text/markdown",
+          "name": "final.md",
+          "request_feedback": false,
+          "summary": "Final report",
+          "user_facing": true
+        },
+        "id": "evt#1",
+        "name": "create_artifact"
+      }
+    ],
+    "v": 2
+  },
+  {
+    "call_id": "call#1",
+    "content": "Tool `create_artifact` allowed (write).",
+    "kind": "tool.decision",
+    "metadata": {
+      "action": "allow",
+      "call_id": "call#1",
+      "plugin": "tool-artifacts",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "write"
+    },
+    "role": "system",
+    "step_index": 4,
+    "v": 2
+  },
+  {
+    "call_id": "call#1",
+    "content": "Final report",
+    "kind": "ui.card",
+    "metadata": {
+      "call_id": "call#1",
+      "card": {
+        "data": {
+          "media_type": "text/markdown",
+          "name": "final.md",
+          "request_feedback": false,
+          "url": "/artifacts/final.md"
+        },
+        "id": "evt#2",
+        "kind": "artifact",
+        "title": "Final report"
+      }
+    },
+    "role": "system",
+    "step_index": 5,
+    "v": 2
+  },
+  {
+    "content": "",
+    "kind": "tool.result",
+    "metadata": {
+      "tool_results": true
+    },
+    "role": "user",
+    "step_index": 6,
+    "tool_results": [
+      {
+        "content": [
+          {
+            "text": "Artifact 'final.md' created successfully (38 bytes).",
+            "type": "text"
+          }
+        ],
+        "is_error": false,
+        "tool_use_id": "call#1"
+      }
+    ],
+    "v": 2
+  },
+  {
+    "content": "",
+    "kind": "assistant.message",
+    "metadata": {
+      "stop_reason": "tool_use",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "role": "assistant",
+    "step_index": 7,
+    "tool_calls": [
+      {
+        "arguments": {
+          "caption": "Final report",
+          "path": "final.md"
+        },
+        "id": "evt#3",
+        "name": "present"
+      }
+    ],
+    "v": 2
+  },
+  {
+    "call_id": "call#2",
+    "content": "Tool `present` allowed (read).",
+    "kind": "tool.decision",
+    "metadata": {
+      "action": "allow",
+      "call_id": "call#2",
+      "plugin": "tools-deliverables",
+      "policy": "policy_gate",
+      "reason": "OK",
+      "risk": "read"
+    },
+    "role": "system",
+    "step_index": 8,
+    "v": 2
+  },
+  {
+    "content": "Presented final.md — Final report",
+    "kind": "deliverable.presented",
+    "metadata": {
+      "caption": "Final report",
+      "kind": "artifact",
+      "path": ".harness/artifacts/final.md",
+      "sha256": "330932511b4489ec7402afb1cd81e58a2e3963e38ded66f85081e5abd839718d",
+      "turn_id": "turn#1"
+    },
+    "role": "system",
+    "step_index": 9,
+    "v": 2
+  },
+  {
+    "call_id": "call#2",
+    "content": "Deliverable presented",
+    "kind": "ui.card",
+    "metadata": {
+      "call_id": "call#2",
+      "card": {
+        "data": {
+          "body": "Presented final.md — Final report",
+          "level": "success"
+        },
+        "id": "evt#4",
+        "kind": "notice",
+        "title": "Deliverable presented"
+      }
+    },
+    "role": "system",
+    "step_index": 10,
+    "v": 2
+  },
+  {
+    "content": "",
+    "kind": "tool.result",
+    "metadata": {
+      "tool_results": true
+    },
+    "role": "user",
+    "step_index": 11,
+    "tool_results": [
+      {
+        "content": [
+          {
+            "text": "Presented '.harness/artifacts/final.md' (38 bytes, sha256 330932511b4489ec7402afb1cd81e58a2e3963e38ded66f85081e5abd839718d).",
+            "type": "text"
+          }
+        ],
+        "is_error": false,
+        "tool_use_id": "call#2"
+      }
+    ],
+    "v": 2
+  },
+  {
+    "content": "The final report is ready.",
+    "kind": "assistant.message",
+    "metadata": {
+      "stop_reason": "end_turn",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "role": "assistant",
+    "step_index": 12,
+    "v": 2
+  },
+  {
+    "content": "No workspace changes this turn.",
+    "kind": "workspace.changes",
+    "metadata": {
+      "added": 0,
+      "base": "sha#1",
+      "files": [],
+      "head": "sha#1",
+      "removed": 0,
+      "snapshot_skipped": false,
+      "total_files": 0,
+      "truncated": false,
+      "turn_id": "turn#1"
+    },
+    "role": "system",
+    "step_index": 13,
+    "v": 2
+  },
+  {
+    "content": "Turn completed (end_turn) with 2 tool call(s).",
+    "kind": "turn.completed",
+    "metadata": {
+      "stop_reason": "end_turn",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0
+      }
+    },
+    "role": "system",
+    "step_index": 14,
+    "v": 2
+  }
+]

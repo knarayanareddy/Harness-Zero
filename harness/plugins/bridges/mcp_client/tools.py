@@ -85,7 +85,11 @@ def create_mcp_tool_handler(
 
     async def _handler(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
         try:
-            res = await client.call_tool(original_tool_name, dict(args or {}))
+            res = await client.call_tool(
+                original_tool_name,
+                dict(args or {}),
+                cancel_event=getattr(ctx, "cancel_event", None),
+            )
             content_items = res.get("content", [])
             text_blocks: list[TextBlock] = []
 

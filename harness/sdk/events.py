@@ -270,6 +270,15 @@ class ToolDecision(EventPayload):
     risk: str
     reason: str
     plugin: str = ""  # owning plugin; "" for a decision taken before a tool was resolved
+    metadata: dict[str, Any] | None = None  # enforcement availability, when the decision depends on a sandbox
+
+    def to_dict(self) -> dict[str, Any]:
+        data = EventPayload.to_dict(self)
+        # Preserve the pre-WS-06 shape for ordinary decisions; the optional metadata is only serialized when a
+        # policy actually has an enforcement fact to attach.
+        if not self.metadata:
+            data.pop("metadata", None)
+        return data
 
 
 @event_payload
@@ -295,6 +304,36 @@ class ApprovalResolved(EventPayload):
     approved: bool
     by: str
     reason: str | None = None
+
+
+@event_payload
+@dataclass(slots=True)
+class QuestionAsked(EventPayload):
+    """A structured question the model is waiting for a human to answer."""
+
+    EVENT_TYPE: ClassVar[str] = "question.asked"
+    record_kind: ClassVar[str | None] = "question.asked"
+    interaction_id: str
+    call_id: str | None
+    turn_id: str | None
+    questions: list[dict[str, Any]]
+    timeout_s: float | None
+
+
+@event_payload
+@dataclass(slots=True)
+class QuestionAnswered(EventPayload):
+    """The user's answer, cancellation, or timeout for a structured question."""
+
+    EVENT_TYPE: ClassVar[str] = "question.answered"
+    record_kind: ClassVar[str | None] = "question.answered"
+    interaction_id: str
+    call_id: str | None
+    turn_id: str | None
+    answers: dict[str, Any]
+    status: Literal["answered", "cancelled", "timeout"]
+    by: str
+    reason: str = ""
 
 
 @event_payload
@@ -372,6 +411,51 @@ class TaskCompleted(EventPayload):
 
 @event_payload
 @dataclass(slots=True)
+class JobStarted(EventPayload):
+    """A durable background process entered the jobs registry."""
+
+    EVENT_TYPE: ClassVar[str] = "job.started"
+    record_kind: ClassVar[str | None] = "job.started"
+    job_id: str
+    label: str
+    command: str
+    cwd: str
+    pid: int | None
+    started_at: float
+    sandbox: dict[str, Any] | None = None
+
+
+@event_payload
+@dataclass(slots=True)
+class JobOutput(EventPayload):
+    """A coalesced live chunk; its durable record points into the bounded spill file."""
+
+    EVENT_TYPE: ClassVar[str] = "job.output"
+    record_kind: ClassVar[str | None] = "job.output"
+    job_id: str
+    offset_start: int
+    offset_end: int
+    stream: str
+    text: str
+
+
+@event_payload
+@dataclass(slots=True)
+class JobExited(EventPayload):
+    """A durable terminal state for a completed, stopped, failed, or lost job."""
+
+    EVENT_TYPE: ClassVar[str] = "job.exited"
+    record_kind: ClassVar[str | None] = "job.exited"
+    job_id: str
+    label: str
+    exit_code: int | None
+    reason: str
+    duration_ms: float
+    tail: str
+
+
+@event_payload
+@dataclass(slots=True)
 class CompactionStarted(EventPayload):
     EVENT_TYPE: ClassVar[str] = "compaction.started"
     transient: ClassVar[bool] = True
@@ -427,6 +511,101 @@ class HookFired(EventPayload):
 class SettingsChanged(EventPayload):
     EVENT_TYPE: ClassVar[str] = "settings.changed"
     paths: list[str]
+
+
+@event_payload
+@dataclass(slots=True)
+class SystemNotice(EventPayload):
+    """Durable user-facing information emitted by a hook or plugin."""
+
+    EVENT_TYPE: ClassVar[str] = "system.notice"
+    record_kind: ClassVar[str | None] = "system.notice"
+    message: str
+    level: Literal["info", "success", "warn", "error"] = "info"
+    code: str | None = None
+
+
+@event_payload
+@dataclass(slots=True)
+class McpServerStatus(EventPayload):
+    """Live status of one configured Model Context Protocol server."""
+
+    EVENT_TYPE: ClassVar[str] = "mcp.server.status"
+    transient: ClassVar[bool] = True
+    server: str
+    transport: str
+    state: Literal["connecting", "connected", "reconnecting", "failed", "stopped"]
+    attempt: int = 0
+    error: str | None = None
+    tools_count: int = 0
+    session_id_present: bool = False
+
+
+@event_payload
+@dataclass(slots=True)
+class McpToolsChanged(EventPayload):
+    """A durable notice that an MCP server's advertised tools changed."""
+
+    EVENT_TYPE: ClassVar[str] = "mcp.tools.changed"
+    record_kind: ClassVar[str | None] = "system.notice"
+    server: str
+    added: list[str] = field(default_factory=list)
+    removed: list[str] = field(default_factory=list)
+
+
+@event_payload
+@dataclass(slots=True)
+class CheckpointCreated(EventPayload):
+    """A commit in the private checkpoint repository, never in the user's own git repository."""
+
+    EVENT_TYPE: ClassVar[str] = "checkpoint.created"
+    record_kind: ClassVar[str | None] = "checkpoint.created"
+    sha: str
+    label: str
+
+
+@event_payload
+@dataclass(slots=True)
+class WorkspaceChanges(EventPayload):
+    """The net tracked workspace delta between the turn-start and turn-end snapshots."""
+
+    EVENT_TYPE: ClassVar[str] = "workspace.changes"
+    record_kind: ClassVar[str | None] = "workspace.changes"
+    turn_id: str
+    base: str | None
+    head: str | None
+    files: list[dict[str, Any]]
+    added: int
+    removed: int
+    truncated: bool = False
+    snapshot_skipped: bool = False
+
+
+@event_payload
+@dataclass(slots=True)
+class DeliverablePresented(EventPayload):
+    """The file the agent marked as its user-facing result."""
+
+    EVENT_TYPE: ClassVar[str] = "deliverable.presented"
+    record_kind: ClassVar[str | None] = "deliverable.presented"
+    turn_id: str
+    path: str
+    caption: str
+    kind: Literal["artifact", "file"]
+    size: int
+    sha256: str
+
+
+@event_payload
+@dataclass(slots=True)
+class CheckpointRestored(EventPayload):
+    """A user-approved restore of the shadow repository to an earlier commit."""
+
+    EVENT_TYPE: ClassVar[str] = "checkpoint.restored"
+    record_kind: ClassVar[str | None] = "checkpoint.restored"
+    sha: str
+    label: str
+    files_touched: int
 
 
 KNOWN_EVENT_TYPES = frozenset(EVENT_PAYLOADS)

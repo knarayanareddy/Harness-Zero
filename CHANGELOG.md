@@ -9,6 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — WS-10a durable background jobs
+- Added the session-scoped `tools-jobs` registry, durable `job.started/output/exited` records, bounded output ring and spill file, lost-process recovery, and a model-visible next-turn completion notice. Detached `job_start` jobs no longer hold up the turn; legacy reactive `run_command` tasks retain their wait behavior and `manage_task` alias.
+- Added `job_start`, `job_output`, `job_list`, and `job_kill`, plus the plugin-owned Jobs panel. Panel stop uses the existing approval broker and destructive-action policy.
+- Hardened index/spill access against symlink escapes, FIFOs and other special files, and multiply-linked regular files; file descriptors are opened nonblocking/no-follow where supported and validated with `fstat`.
+- Added the deterministic kernel and record/replay integration coverage. Validation: `pytest -q` → **716 passed, 4 skipped**; `ruff check .`, strict UI audit, plugin doctor, catalog drift, and `git diff --check` pass. Catalog README/scenario-coverage warnings remain advisory.
+- Generated catalog entries: [plugins](docs/catalog/PLUGINS.md), [tools](docs/catalog/TOOLS.md), [settings](docs/catalog/SETTINGS.md), and [UI contract](docs/catalog/UI_CONTRACT.md).
+
+### Added — WS-09 MCP streamable HTTP and resilience
+- Added the streamable-HTTP transport alongside stdio, per-call timeouts, cancellation, supervised reconnect/backoff, and truthful connection status.
+- Generated catalog changes: [plugins](docs/catalog/PLUGINS.md), [tools](docs/catalog/TOOLS.md), [settings](docs/catalog/SETTINGS.md), and [events](docs/catalog/EVENTS.md).
+
+### Added — WS-08 user questions
+- Added `ask_user` with a model-visible question/answer lifecycle on the existing interaction channel, including CLI and web response handling and headless behavior.
+- Generated catalog changes: [tools](docs/catalog/TOOLS.md), [events](docs/catalog/EVENTS.md), and [UI contract](docs/catalog/UI_CONTRACT.md).
+
+### Added — WS-07 workspace changes and deliverables
+- Added per-turn workspace-change summaries and the `present` tool for user-facing files/artifacts, with durable events and feature-owned renderers/panels.
+- Generated catalog changes: [plugins](docs/catalog/PLUGINS.md), [tools](docs/catalog/TOOLS.md), [events](docs/catalog/EVENTS.md), and [UI contract](docs/catalog/UI_CONTRACT.md).
+
+### Added — P15 / WS-06 permission presets and OS process confinement
+- **Named presets resolve without materialising their expansion.** `locked`, `careful`, `standard`, and `open` use
+  explicit stored values → preset defaults → call-site/schema defaults. Explicit overrides remain pinned; `bypass`
+  is never a preset. The `standard` no-click EXEC path is allowed only after a sandbox backend successfully probes.
+- **Executor processes gain a fail-closed OS boundary.** `SandboxService` probes the selected backend and wraps the
+  chosen executor after policy/approval. Linux bubblewrap and macOS Seatbelt adapters are registered through the
+  SDK seam. Required-but-unavailable denies before spawn; preferred-but-unavailable asks before unconfined
+  execution; `off` is an explicit unconfined choice. An approved unconfined fallback and every confined result
+  retain truthful sandbox metadata, including enforcement and network state.
+- **One posture across kernel, CLI and Studio.** `security.status`, `/health`, `harness security show`, tool
+  decision/result metadata and the Studio badge expose effective preset and sandbox state. The schema-driven
+  Security & Sandboxing settings group includes preset, backend, mode, network and extra-readable path controls.
+- Added preset/sandbox unit tests, the daemon-without-approver regression, four preset/unavailable/full-status
+  scenarios, sandbox backend READMEs, generated catalogs, and CI installation of bubblewrap on Linux.
+- Validation: `pytest -q -rs` → **655 passed, 4 skipped**; scenarios → **30 passed, 1 skipped**; plugin
+  conformance → **220 passed**; `ruff check .`, the strict UI audit, and catalog drift/settings/UI checks passed.
+  The four local skips require real bubblewrap; `bwrap` is absent here, so this run does not claim real Linux
+  confinement. Seatbelt profile rules have mocked unit coverage only; no real macOS integration run was performed.
+
 ### Added — P14 / WS-05c plugin client modules are served, and installed plugins load at all
 - **`[ui].client_module` now means something on disk.** The address is derived in one module both ends import —
   `harness/sdk/plugin_static.py` (`CLIENT_MODULE_ROOT`, `CLIENT_MODULE_SUFFIXES`, `plugin_dir`, `client_module_url`,

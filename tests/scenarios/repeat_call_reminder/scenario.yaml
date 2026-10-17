@@ -7,6 +7,8 @@ summary: >-
 recorded_from: synthetic
 settings:
   kernel.security.permission_mode: allow
+  # This scenario tests repeated-call handling, not sandbox enforcement; keep it portable to hosts without bwrap.
+  kernel.sandbox.mode: "off"
 turns:
   - prompt: "Check the build status"
 expect:

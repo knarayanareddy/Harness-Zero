@@ -164,8 +164,20 @@
   }
 }
 
+.visible {
+  visibility: visible
+}
+
+.invisible {
+  visibility: hidden
+}
+
 .static {
   position: static
+}
+
+.absolute {
+  position: absolute
 }
 
 .my-2 {
@@ -195,6 +207,10 @@
 
 .mt-3 {
   margin-top: 0.75rem
+}
+
+.\!block {
+  display: block !important
 }
 
 .block {
@@ -475,6 +491,11 @@
 
 .italic {
   font-style: italic
+}
+
+.text-amber-300 {
+  --tw-text-opacity: 1;
+  color: rgb(252 211 77 / var(--tw-text-opacity, 1))
 }
 
 .text-blue-600 {

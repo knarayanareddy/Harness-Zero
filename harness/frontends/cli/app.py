@@ -17,7 +17,7 @@ from harness.kernel.bus import EventBus
 from harness.kernel.commands import Commands
 from harness.sdk.types import TurnResult
 
-from .prompts import prompt_approval
+from .prompts import prompt_approval, prompt_question
 from .renderer import render_event
 
 
@@ -81,6 +81,25 @@ class CliApp:
                                 approved=approved,
                                 by="user",
                             )
+                        elif event.type == "question.asked" and self.interactive:
+                            data = event.data
+                            interaction_id = data.get("interaction_id", "")
+                            answers = prompt_question(
+                                interaction_id=interaction_id,
+                                questions=data.get("questions", []),
+                                console=self.console,
+                                input_fn=self.input_fn,
+                            )
+                            if answers is None:
+                                session_id = event.session_id or self._resolve_session_id()
+                                if session_id:
+                                    await self.commands.cancel_turn(session_id)
+                            else:
+                                await self.commands.question_answer(
+                                    interaction_id=interaction_id,
+                                    answers=answers,
+                                    by="user",
+                                )
                     except Exception as e:
                         self.console.print(f"[red]Error rendering event {event.type}: {e}[/red]")
             except asyncio.CancelledError:

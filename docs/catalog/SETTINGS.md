@@ -7,6 +7,36 @@
 Aggregated from the schemas the loader registered — `KERNEL_SCHEMA` and every plugin `settings.schema.json`. The settings UI renders exactly this list; a key with no reader cannot appear here, and a read key that is undeclared fails `harness catalog --check settings`.
 
 
+## Security & Sandboxing
+
+| Key | Type | Default | Widget | Owner | Read in UI |
+|---|---|---|---|---|---|
+| `kernel.sandbox.backend` | string | `"auto"` | select | kernel | yes |
+| `kernel.sandbox.extra_readable` | array | `[]` | path-list | kernel | yes |
+| `kernel.sandbox.mode` | string | `"preferred"` | select | kernel | yes |
+| `kernel.sandbox.network` | boolean | `false` | boolean | kernel | yes |
+| `kernel.security.approval_timeout_s` | integer | `300` | number | kernel | yes |
+| `kernel.security.destructive_blocking` | boolean | `true` | boolean | kernel | yes |
+| `kernel.security.exec_in_sandbox` | string | `"ask"` | select | kernel | yes |
+| `kernel.security.permission_mode` | string | `"ask"` | select | kernel | yes |
+| `kernel.security.preset` | string | `"careful"` | select | kernel | yes |
+
+## Checkpoints
+
+| Key | Type | Default | Widget | Owner | Read in UI |
+|---|---|---|---|---|---|
+| `plugins.hook-checkpoints.max_diff_bytes` | integer | `262144` | number | hook-checkpoints | yes |
+| `plugins.hook-checkpoints.max_files` | integer | `200` | number | hook-checkpoints | yes |
+| `plugins.hook-checkpoints.max_workspace_bytes` | integer | `67108864` | number | hook-checkpoints | yes |
+
+## Jobs
+
+| Key | Type | Default | Widget | Owner | Read in UI |
+|---|---|---|---|---|---|
+| `plugins.tools-jobs.max_jobs` | integer | `20` | number | tools-jobs | yes |
+| `plugins.tools-jobs.ring_bytes` | integer | `65536` | number | tools-jobs | yes |
+| `plugins.tools-jobs.spill_max_bytes` | integer | `52428800` | number | tools-jobs | yes |
+
 ## Models & Providers
 
 | Key | Type | Default | Widget | Owner | Read in UI |
@@ -19,14 +49,6 @@ Aggregated from the schemas the loader registered — `KERNEL_SCHEMA` and every 
 | `plugins.provider-gemini.base_url` | string | `"https://generativelanguage.googleapis.com/v1beta"` | text | provider-gemini | yes |
 | `plugins.provider-mock.script_file` | string | `""` | text | provider-mock | yes |
 | `plugins.provider-ollama.base_url` | string | `"http://localhost:11434"` | text | provider-ollama | yes |
-
-## Security & Sandboxing
-
-| Key | Type | Default | Widget | Owner | Read in UI |
-|---|---|---|---|---|---|
-| `kernel.security.approval_timeout_s` | integer | `300` | number | kernel | yes |
-| `kernel.security.destructive_blocking` | boolean | `true` | boolean | kernel | yes |
-| `kernel.security.permission_mode` | string | `"ask"` | select | kernel | yes |
 
 ## Execution & Strategies
 
@@ -51,6 +73,7 @@ Aggregated from the schemas the loader registered — `KERNEL_SCHEMA` and every 
 | `secrets.DEEPSEEK_API_KEY` | string | `null` | secret | kernel | yes |
 | `secrets.GEMINI_API_KEY` | string | `null` | secret | kernel | yes |
 | `secrets.GOOGLE_API_KEY` | string | `null` | secret | kernel | yes |
+| `secrets.MCP_API_KEY` | string | `null` | secret | kernel | yes |
 | `secrets.OPENAI_API_KEY` | string | `null` | secret | kernel | yes |
 | `secrets.OPENROUTER_API_KEY` | string | `null` | secret | kernel | yes |
 
@@ -58,6 +81,10 @@ Aggregated from the schemas the loader registered — `KERNEL_SCHEMA` and every 
 
 | Key | Type | Default | Widget | Owner | Read in UI |
 |---|---|---|---|---|---|
+| `plugins.bridge-mcp-client.call_timeout_s` | number | `60` | number | bridge-mcp-client | yes |
+| `plugins.bridge-mcp-client.connect_timeout_s` | number | `15` | number | bridge-mcp-client | yes |
+| `plugins.bridge-mcp-client.reconnect.max_attempts` | integer | `10` | number | bridge-mcp-client | yes |
+| `plugins.bridge-mcp-client.reconnect.max_backoff_s` | number | `60` | number | bridge-mcp-client | yes |
 | `plugins.bridge-mcp-client.servers` | object | `{}` | json | bridge-mcp-client | yes |
 | `plugins.bridge-mcp-server.expose` | array | `[]` | json | bridge-mcp-server | yes |
 | `plugins.bridge-shell-hooks.hooks` | object | `{}` | json | bridge-shell-hooks | yes |
@@ -115,6 +142,7 @@ These spellings are registered so older configuration files keep working; they a
 
 | Alias key | Declared by |
 |---|---|
+| `extensions.mcp_servers` | bridge-mcp-client |
 | `plugins.mcp-client.servers` | bridge-mcp-client |
 | `plugins.mcp-server.expose` | bridge-mcp-server |
 | `plugins.shell-hooks.hooks` | bridge-shell-hooks |

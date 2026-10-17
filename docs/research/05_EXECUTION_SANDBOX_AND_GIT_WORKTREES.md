@@ -144,3 +144,41 @@ class CommandExecutor:
             proc.kill()
             return {"status": "timeout", "exit_code": -1, "stdout": "", "stderr": "Command timed out."}
 ```
+
+---
+
+## 5. Implemented boundary (WS-06, 2026-10-16)
+
+The code above is historical design material. This is what the current repository actually enforces:
+
+- `harness.kernel.presets` defines `locked`, `careful`, `standard`, and `open` as a resolver layer, not a macro that
+  writes child settings. Effective reads resolve in-memory override or explicit stored value → preset expansion →
+  call-site default → schema default;
+  `customised` and `pinned` are separate in `security.status`. `bypass` is never a preset.
+- `harness.kernel.sandbox.SandboxService` is owned by `PluginRegistry`. Built-in `sandbox-bwrap` and
+  `sandbox-seatbelt` plugins register `SandboxBackend`s from `harness.sdk.sandbox_bwrap` /
+  `harness.sdk.sandbox_seatbelt`. The `PolicyGate` wraps the selected executor after policy and approval; this
+  boundary covers `local`, `worktree`, and other registered executors without teaching an executor plugin to find
+  the registry.
+- `required` + unavailable denies before the executor starts. `preferred` + unavailable returns ASK; only an
+  approval (or the explicitly chosen `kernel.security.permission_mode=bypass`) permits an unconfined start, whose
+  `ExecResult.metadata.sandbox.enforcement` remains `none`. `off` is explicit, and every process result reports
+  its mode/backend/availability/enforcement/network values.
+- Linux bubblewrap is probed for the exact namespaces before being trusted. Its request gets the workspace
+  read/write, base runtime read-only, a private `/tmp`, a cleared allowlisted environment, no host home, and no
+  network by default. The macOS Seatbelt profile is implemented and reports `partial`; it is not a VM. Extra
+  readable paths are explicit, read-only, and change bubblewrap status to `partial`. Workspace `/` and extra-read
+  `/` are refused.
+- `security.status`, `/health`, `harness security show`, and the Studio pill read one kernel status; the settings
+  tab has schema-generated presets, backend/mode/network controls, and a line-per-path control that warns that
+  extra paths reduce confinement.
+
+Evidence is pinned in `tests/kernel/test_sandbox.py`, the `preset_locked_denies_exec`,
+`sandbox_unavailable_required_denies`, `security_preset_badge_web_dom`, and `sandbox_bwrap_full_badge` scenarios,
+and the HTTP test `test_daemon_without_an_sse_approver_denies_write_before_handler`. CI installs bubblewrap on
+Linux and prints skip reasons (`pytest -rs`). This runner has no bwrap and cannot install packages without root,
+so the real namespace integration checks skip here; they are not replaced by a fake `unshare` execution. The
+Seatbelt profile builder has a mocked unit test, but no real macOS confinement integration test is currently in the
+suite; this Linux host cannot execute Seatbelt, and a successful availability probe alone is not filesystem-rule
+evidence. Only processes routed through `ctx.executor` are confined: provider HTTP, MCP servers and the kernel
+process itself are out of scope.

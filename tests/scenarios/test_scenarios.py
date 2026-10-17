@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 from _lib.kernel_runner import run_kernel_scenario
-from _lib.scenario import compare_golden, discover, kind_of, load_scenario
+from _lib.scenario import Scenario, Turn, compare_golden, discover, kind_of, load_scenario
 from _lib.web_runner import run_web_scenario
 
 from harness.sdk.events import validate_event
@@ -101,6 +101,21 @@ def _check_expectations(sc, result) -> None:
         assert not present, f"events that must not occur: {present}"
     if exp.get("replay_consumed", True):
         assert result.extra.get("replay_remaining") == 0, f"{result.extra.get('replay_remaining')} recorded model responses were never requested"
+    interaction_inputs = result.extra.get("interaction_inputs") or {}
+    for expectation, input_name in (
+        ("approvals_consumed", "approvals"),
+        ("question_answers_consumed", "question_answers"),
+    ):
+        if exp.get(expectation, True):
+            status = interaction_inputs.get(input_name) or {}
+            provided = int(status.get("provided", 0))
+            consumed = int(status.get("consumed", 0))
+            remaining = int(status.get("remaining", max(0, provided - consumed)))
+            unanswered = int(status.get("unanswered", 0))
+            assert consumed == provided and remaining == 0 and unanswered == 0, (
+                f"scripted {input_name} were not consumed exactly once: "
+                f"provided={provided}, consumed={consumed}, remaining={remaining}, unanswered={unanswered}"
+            )
     for needle in exp.get("model_saw") or []:
         blob = "\n".join(str(r) for r in result.provider_requests)
         assert needle in blob, f"model never saw {needle!r}"
@@ -133,6 +148,30 @@ def _check_expectations(sc, result) -> None:
         assert not missing, f"timeline lacks {missing}; timeline={text[:400]!r}"
         idx = [i for _, i in positions]
         assert idx == sorted(idx), f"timeline order is {[n for n, _ in sorted(positions, key=lambda x: x[1])]}, expected {exp['timeline_order']}"
+    if "dom_questions_answered" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        assert result.dom.get("questions_answered") == exp["dom_questions_answered"], (
+            f"DOM question answers={result.dom.get('questions_answered')!r}; console={result.dom.get('console_tail')}"
+        )
+    if "dom_question_waiting_seen" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        assert result.dom.get("question_waiting_seen") is exp["dom_question_waiting_seen"], (
+            f"question waiting indicator={result.dom.get('question_waiting_seen')!r}"
+        )
+    if "security_badge_contains" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        badge = result.dom.get("security_badge") or {}
+        text = badge.get("text") or ""
+        for needle in exp["security_badge_contains"]:
+            assert needle in text, f"security badge does not show {needle!r}; badge={badge}"
+    if "security_badge_state" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        badge = result.dom.get("security_badge") or {}
+        assert badge.get("state") == exp["security_badge_state"], f"security badge state={badge.get('state')!r}; badge={badge}"
+    if "security_settings_controls" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        controls = result.dom.get("security_settings_controls") or {}
+        assert _subset(exp["security_settings_controls"], controls), f"security settings controls mismatch: {controls}"
     if "settings_groups_include" in exp:
         assert result.dom is not None, f"dom lane did not run: {result.errors}"
         groups = result.dom.get("settings_groups") or []
@@ -152,6 +191,20 @@ def _check_expectations(sc, result) -> None:
             got = texts.get(pid)
             assert got is not None, f"panel {pid!r} painted nothing (host missing?); painted={sorted(k for k, v in texts.items() if v)}"
             assert needle in got, f"panel {pid!r} does not show {needle!r}; it shows {got[:200]!r}"
+    if "dom_diff_preview_contains" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        diff = result.dom.get("diff_preview") or ""
+        for needle in exp["dom_diff_preview_contains"]:
+            assert needle in diff, f"on-demand file diff does not show {needle!r}; diff={diff[:500]!r}"
+    if "dom_deliverable" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        got = result.dom.get("deliverable_viewer") or {}
+        assert _subset(exp["dom_deliverable"], got), f"deliverable viewer mismatch: {got}"
+    if "dom_artifact_tab_active" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        assert result.dom.get("artifact_tab_active") is exp["dom_artifact_tab_active"], (
+            f"artifact viewer did not open its tab: {result.dom.get('artifact_tab_active')}"
+        )
     if "dom_restart_tabs_include" in exp or "dom_restart_tabs_exclude" in exp:
         assert result.dom is not None, f"dom lane did not run: {result.errors}"
         rep = result.dom.get("restart") or {}
@@ -232,9 +285,67 @@ def _check_expectations(sc, result) -> None:
         assert not incomplete, f"client never saw the turn finish: {incomplete}; sse={result.dom.get('sse_events')[:20]}; submit={result.dom.get('submit_bodies')}; fetch={result.dom.get('fetch_log')[-6:]}"
 
 
+@pytest.mark.asyncio
+async def test_kernel_runner_reports_returned_turn_errors(tmp_path: Path, hermetic_env: Path) -> None:
+    """Commands returns fatal turn failures in ``TurnResult``; the runner must not treat them as success."""
+    scenario_dir = tmp_path / "empty-recording"
+    scenario_dir.mkdir()
+    (scenario_dir / "provider.jsonl").write_text("", encoding="utf-8")
+    scenario = Scenario(
+        name="empty-recording",
+        dir=scenario_dir,
+        kind="kernel",
+        turns=[Turn(prompt="Say hello.")],
+    )
+
+    result = await run_kernel_scenario(scenario, tmp_path / "run", env_conf=hermetic_env)
+
+    assert result.turn_results[0]["error"]
+    assert result.errors, "a TurnResult.error must participate in the default no_errors expectation"
+    with pytest.raises(AssertionError, match="errors during run"):
+        _check_expectations(scenario, result)
+
+
+@pytest.mark.asyncio
+async def test_kernel_runner_rejects_unconsumed_interaction_inputs(tmp_path: Path, hermetic_env: Path) -> None:
+    """Unused scripted approval/question data must not silently make an unrelated flow look covered."""
+    scenario_dir = tmp_path / "unconsumed-inputs"
+    scenario_dir.mkdir()
+    recording = ROOT / "plain_answer_kernel" / "provider.jsonl"
+    (scenario_dir / "provider.jsonl").write_text(recording.read_text(encoding="utf-8"), encoding="utf-8")
+    scenario = Scenario(
+        name="unconsumed-inputs",
+        dir=scenario_dir,
+        kind="kernel",
+        turns=[Turn(prompt="What is the capital of the Netherlands?")],
+        approvals=["approve"],
+        question_answers=[{"format": {"option_id": "markdown", "custom_text": ""}}],
+    )
+
+    result = await run_kernel_scenario(scenario, tmp_path / "run", env_conf=hermetic_env)
+
+    interactions = result.extra["interaction_inputs"]
+    assert interactions["approvals"] == {"provided": 1, "consumed": 0, "remaining": 1, "unanswered": 0}
+    assert interactions["question_answers"] == {"provided": 1, "consumed": 0, "remaining": 1, "unanswered": 0}
+    with pytest.raises(AssertionError, match="scripted approvals were not consumed exactly once"):
+        _check_expectations(scenario, result)
+
+    scenario.expect["approvals_consumed"] = False
+    with pytest.raises(AssertionError, match="scripted question_answers were not consumed exactly once"):
+        _check_expectations(scenario, result)
+
+
 @pytest.mark.parametrize("scenario_dir", _params(ROOT), ids=lambda p: p.name)
 async def test_scenario(scenario_dir: Path, tmp_path: Path, hermetic_env: Path, request: pytest.FixtureRequest):
     sc = load_scenario(scenario_dir)
+    if sc.name == "sandbox_bwrap_full_badge":
+        # This one claims real confinement, not merely a setting. Skip with the probe's exact reason on macOS,
+        # Windows, or a Linux runner whose user namespaces are disabled; CI prints skip reasons with `-rs`.
+        from harness.plugins.executors.sandbox_bwrap.backend import BwrapBackend
+
+        availability = BwrapBackend().available()
+        if not availability.available:
+            pytest.skip(f"bwrap full-enforcement scenario unavailable: {availability.reason}")
     if sc.xfail:
         request.node.add_marker(pytest.mark.xfail(reason=sc.xfail, strict=True))
 

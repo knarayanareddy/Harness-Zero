@@ -288,7 +288,7 @@ async def test_invariant_plan_mode_denies_non_read(gate_setup):
     # Write is denied in plan mode
     res_write = await gate.execute(ToolCall(id="c1", name="write_file", arguments={}))
     assert res_write.is_error is True
-    assert "Permission mode 'plan' denies non-read action" in res_write.content[0].text
+    assert "denied in plan mode" in res_write.content[0].text
 
     # Read is allowed in plan mode
     res_read = await gate.execute(ToolCall(id="c2", name="view_file", arguments={}))
@@ -408,8 +408,11 @@ async def test_invariant_bypass_principal_capability(gate_setup):
 @pytest.mark.asyncio
 async def test_invariant_tool_context_capability_gating(gate_setup):
     """ToolContext.executor raises CapabilityDenied when plugin lacks EXEC capability."""
+    settings: SettingsStore = gate_setup["settings"]
     registry: PluginRegistry = gate_setup["registry"]
     gate: PolicyGate = gate_setup["gate"]
+    # This invariant concerns capability gating, not the separate ask-before-unconfined sandbox policy.
+    settings.set("kernel.sandbox.mode", "off")
 
     # Register a plugin with only FS_READ capability
     manifest = PluginManifest(

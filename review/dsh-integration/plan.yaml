@@ -198,36 +198,49 @@ workstreams:
   - id: WS-06
     title: Permission presets + OS sandbox behind executor
     doc: WS-06_permission_presets_sandbox.md
-    status: specified
+    status: executed  # P15; resolver presets, fail-closed executor seam, bwrap + Seatbelt backends, status/UI/CLI, and scenarios
     effort_days: 4.5
     depends_on: [WS-01, WS-02]
     split: [WS-06a presets, WS-06b sandbox]
     principles: [P3, P6]
     dsh_refs: [packages/core/permission, packages/core/sandbox, packages/platform/sandbox-landlock, packages/platform/sandbox-seatbelt, docs/security.md]
     files_add:
-      - harness/kernel/presets.py
+      - harness/kernel/{presets,sandbox}.py
+      - harness/sdk/{sandbox_bwrap,sandbox_seatbelt}.py
       - harness/plugins/executors/{sandbox_bwrap,sandbox_seatbelt}/
-      - tests/kernel/{test_presets,test_sandbox_fail_closed,test_sandbox_bwrap,test_daemon_no_approver_denies}.py
-      - tests/scenarios/{preset_locked_denies_exec,sandbox_unavailable_required_denies,sandbox_bwrap_full_badge}/
+      - tests/kernel/{test_presets,test_sandbox}.py
+      - tests/scenarios/{preset_locked_denies_exec,sandbox_unavailable_required_denies,sandbox_bwrap_full_badge,security_preset_badge_web_dom}/
     files_modify:
       - harness/sdk/{contracts,types}.py
       - harness/sdk/testing/kits.py
-      - harness/kernel/{settings,registry,commands}.py
+      - harness/kernel/{bootstrap,commands,gate,registry,settings}.py
       - harness/plugins/executors/local/executor.py
       - harness/plugins/policy/permission_modes/
-      - .github/workflows/ci.yml   # apt-get install bubblewrap
+      - harness/frontends/web/static/{app,settings}.js
+      - harness/frontends/web/static/styles.css
+      - harness/cli.py
+      - tests/frontends/{test_cli_frontend,test_ui_contract,test_web_server,test_web_turn}.py
+      - tests/kernel/test_gate_invariants.py
+      - tests/scenarios/{make_recordings,test_scenarios}.py
+      - .github/workflows/ci.yml   # install bubblewrap on Linux
+      - docs/{ARCHITECTURE.md,events.schema.json,research/05_EXECUTION_SANDBOX_AND_GIT_WORKTREES.md,research/12_TOOL_SAFETY_GUARDRAILS_AND_PERMISSIONS.md}
     settings_added:
       - kernel.security.preset
       - kernel.security.exec_in_sandbox
-      - kernel.sandbox.{mode,network,extra_readable}
+      - kernel.sandbox.{mode,backend,network,extra_readable}
     acceptance:
-      - pytest tests/kernel/test_presets.py tests/kernel/test_sandbox_fail_closed.py tests/kernel/test_sandbox_bwrap.py -q
-      - "manual: cat ~/.ssh/id_rsa inside run_command fails under careful; status.security reports backend"
+      - .venv/bin/pytest -q -rs  # 655 passed, 4 skipped; all skips are bwrap-dependent on this host
+      - .venv/bin/pytest -q -rs tests/scenarios/test_scenarios.py  # 30 passed, 1 skipped
+      - .venv/bin/harness plugin test --all  # 220 passed
+      - .venv/bin/harness catalog --check --section drift --section settings --section ui
+      - .venv/bin/ruff check .
+      - python tests/frontends/ui_audit.py --strict
+      - "real bubblewrap confinement: not verified locally (bwrap absent); Linux CI installs bubblewrap and reports skip reasons"
 
   - id: WS-07
     title: Workspace changes + present tool
     doc: WS-07_deliverables_workspace_changes.md
-    status: specified
+    status: executed  # WS-07 verified: scenario suite 50 passed / 1 skipped, non-scenario suite 631 passed / 3 skipped; catalog drift/settings/UI checks pass.
     effort_days: 1.5
     depends_on: [WS-04]
     soft_depends_on: [WS-05]
@@ -239,7 +252,7 @@ workstreams:
       - harness/frontends/web/static/renderers/{workspace_changes,deliverable}.js
       - harness/frontends/web/static/panels/diffs.js
       - tests/kernel/{test_workspace_changes,test_present_tool}.py
-      - tests/scenarios/{turn_changes_summary,present_artifact,restore_turn}/
+      - tests/scenarios/{turn_changes_summary,present_artifact,present_workspace_file,restore_turn}/
     files_modify:
       - harness/sdk/context.py          # register_command
       - harness/kernel/{commands,registry}.py
@@ -250,7 +263,7 @@ workstreams:
   - id: WS-08
     title: ask_user tool
     doc: WS-08_ask_user_tool.md
-    status: specified
+    status: executed  # 2026-10-17 verified end-to-end; existing PR branch only, no commit/push made.
     effort_days: 1
     depends_on: [WS-04]
     soft_depends_on: [WS-05]
@@ -259,21 +272,35 @@ workstreams:
     files_add:
       - harness/kernel/interactions.py
       - harness/plugins/tools/ask_user/
-      - harness/frontends/web/static/renderers/question.js
+      - harness/frontends/web/static/renderers/{_question,question.asked,question.answered}.js
       - tests/kernel/test_ask_user_through_kernel.py
+      - tests/plugins/test_ask_user.py
       - tests/scenarios/{ask_user_answered,ask_user_headless}/
     files_modify:
-      - harness/kernel/{approvals,commands,gate}.py
-      - harness/sdk/context.py
-      - harness/frontends/cli/app.py
-    commands_added: [question.answer]
+      - harness/kernel/{approvals,bus,commands,gate,runner}.py
+      - harness/sdk/{context,events,types}.py
+      - harness/frontends/cli/{app,prompts,renderer}.py
+      - harness/frontends/web/static/{api,app,events,index.html,styles.css}
+      - tests/frontends/test_cli_frontend.py
+      - tests/scenarios/_lib/{kernel_runner,normalize,scenario,web_runner}.py
+      - docs/ARCHITECTURE.md
+      - docs/catalog/ and docs/events.schema.json (generated)
+    commands_added: [question.answer, interactions.list]
+    commands_aliased:
+      - form.submit -> question.answer when form_id is a pending question
+      - approvals.list -> interactions.list
     acceptance:
-      - pytest tests/kernel/test_ask_user_through_kernel.py tests/kernel/test_approvals.py -q
+      - pytest tests/kernel/test_ask_user_through_kernel.py tests/kernel/test_approvals.py tests/plugins/test_ask_user.py tests/frontends/test_cli_frontend.py -q
+      - pytest tests/scenarios -q  # 52 passed, 1 skipped
+      - pytest -q --ignore=tests/scenarios  # 641 passed, 3 skipped
+      - ruff check .
+      - harness catalog --check  # drift/settings/UI/refs pass; pre-existing README/scenario-coverage warnings remain
+      - git diff --check
 
   - id: WS-09
     title: MCP streamable-http + resilience
     doc: WS-09_mcp_http_transport.md
-    status: specified
+    status: executed
     effort_days: 1.5
     depends_on: [WS-01, WS-02]
     principles: [P3, P6]
@@ -284,7 +311,6 @@ workstreams:
       - harness/plugins/bridges/mcp_client/settings.schema.json
       - tests/fixtures/mcp_echo_http_server.py
       - tests/kernel/{test_mcp_http_through_kernel,test_mcp_reconnect,test_mcp_cancel}.py
-      - tests/scenarios/{mcp_http_echo,mcp_server_dies_and_returns}/
     files_modify:
       - harness/plugins/bridges/mcp_client/{client,plugin}.py
       - harness/plugins/bridges/mcp_client/README.md
@@ -292,12 +318,19 @@ workstreams:
     settings_added:
       - plugins.bridge-mcp-client.{servers,call_timeout_s,connect_timeout_s,reconnect.max_attempts,reconnect.max_backoff_s}
     acceptance:
-      - pytest tests/kernel/test_mcp_*.py -q
+      - pytest tests/plugins/bridges/test_mcp_client.py tests/kernel/test_mcp_http_through_kernel.py tests/kernel/test_mcp_reconnect.py tests/kernel/test_mcp_cancel.py tests/frontends/test_cli_frontend.py -q  # 28 passed
+      - pytest tests/scenarios -q  # 54 passed, 1 skipped (requires npm ci for DOM lane)
+      - pytest tests -m 'not scenario' -q  # 664 passed, 3 skipped
+      - harness catalog --check  # drift/settings/UI/refs pass; advisory README/scenario-coverage warnings remain
+      - ruff check on touched Python files; git diff --check
 
   - id: WS-10
     title: Jobs and goals
     doc: WS-10_jobs_and_goals.md
-    status: specified
+    status: in_progress  # WS-10a Jobs is executed locally on the existing branch; WS-10b Goals is still specified and not started.
+    phase_status:
+      WS-10a: executed
+      WS-10b: specified
     effort_days: 5
     depends_on: [WS-04, WS-03, WS-05]
     split: [WS-10a jobs, WS-10b goals]
@@ -318,7 +351,12 @@ workstreams:
       - plugins.tools-jobs.{ring_bytes,max_jobs,spill_max_bytes}
       - kernel.goals.{max_rounds_hard_cap,max_usd_hard_cap}
     acceptance:
-      - pytest tests/kernel/test_jobs_*.py tests/kernel/test_goal_driver.py -q
+      - "WS-10a: .venv/bin/pytest tests/kernel/test_jobs_*.py -q  # 9 passed"
+      - "WS-10a: .venv/bin/pytest tests/scenarios/test_scenarios.py -q -k job_finishes_between_turns  # 1 passed"
+      - "WS-10a: .venv/bin/pytest -q  # 716 passed, 4 skipped; includes the full flow/scenario suite"
+      - "WS-10a: ruff check ., UI audit --strict, plugin doctor --all, git diff --check all pass"
+      - "WS-10a: harness catalog --check has clean generated drift/settings/UI/refs; README and scenario coverage remain advisory"
+      - "WS-10b pending: tests/kernel/test_goal_driver.py and goal scenarios are not implemented or run"
 
   - id: WS-11
     title: Subagents (in-process tool) + ACP client

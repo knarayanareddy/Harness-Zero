@@ -159,6 +159,8 @@ class ScriptedApprover:
         self.commands = commands
         self.decisions = list(decisions)
         self.seen: list[dict[str, Any]] = []
+        self.consumed = 0
+        self.unanswered = 0
         self.sub = bus.subscribe(types=["approval.required"], interactive=True)
         self.bus = bus
         self._task = asyncio.create_task(self._loop())
@@ -167,12 +169,55 @@ class ScriptedApprover:
         while True:
             evt = await self.sub.get()
             self.seen.append(evt.to_dict())
-            decision = self.decisions.pop(0) if self.decisions else "deny"
+            if self.decisions:
+                decision = self.decisions.pop(0)
+                self.consumed += 1
+            else:
+                self.unanswered += 1
+                decision = "deny"
             await asyncio.sleep(0.01)
             await self.commands.resolve_approval(
                 approval_id=evt.data.get("approval_id"),
                 approved=(decision == "approve"),
                 reason=f"scenario:{decision}",
+            )
+
+    async def close(self) -> None:
+        self._task.cancel()
+        try:
+            await self._task
+        except asyncio.CancelledError:
+            pass
+        self.bus.unsubscribe(self.sub)
+
+
+class ScriptedQuestionResponder:
+    """Answers ``question.asked`` events in order using provided answer maps."""
+
+    def __init__(self, bus: Any, commands: Any, answers: list[dict[str, Any]]) -> None:
+        self.commands = commands
+        self.answers = list(answers)
+        self.seen: list[dict[str, Any]] = []
+        self.consumed = 0
+        self.unanswered = 0
+        self.sub = bus.subscribe(types=["question.asked"], interactive=True)
+        self.bus = bus
+        self._task = asyncio.create_task(self._loop())
+
+    async def _loop(self) -> None:
+        while True:
+            event = await self.sub.get()
+            self.seen.append(event.to_dict())
+            if self.answers:
+                answer = self.answers.pop(0)
+                self.consumed += 1
+            else:
+                self.unanswered += 1
+                answer = {}
+            await asyncio.sleep(0.01)
+            await self.commands.question_answer(
+                interaction_id=event.data.get("interaction_id", ""),
+                answers=answer,
             )
 
     async def close(self) -> None:
@@ -207,9 +252,14 @@ async def run_kernel_scenario(sc: Scenario, tmp: Path, *, env_conf: Path) -> Run
         rt.secrets.set_many(sc.secrets)  # the gate redacts stored secret values from tool output
     provider = record.install_provider(sc, rt)
 
-    wants_approver = bool(sc.approvals)
-    collector = EventCollector(rt.bus, interactive=wants_approver)
-    approver = ScriptedApprover(rt.bus, rt.commands, sc.approvals) if wants_approver else None
+    wants_interactive = bool(sc.approvals or sc.question_answers)
+    collector = EventCollector(rt.bus, interactive=wants_interactive)
+    approver = ScriptedApprover(rt.bus, rt.commands, sc.approvals) if sc.approvals else None
+    question_responder = (
+        ScriptedQuestionResponder(rt.bus, rt.commands, sc.question_answers)
+        if sc.question_answers
+        else None
+    )
 
     errors: list[str] = []
     turn_results: list[dict[str, Any]] = []
@@ -226,7 +276,13 @@ async def run_kernel_scenario(sc: Scenario, tmp: Path, *, env_conf: Path) -> Run
                     rt.commands.submit_turn(session_id=sid, prompt=turn.prompt, options=options),
                     timeout=float(os.environ.get("SCENARIO_TURN_TIMEOUT", "60")),
                 )
-                turn_results.append(_jsonable(res))
+                result_data = _jsonable(res)
+                turn_results.append(result_data)
+                # Commands returns most runtime failures as TurnResult(error=…), rather than raising. Keep
+                # those failures in the same lane as submit exceptions so the default `no_errors` expectation
+                # cannot pass while a `turn.error` was returned normally.
+                if isinstance(result_data, dict) and result_data.get("error"):
+                    errors.append(f"turn {len(turn_results)}: {result_data['error']}")
             except Exception as e:  # the error itself is part of the observed flow
                 errors.append(f"{type(e).__name__}: {e}")
                 turn_results.append({"error": f"{type(e).__name__}: {e}"})
@@ -234,6 +290,8 @@ async def run_kernel_scenario(sc: Scenario, tmp: Path, *, env_conf: Path) -> Run
     finally:
         if approver:
             await approver.close()
+        if question_responder:
+            await question_responder.close()
         await collector.close()
         await rt.registry.unload_all()
     # Flush before the second boot, so `HARNESS_REPLAY=record` leaves a recording that the very next run
@@ -266,5 +324,21 @@ async def run_kernel_scenario(sc: Scenario, tmp: Path, *, env_conf: Path) -> Run
             "replay_remaining": provider.remaining,
             "live_vs_reloaded_equal": json.dumps(live_records, sort_keys=True)
             == json.dumps(reloaded_records, sort_keys=True),
+            "interaction_inputs": {
+                "approvals": {
+                    "provided": len(sc.approvals),
+                    "consumed": approver.consumed if approver else 0,
+                    "remaining": len(approver.decisions) if approver else len(sc.approvals),
+                    "unanswered": approver.unanswered if approver else 0,
+                },
+                "question_answers": {
+                    "provided": len(sc.question_answers),
+                    "consumed": question_responder.consumed if question_responder else 0,
+                    "remaining": len(question_responder.answers)
+                    if question_responder
+                    else len(sc.question_answers),
+                    "unanswered": question_responder.unanswered if question_responder else 0,
+                },
+            },
         },
     )

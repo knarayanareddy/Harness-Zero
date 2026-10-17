@@ -28,6 +28,7 @@ class Scenario:
     settings: dict[str, Any] = field(default_factory=dict)
     turns: list[Turn] = field(default_factory=list)
     approvals: list[str] = field(default_factory=list)  # "approve" | "deny" in order of approval.required
+    question_answers: list[dict[str, Any]] = field(default_factory=list)  # answer maps in question.asked order
     expect: dict[str, Any] = field(default_factory=dict)
     workspace_files: dict[str, str] = field(default_factory=dict)  # relative path -> content, seeded before the run
     config_files: dict[str, str] = field(default_factory=dict)  # relative path -> content, seeded into the config dir before boot
@@ -56,6 +57,7 @@ def load_scenario(path: Path) -> Scenario:
         settings=data.get("settings", {}) or {},
         turns=turns,
         approvals=list(data.get("approvals", []) or []),
+        question_answers=list(data.get("question_answers", []) or []),
         expect=data.get("expect", {}) or {},
         workspace_files=data.get("workspace_files", {}) or {},
         config_files=data.get("config_files", {}) or {},

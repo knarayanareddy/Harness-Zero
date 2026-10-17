@@ -7,6 +7,7 @@ from __future__ import annotations
 from harness.sdk.cards import BUILTIN_CARD_KINDS, CARD_FIELDS, Card, fallback, validate_card
 from harness.sdk.context import (
     HookContext,
+    JobsView,
     KernelServices,
     PluginContext,
     PolicyContext,
@@ -173,6 +174,7 @@ __all__ = [
     # Context
     "SettingsView",
     "SecretsView",
+    "JobsView",
     "PluginContext",
     "ToolContext",
     "PolicyContext",

@@ -9,22 +9,26 @@ The vocabulary the transcript log accepts, from `harness.sdk.types.RECORD_KINDS`
 | Kind | Model-visible | Durable event(s) carrying it | Scenario transcripts holding it |
 |---|---|---|---|
 | `turn.started` | no | — | 0 scenario(s) |
-| `turn.completed` | no | `turn.completed` | 27 scenario(s) |
+| `turn.completed` | no | `turn.completed` | 37 scenario(s) |
 | `turn.error` | no | `turn.error` | 0 scenario(s) |
 | `turn.cancelled` | no | `turn.cancelled` | 0 scenario(s) |
-| `user.message` | yes | `turn.started` | 27 scenario(s) |
-| `assistant.message` | yes | `model.completed` | 27 scenario(s) |
+| `user.message` | yes | `turn.started` | 37 scenario(s) |
+| `assistant.message` | yes | `model.completed` | 37 scenario(s) |
 | `tool.call` | no | — | 0 scenario(s) |
-| `tool.decision` | no | `tool.decision` | 19 scenario(s) |
-| `approval.requested` | no | `approval.required` | 3 scenario(s) |
-| `approval.resolved` | no | `approval.resolved` | 3 scenario(s) |
-| `tool.result` | yes | `tool.result` | 19 scenario(s) |
-| `ui.card` | no | `ui.card` | 7 scenario(s) |
+| `tool.decision` | no | `tool.decision` | 28 scenario(s) |
+| `approval.requested` | no | `approval.required` | 4 scenario(s) |
+| `approval.resolved` | no | `approval.resolved` | 4 scenario(s) |
+| `question.asked` | no | `question.asked` | 1 scenario(s) |
+| `question.answered` | no | `question.answered` | 1 scenario(s) |
+| `tool.result` | yes | `tool.result` | 28 scenario(s) |
+| `ui.card` | no | `ui.card` | 10 scenario(s) |
 | `compaction.summary` | yes | `compaction.completed` | 0 scenario(s) |
-| `system.notice` | no | — | 0 scenario(s) |
+| `system.notice` | no | `mcp.tools.changed`, `system.notice` | 1 scenario(s) |
 | `settings.changed` | no | — | 0 scenario(s) |
-| `checkpoint.created` | no | — | 0 scenario(s) |
-| `job.started` | no | — | 0 scenario(s) |
-| `job.completed` | no | — | 0 scenario(s) |
-| `goal.created` | no | — | 0 scenario(s) |
-| `goal.completed` | no | — | 0 scenario(s) |
+| `checkpoint.created` | no | `checkpoint.created` | 37 scenario(s) |
+| `checkpoint.restored` | no | `checkpoint.restored` | 1 scenario(s) |
+| `workspace.changes` | no | `workspace.changes` | 37 scenario(s) |
+| `deliverable.presented` | no | `deliverable.presented` | 2 scenario(s) |
+| `job.started` | no | `job.started` | 1 scenario(s) |
+| `job.output` | no | `job.output` | 1 scenario(s) |
+| `job.exited` | no | `job.exited` | 1 scenario(s) |

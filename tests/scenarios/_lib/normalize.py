@@ -20,6 +20,8 @@ DROP_KEYS = frozenset(
         "timestamp",
         "created_at",
         "updated_at",
+        "started_at",
+        "ended_at",
         "duration_ms",
         "duration_s",
         "elapsed_ms",
@@ -49,15 +51,20 @@ _ID_KEYS = {
     "tool_use_id": "call",
     "approval_id": "appr",
     "request_id": "appr",
+    "interaction_id": "question",
     "turn_id": "turn",
     "task_id": "task",
+    "job_id": "job",
     "form_id": "form",
     "card_id": "card",
     "checkpoint": "ckpt",
     "sha": "sha",
+    "base": "sha",
+    "head": "sha",
+    "checkpoint_id": "sha",
 }
 
-_HEX_ID = re.compile(r"\b(evt|turn|call|appr|req|task|sess|session|child|ckpt|card|form)_[0-9a-f]{6,}\b")
+_HEX_ID = re.compile(r"\b(evt|turn|call|appr|req|task|job|sess|session|child|ckpt|card|form)_[0-9a-f]{6,}\b")
 _UUIDISH = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b")
 _ISO_TS = re.compile(r"\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?\b")
 _FLOAT_S = re.compile(r"\b\d+\.\d+s\b")

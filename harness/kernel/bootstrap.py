@@ -100,7 +100,8 @@ async def bootstrap_kernel(
     await registry.load_all()
 
     approvals = ApprovalBroker(bus=bus)
-    inbox = BackgroundInbox(bus=bus)
+    jobs_service = registry.get_service("jobs")
+    inbox = jobs_service if jobs_service is not None else BackgroundInbox(bus=bus)
     gate = PolicyGate(
         registry=registry,
         jail=jail,
@@ -116,6 +117,13 @@ async def bootstrap_kernel(
         settings=settings,
         bus=bus,
     )
+    registry.session_manager = session_manager
+    recover_jobs = getattr(jobs_service, "recover", None)
+    if callable(recover_jobs):
+        try:
+            await recover_jobs()
+        except Exception as err:
+            logger.warning("Background job recovery was incomplete: %s", err)
 
     def _session_log(session_id: str):
         """The transcript log for one session, or None (WS-04b).

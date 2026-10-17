@@ -4,32 +4,41 @@
 
 # Command catalogue
 
-`POST /commands/<name>` on the web daemon, `execute()` on the kernel. The list is `harness.kernel.commands.BUILTIN_COMMANDS`; `dispatch` resolves through it, so nothing else is callable over HTTP.
+`POST /commands/<name>` on the web daemon and `execute()` on the kernel use the same dispatcher. `commands.list` includes built-ins and plugin commands registered through `PluginContext.register_command`; plugin names are namespaced as `plugins.<manifest-id>.<name>`. Only exposed plugin commands can be called by a frontend. `Web client calls it` is a source scan of the shipped client and plugin modules, including namespaced command constants.
 
-| Command | Handler | Arguments | Web client calls it |
-|---|---|---|---|
-| `submit_turn` | `harness/kernel/commands.py:submit_turn` | `session_id: str \| None`, `prompt: str`, `media: list[Any] \| None`, `options: dict[str, Any] \| None`, `model: str \| None`, `provider: str \| None`, `strategy: str \| None` | yes |
-| `cancel_turn` | `harness/kernel/commands.py:cancel_turn` | `session_id: str` | yes |
-| `resolve_approval` | `harness/kernel/commands.py:resolve_approval` | `approval_id: str \| None`, `request_id: str \| None`, `approved: bool \| None`, `decision: str \| None`, `by: str`, `reason: str`, `feedback: str` | yes |
-| `form.submit` | `harness/kernel/commands.py:form_submit` | `form_id: str`, `data: dict[str, Any] \| None` | no |
-| `form_submit` | `harness/kernel/commands.py:form_submit` | `form_id: str`, `data: dict[str, Any] \| None` | no |
-| `sessions.list` | `harness/kernel/commands.py:sessions_list` | — | yes |
-| `sessions.create` | `harness/kernel/commands.py:sessions_create` | `session_id: str \| None`, `metadata: dict[str, Any] \| None` | yes |
-| `sessions.get` | `harness/kernel/commands.py:sessions_get` | `session_id: str` | no |
-| `sessions.switch` | `harness/kernel/commands.py:sessions_switch` | `session_id: str` | yes |
-| `settings.get` | `harness/kernel/commands.py:settings_get` | `path: str`, `default: Any` | yes |
-| `settings.set` | `harness/kernel/commands.py:settings_set` | `path: str`, `value: Any` | yes |
-| `settings.schema` | `harness/kernel/commands.py:settings_schema` | — | no |
-| `models.list` | `harness/kernel/commands.py:models_list` | — | yes |
-| `files.read` | `harness/kernel/commands.py:files_read` | `path: str` | no |
-| `files.write` | `harness/kernel/commands.py:files_write` | `path: str`, `content: str`, `is_base64: bool` | no |
-| `plugins.list` | `harness/kernel/commands.py:plugins_list` | — | no |
-| `plugins.info` | `harness/kernel/commands.py:plugins_info` | `name: str` | no |
-| `plugins.enable` | `harness/kernel/commands.py:plugins_enable` | `name: str` | no |
-| `plugins.disable` | `harness/kernel/commands.py:plugins_disable` | `name: str` | no |
-| `approvals.list` | `harness/kernel/commands.py:approvals_list` | — | no |
-| `economics` | `harness/kernel/commands.py:economics` | `session_id: str \| None` | yes |
-| `commands.list` | `harness/kernel/commands.py:commands_list` | — | no |
-| `ui.contributions` | `harness/kernel/commands.py:ui_contributions` | — | no |
+| Command | Plugin | Handler | Arguments | Exposed | Web client calls it |
+|---|---|---|---|---|---|
+| `submit_turn` | kernel | `harness/kernel/commands.py:submit_turn` | `session_id: str \| None`, `prompt: str`, `media: list[Any] \| None`, `options: dict[str, Any] \| None`, `model: str \| None`, `provider: str \| None`, `strategy: str \| None` | yes | yes |
+| `cancel_turn` | kernel | `harness/kernel/commands.py:cancel_turn` | `session_id: str` | yes | yes |
+| `resolve_approval` | kernel | `harness/kernel/commands.py:resolve_approval` | `approval_id: str \| None`, `request_id: str \| None`, `approved: bool \| None`, `decision: str \| None`, `by: str`, `reason: str`, `feedback: str` | yes | yes |
+| `question.answer` | kernel | `harness/kernel/commands.py:question_answer` | `interaction_id: str`, `answers: dict[str, Any]`, `by: str` | yes | yes |
+| `form.submit` | kernel | `harness/kernel/commands.py:form_submit` | `form_id: str`, `data: dict[str, Any] \| None` | yes | yes |
+| `form_submit` | kernel | `harness/kernel/commands.py:form_submit` | `form_id: str`, `data: dict[str, Any] \| None` | no | no |
+| `sessions.list` | kernel | `harness/kernel/commands.py:sessions_list` | — | yes | yes |
+| `sessions.create` | kernel | `harness/kernel/commands.py:sessions_create` | `session_id: str \| None`, `metadata: dict[str, Any] \| None` | yes | yes |
+| `sessions.get` | kernel | `harness/kernel/commands.py:sessions_get` | `session_id: str` | yes | yes |
+| `sessions.switch` | kernel | `harness/kernel/commands.py:sessions_switch` | `session_id: str` | yes | yes |
+| `settings.get` | kernel | `harness/kernel/commands.py:settings_get` | `path: str`, `default: Any` | yes | yes |
+| `settings.set` | kernel | `harness/kernel/commands.py:settings_set` | `path: str`, `value: Any` | yes | yes |
+| `settings.schema` | kernel | `harness/kernel/commands.py:settings_schema` | — | yes | yes |
+| `models.list` | kernel | `harness/kernel/commands.py:models_list` | — | yes | yes |
+| `files.read` | kernel | `harness/kernel/commands.py:files_read` | `path: str` | yes | no |
+| `files.write` | kernel | `harness/kernel/commands.py:files_write` | `path: str`, `content: str`, `is_base64: bool` | yes | no |
+| `plugins.list` | kernel | `harness/kernel/commands.py:plugins_list` | — | yes | yes |
+| `plugins.info` | kernel | `harness/kernel/commands.py:plugins_info` | `name: str` | yes | no |
+| `plugins.enable` | kernel | `harness/kernel/commands.py:plugins_enable` | `name: str` | yes | no |
+| `plugins.disable` | kernel | `harness/kernel/commands.py:plugins_disable` | `name: str` | yes | no |
+| `approvals.list` | kernel | `harness/kernel/commands.py:approvals_list` | `session_id: str \| None` | no | no |
+| `interactions.list` | kernel | `harness/kernel/commands.py:interactions_list` | `session_id: str \| None` | yes | no |
+| `economics` | kernel | `harness/kernel/commands.py:economics` | `session_id: str \| None` | yes | yes |
+| `commands.list` | kernel | `harness/kernel/commands.py:commands_list` | — | yes | no |
+| `ui.contributions` | kernel | `harness/kernel/commands.py:ui_contributions` | — | yes | yes |
+| `security.status` | kernel | `harness/kernel/commands.py:security_status` | — | yes | yes |
+| `plugins.hook-checkpoints.changes` | `hook-checkpoints` | `harness/plugins/hooks/checkpoints/plugin.py:_changes` | `session_id: str` | yes | yes |
+| `plugins.hook-checkpoints.diff` | `hook-checkpoints` | `harness/plugins/hooks/checkpoints/plugin.py:_diff` | `path: str`, `base: str`, `head: str` | yes | yes |
+| `plugins.hook-checkpoints.restore` | `hook-checkpoints` | `harness/plugins/hooks/checkpoints/plugin.py:_restore` | `session_id: str`, `sha: str` | yes | yes |
+| `plugins.tools-jobs.kill` | `tools-jobs` | `harness/plugins/tools/jobs/registry.py:command_kill` | `session_id: str`, `job_id: str` | yes | yes |
+| `plugins.tools-jobs.list` | `tools-jobs` | `harness/plugins/tools/jobs/registry.py:command_list` | `session_id: str` | yes | yes |
+| `plugins.tools-jobs.output` | `tools-jobs` | `harness/plugins/tools/jobs/registry.py:command_output` | `session_id: str`, `job_id: str`, `tail_lines: int`, `since_offset: int` | yes | yes |
 
-Underscore aliases kept for external callers: `form_submit`.
+Underscore aliases kept for external callers: `form_submit`, `approvals.list`.

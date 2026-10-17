@@ -1,0 +1,18 @@
+name: security_preset_badge_web_dom
+kind: web
+summary: The Studio status chip shows the resolved preset and backend probe result from the kernel, not a browser-side default.
+recorded_from: synthetic
+settings:
+  kernel.security.preset: standard
+  kernel.sandbox.backend: none
+turns:
+  - prompt: "Say hello."
+expect:
+  security_badge_contains: ["standard", "sandbox unavailable"]
+  security_badge_state: unavailable
+  security_settings_controls:
+    preset: {tag: select, type: string}
+    extra_readable: {tag: textarea, type: string-list}
+  settings_groups_include: ["Security & Sandboxing"]
+  dom_turns_completed: true
+  event_types_exclude: [turn.error, turn.cancelled]

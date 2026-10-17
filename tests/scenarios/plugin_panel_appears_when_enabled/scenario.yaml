@@ -18,18 +18,11 @@ expect:
   # The tab exists because the plugin declared it, and the host is created by `PanelRegistry.mount()`: nothing
   # in `index.html` mentions `probe-vault`.
   dom_tabs_include: [probe-vault, plugins]
-  # What the pane painted, from the command its declaration names: the plugin's own panel runs `plugins.list`,
-  # so its table contains the plugin's id. The Plugins pane lists the same plugin from the kernel's discovery.
-  #
-  # What this lane cannot claim: Node's ESM loader will not import an `http:` URL, so the *page's*
-  # `import(entry.url)` of the plugin module falls back to the generic renderer here (the client logs a
-  # `[ui]` warning and carries on, which is the designed degradation). Both ends around it are asserted —
-  # `client_module_urls` proves the app was handed the URL the kernel advertised, `dom_plugin_modules_served`
-  # proves the browser can fetch that URL and gets the module's bytes, and
-  # `tests/frontends/test_plugin_static.py::test_the_url_the_kernel_advertises_is_the_url_that_serves_the_bytes`
-  # pins those bytes to the file the manifest declared. The browser's own import is the platform's part.
+  # The headless client executes the module bytes fetched from the URL `ui.contributions` advertised (rewriting
+  # only its core `/static/` imports to the same local shipped files, because Node cannot import HTTP modules).
+  # The panel's custom renderer fetches `plugins.list` and paints this line; a generic table cannot produce it.
   dom_panel_text:
-    probe-vault: "probe-vault"
+    probe-vault: "Vault rows from the plugin module: 1"
     plugins: "probe-vault"
   dom_plugin_modules_served: true
   # The pane's Enable/Disable switch is a plain `data-command` binding; it must reach the kernel and repaint.

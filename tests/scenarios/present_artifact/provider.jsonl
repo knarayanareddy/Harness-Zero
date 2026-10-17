@@ -1,0 +1,11 @@
+{"arguments": {"content": "# Final report\n\nThe requested result.\n", "media_type": "text/markdown", "name": "final.md", "request_feedback": false, "summary": "Final report", "user_facing": true}, "id": "c1", "name": "create_artifact", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"arguments": {"caption": "Final report", "path": "final.md"}, "id": "c2", "name": "present", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"t": "TextDelta", "text": "The final report is ready."}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "end_turn", "t": "Done"}

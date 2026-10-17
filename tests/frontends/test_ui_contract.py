@@ -38,6 +38,12 @@ _RENDER_CASE_RE = re.compile("""case ["']([a-z_][a-z0-9_.]*)["']:""")
 _PANEL_REGISTER_RE = re.compile(r'''this\.panels\.register\(\s*['"]([\w-]+)['"]''')
 _GENERIC_RENDERER_RE = re.compile(r"^  (\w+): \(", re.M)
 _STUDIO_PANE_RE = re.compile(r'<section class="studio-pane">.*?</section>', re.S)
+_PLUGIN_RECORD_RENDERERS = {
+    "workspace.changes": "workspace_changes.js",
+    "checkpoint.restored": "checkpoint_restored.js",
+    "deliverable.presented": "deliverable.js",
+}
+_PLUGIN_PANEL_MODULES = {"diffs"}
 
 
 def _sources() -> dict[str, str]:
@@ -84,6 +90,9 @@ def _painted_kinds() -> set[str]:
     renderer_dir = STATIC / "renderers"
     if renderer_dir.is_dir():
         painted |= {p.stem for p in renderer_dir.glob("*.js") if not p.stem.startswith("_")}
+    # The module-bearing plugin renderers are not in app.js's static map; their ownership is checked explicitly
+    # below against their plugin manifests and client modules.
+    painted |= set(_PLUGIN_RECORD_RENDERERS)
     return painted
 
 
@@ -104,6 +113,17 @@ def test_no_placeholder_bindings_in_the_client():
     offenders = {name: _PLACEHOLDER_RE.findall(text) for name, text in _sources().items()}
     offenders = {k: v for k, v in offenders.items() if v}
     assert not offenders, f"placeholder UI present: {offenders}"
+
+
+def test_security_badge_refreshes_for_preset_and_sandbox_setting_changes():
+    """A saved backend/mode/network choice must not leave the Studio badge reporting stale status."""
+    src = _sources()["app.js"]
+    start = src.index("this.events.on('settings.changed'")
+    end = src.index("\n    });", start)
+    listener = src[start:end]
+    assert "kernel.security" in listener
+    assert "kernel.sandbox" in listener
+    assert "updatePermissionBadge()" in listener
 
 
 async def test_every_command_the_client_binds_is_dispatchable(kernel):
@@ -226,9 +246,14 @@ def test_the_renderer_map_is_the_modules_on_disk():
     block = app[start : app.index("\n};", start)]
     wired = set(re.findall(r"'([a-z_][a-z0-9_.]*)':\s*render", block))
     imports = set(re.findall(r"from '\./renderers/([a-z_][a-z0-9_.]*)\.js'", app))
-    on_disk = {p.stem for p in (STATIC / "renderers").glob("*.js") if not p.stem.startswith("_")}
-    assert wired == on_disk, f"map {sorted(wired)} != modules {sorted(on_disk)}"
-    assert imports == on_disk, f"imports {sorted(imports)} != modules {sorted(on_disk)}"
+    plugin_files = set(_PLUGIN_RECORD_RENDERERS.values())
+    on_disk = {
+        p.stem
+        for p in (STATIC / "renderers").glob("*.js")
+        if not p.stem.startswith("_") and p.name not in plugin_files
+    }
+    assert wired == on_disk, f"map {sorted(wired)} != core modules {sorted(on_disk)}"
+    assert imports == on_disk, f"imports {sorted(imports)} != core modules {sorted(on_disk)}"
 
 
 def test_the_panel_modules_are_the_declared_panels():
@@ -240,7 +265,11 @@ def test_the_panel_modules_are_the_declared_panels():
     """
     app = _sources()["app.js"]
     registered = set(re.findall(r"this\.panels\.register\('([a-z][a-z0-9_-]+)'", app))
-    modules = {p.stem for p in (STATIC / "panels").glob("*.js") if not p.stem.startswith("_")}
+    modules = {
+        p.stem
+        for p in (STATIC / "panels").glob("*.js")
+        if not p.stem.startswith("_") and p.stem not in _PLUGIN_PANEL_MODULES
+    }
     import tomllib
 
     with (REPO / "harness" / "frontends" / "web" / "ui.toml").open("rb") as fh:
@@ -253,6 +282,53 @@ def test_the_panel_modules_are_the_declared_panels():
     assert all(f"'./panels/{pid}.js'" in app for pid in registered), "a registered panel has no module import"
 
 
+def test_plugin_owned_renderers_and_panel_are_declared_and_shipped():
+    """A plugin renderer/panel is not part of the shell map: its manifest and declared module own the wiring."""
+    from harness.sdk.manifest import PluginManifest
+
+    expected = {
+        "hook-checkpoints": {
+            "path": REPO / "harness" / "plugins" / "hooks" / "checkpoints",
+            "renderers": {"workspace.changes": "workspace_changes.js", "checkpoint.restored": "checkpoint_restored.js"},
+            "panel": ("diffs", "diffs.js", "plugins.hook-checkpoints.changes"),
+        },
+        "tools-deliverables": {
+            "path": REPO / "harness" / "plugins" / "tools" / "deliverables",
+            "renderers": {"deliverable.presented": "deliverable.js"},
+            "panel": None,
+        },
+    }
+    for plugin_id, contract in expected.items():
+        plugin_dir = contract["path"]
+        manifest = PluginManifest.load(plugin_dir / "harness_plugin.toml")
+        assert manifest.name == plugin_id
+        assert manifest.ui is not None
+        assert set(contract["renderers"]) <= set(manifest.ui.record_renderers)
+        assert manifest.ui.client_module
+        client_module = plugin_dir / manifest.ui.client_module
+        assert client_module.is_file()
+        source = client_module.read_text(encoding="utf-8")
+        for kind, renderer_file in contract["renderers"].items():
+            assert (STATIC / "renderers" / renderer_file).is_file(), kind
+            assert renderer_file in source, f"{plugin_id} does not import its {kind} renderer"
+        panel = contract["panel"]
+        if panel:
+            panel_id, panel_file, command = panel
+            declarations = {item.id: item for item in manifest.ui.panels}
+            assert panel_id in declarations
+            assert declarations[panel_id].command == command
+            assert (STATIC / "panels" / panel_file).is_file()
+            assert panel_file in source
+
+
+def test_custom_durable_events_are_named_sse_subscriptions():
+    """Named SSE frames are only consumed when the client subscribes before it connects."""
+    app = _sources()["app.js"]
+    events = _sources()["events.js"]
+    for event_type in ("workspace.changes", "deliverable.presented", "checkpoint.restored", "system.notice"):
+        assert f"'{event_type}'" in events
+        assert f"this.events.on('{event_type}'" in app
+    assert app.index("this.setupEventHandlers();") < app.index("this.events.connect();")
 
 
 async def test_the_generated_contract_agrees_with_this_test():
@@ -372,5 +448,8 @@ async def test_ui_contributions_response_is_all_the_client_needs_at_boot(kernel)
     rows = await kernel.commands.commands_list()
     assert {"name", "args", "alias_of", "exposed"} == set(rows[0])
     aliases = {row["name"]: row["alias_of"] for row in rows if row["alias_of"]}
-    assert aliases == {"form_submit": "form.submit"}, "an underscore alias must be reported as one"
+    assert aliases == {
+        "form_submit": "form.submit",
+        "approvals.list": "interactions.list",
+    }, "underscore and command-rename aliases must be reported"
     assert all(not row["exposed"] for row in rows if row["alias_of"]), "an alias is not something to put on a button"

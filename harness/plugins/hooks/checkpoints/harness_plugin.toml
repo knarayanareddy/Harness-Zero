@@ -2,7 +2,20 @@
 name = "hook-checkpoints"
 version = "1.0.0"
 api_version = "1"
-summary = "Cline-style shadow git repo snapshots before mutating tools with checkpoint_restore tool"
-provides = ["hook", "tool"]
+summary = "Private bounded workspace snapshots, change review, and approval-gated restore"
+provides = ["hook", "tool", "command"]
 capabilities = ["fs:write", "exec"]
 entry = "harness.plugins.hooks.checkpoints.plugin:CheckpointsPlugin"
+
+[settings]
+schema = "settings.schema.json"
+
+[ui]
+client_module = "static/ui.js"
+record_renderers = ["workspace.changes", "checkpoint.restored"]
+
+[[ui.panels]]
+id = "diffs"
+title = "Diffs"
+command = "plugins.hook-checkpoints.changes"
+renderer = "list"

@@ -12,6 +12,7 @@ import logging
 import os
 import tempfile
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -19,11 +20,11 @@ from harness.kernel.bus import EventBus
 from harness.kernel.economics import economics_snapshot
 from harness.kernel.gate import PolicyGate
 from harness.kernel.plugin_paths import plugin_dir
-from harness.kernel.registry import PluginRegistry
+from harness.kernel.registry import PluginRegistry, RegisteredPluginCommand
 from harness.kernel.runner import TurnRunner
 from harness.kernel.secrets import Secrets
 from harness.kernel.session import SessionManager
-from harness.kernel.settings import SettingsStore
+from harness.kernel.settings import SettingsStore, validate_schema_value
 from harness.kernel.settings_schema import (
     flatten_schema_properties,
     order_groups,
@@ -33,9 +34,9 @@ from harness.kernel.settings_schema import (
 from harness.kernel.validators import validate_session_id
 from harness.sdk.cards import Card
 from harness.sdk.contracts import Provider
-from harness.sdk.errors import HarnessError
-from harness.sdk.events import Event, SettingsChanged, UiCard
-from harness.sdk.types import RECORD_KINDS, ModelRow, TurnResult
+from harness.sdk.errors import HarnessError, SettingsValidationError
+from harness.sdk.events import Event, EventPayload, SettingsChanged, UiCard
+from harness.sdk.types import RECORD_KINDS, ModelRow, TranscriptRecord, TurnResult
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ BUILTIN_COMMANDS: tuple[str, ...] = (
     "submit_turn",
     "cancel_turn",
     "resolve_approval",
+    "question.answer",
     "form.submit",
     "form_submit",  # underscore alias of form.submit, kept for external callers
     "sessions.list",
@@ -62,6 +64,7 @@ BUILTIN_COMMANDS: tuple[str, ...] = (
     "plugins.enable",
     "plugins.disable",
     "approvals.list",
+    "interactions.list",
     "economics",
     # The client's boot-time vocabulary (WS-05): what may be dispatched, and what to mount. Both exist so the
     # shipped client stops hard-coding the answer — a button wired to a command that no longer exists, or a
@@ -69,7 +72,91 @@ BUILTIN_COMMANDS: tuple[str, ...] = (
     # the kernel instead of remembering.
     "commands.list",
     "ui.contributions",
+    # WS-06a: the security posture is state the user is entitled to see without opening the settings modal, so
+    # the kernel answers it as a command — the Studio's status pill, `harness security show`, and any frontend
+    # that wants a badge all read the same resolution of preset + overrides (never a copy of the schema default).
+    "security.status",
 )
+
+# Command renames remain dispatchable for old clients, but are marked as non-UI aliases in commands.list.
+COMMAND_ALIASES: dict[str, str] = {"approvals.list": "interactions.list"}
+
+
+class _PluginCommandRuntime:
+    """The constrained kernel services passed to a plugin-owned frontend command."""
+
+    def __init__(self, commands: Commands) -> None:
+        self._commands = commands
+        self.workspace = commands.workspace
+        self.settings = commands.settings
+
+    def _session(self, session_id: str):
+        validate_session_id(session_id)
+        session = self._commands.session_manager.get_session(session_id)
+        if session is None:
+            raise HarnessError(f"Unknown session: {session_id}")
+        return session
+
+    @asynccontextmanager
+    async def session_lock(self, session_id: str):
+        """Serialize the operation with a turn and fail with TurnInProgress rather than racing it."""
+        session = self._session(session_id)
+        async with session.turn_lock():
+            yield None
+
+    async def read_records(self, session_id: str) -> list[dict[str, Any]]:
+        return await self._session(session_id).get_history()
+
+    async def request_approval(
+        self,
+        *,
+        session_id: str,
+        kind: str,
+        summary: str,
+        details: dict[str, Any] | None = None,
+        destructive: bool = False,
+    ) -> tuple[bool, str]:
+        """Ask through the same user-visible broker as tool approvals, never auto-approve a command."""
+        validate_session_id(session_id)
+        if destructive and bool(self.settings.get("kernel.security.destructive_blocking", True)):
+            return False, "destructive action blocked by kernel.security.destructive_blocking"
+        return await self._commands.gate.approvals.ask(
+            kind=kind,
+            summary=summary,
+            details=details or {},
+            session_id=session_id,
+        )
+
+    async def emit_record(
+        self,
+        *,
+        session_id: str,
+        turn_id: str | None,
+        payload: EventPayload,
+        content: str,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Persist the plugin fact before publishing the matching event."""
+        session = self._session(session_id)
+        kind = getattr(type(payload), "record_kind", None)
+        event_type = getattr(type(payload), "EVENT_TYPE", None)
+        if not kind or not event_type:
+            raise HarnessError(f"Payload {type(payload).__name__} is not a durable event")
+        await session.log.append(
+            TranscriptRecord(kind=kind, role="system", content=content, metadata=dict(metadata))
+        )
+        record = session.log.records[-1]
+        if self._commands.bus is not None:
+            self._commands.bus.publish(
+                Event(
+                    type=event_type,
+                    data=payload,
+                    session_id=session_id,
+                    turn_id=turn_id,
+                    record=record,
+                )
+            )
+        return record
 
 
 class Commands:
@@ -97,11 +184,28 @@ class Commands:
         self.secrets = secrets
         self.registry = registry
         self.bus = bus
-        self._custom_commands: dict[str, Callable[..., Any]] = {}
+        self._custom_commands: dict[str, RegisteredPluginCommand | Callable[..., Any]] = {
+            name: registration for name, registration in registry.commands.items()
+        }
+        self._plugin_command_context = _PluginCommandRuntime(self)
 
-    def register_command(self, name: str, handler: Callable[..., Any]) -> None:
-        """Registers a custom command from plugins or extensions."""
-        self._custom_commands[name] = handler
+    def register_command(
+        self,
+        name: str,
+        handler: Callable[..., Any],
+        *,
+        owner: str = "extension",
+        args_schema: dict[str, Any] | None = None,
+        exposed: bool = True,
+    ) -> None:
+        """Registers a custom command from an extension (plugins use ``PluginContext.register_command``)."""
+        self._custom_commands[name] = RegisteredPluginCommand(
+            name=name,
+            handler=handler,
+            plugin=owner,
+            args_schema=args_schema,
+            exposed=exposed,
+        )
 
     async def submit_turn(
         self,
@@ -249,6 +353,31 @@ class Commands:
         self.settings.set(path, value)
         self._publish_settings_changed([path])
         return {"path": path, "value": value, "status": "ok"}
+
+    async def security_status(self) -> dict[str, Any]:
+        """``security.status`` → the preset in effect, what it resolves to, and what the user changed.
+
+        A preset is a *resolution layer* over ordinary settings (`harness/kernel/presets.py`), so a frontend that
+        read `settings.schema`'s defaults would report the wrong thing the moment someone picked `open`: the
+        schema default for permission mode stays `ask` while the effective value is `allow`. This answers with the
+        effective values plus the two lists that explain them — `customised` (a preset-controlled key whose value
+        differs from the preset) and `pinned` (one the user wrote, whether or not it differs).
+
+        Deliberately *not* here: any secret, any configured extra-readable path, or any list of what a host has
+        installed. The Studio renders this without a token in some deployments (`/health` carries it), so the
+        payload is posture, not inventory. The sandbox block reports the backend probe and enforcement fact rather
+        than echoing a sandbox configuration value.
+        """
+        from harness.kernel import presets
+
+        summary = presets.summary(self.settings)
+        return {
+            "preset": summary["preset"],
+            "customised": summary["customised"],
+            "pinned": summary["pinned"],
+            "settings": summary["effective"],
+            "sandbox": self.registry.sandbox.status(),
+        }
 
     def _publish_settings_changed(self, paths: list[str]) -> None:
         """Tells every frontend which setting paths changed (values are never put on the bus)."""
@@ -467,9 +596,35 @@ class Commands:
             return True
         return False
 
-    async def approvals_list(self) -> list[dict[str, Any]]:
-        """Lists pending approval requests waiting for human resolution."""
-        return self.gate.approvals.pending()
+    async def approvals_list(self, session_id: str | None = None) -> list[dict[str, Any]]:
+        """Compatibility alias for ``interactions.list``; includes pending approvals and questions."""
+        return await self.interactions_list(session_id=session_id)
+
+    async def interactions_list(self, session_id: str | None = None) -> list[dict[str, Any]]:
+        """Lists pending approvals and questions, optionally filtered to one session."""
+        return self.gate.approvals.interactions.pending(session_id=session_id)
+
+    async def question_answer(
+        self,
+        interaction_id: str,
+        answers: dict[str, Any],
+        by: str = "user",
+    ) -> dict[str, Any]:
+        """Resolves a pending structured question after validating its option ids and custom text."""
+        if not interaction_id:
+            raise HarnessError("Missing 'interaction_id'")
+        try:
+            ok = await self.gate.approvals.interactions.resolve_question(
+                interaction_id=interaction_id,
+                answers=answers,
+                by=by,
+            )
+        except ValueError as err:
+            raise HarnessError(f"Invalid question answer: {err}") from err
+        return {
+            "status": "answered" if ok else "not_found",
+            "interaction_id": interaction_id,
+        }
 
     async def economics(self, session_id: str | None = None) -> dict[str, Any]:
         """Returns the ``EconomicsSnapshot`` for a session (defaults to the active session).
@@ -486,8 +641,11 @@ class Commands:
         return snapshot.to_dict()
 
     async def form_submit(self, form_id: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Handles human interactive form submission from studio frontends."""
+        """Handles generic forms; routes pending ask_user forms through the compatibility alias."""
         payload = data or {}
+        if self.gate.approvals.interactions.is_pending_question(form_id):
+            result = await self.question_answer(interaction_id=form_id, answers=payload)
+            return {"form_id": form_id, **result}
         if self.bus:
             self.bus.publish(
                 Event(
@@ -505,27 +663,47 @@ class Commands:
 
         The dispatch table is the source: built-ins are this class's methods (``name.replace(".", "_")``) and
         plugin commands are the registered custom ones, so a frontend can check its own bindings against
-        reality instead of against a list kept in a JS file. ``alias_of`` marks the underscore spellings kept
-        for external callers and ``exposed`` is false for them: an alias is a compatibility shim, not something
-        to put on a button.
+        reality instead of against a list kept in a JS file. ``alias_of`` marks underscore spellings and
+        documented command renames kept for external callers; ``exposed`` is false for them, so a UI does not
+        offer a legacy alias as a separate action.
         """
         out: list[dict[str, Any]] = []
         names = set(BUILTIN_COMMANDS) | set(self._custom_commands)
         for name in sorted(names):
-            handler = self._custom_commands.get(name) or getattr(self, name.replace(".", "_").replace("-", "_"), None)
-            args: list[str] = []
-            if handler is not None:
+            registration = self._custom_commands.get(name)
+            if isinstance(registration, RegisteredPluginCommand):
+                handler = registration.handler
+                schema = registration.args_schema
+                owner = registration.plugin
+                exposed = registration.exposed
+                if schema is not None:
+                    args = list((schema.get("properties") or {}).keys())
+                else:
+                    args = [
+                        param.name
+                        for param in inspect.signature(handler).parameters.values()
+                        if param.kind in (param.POSITIONAL_OR_KEYWORD, param.KEYWORD_ONLY)
+                        and param.name != "_context"
+                    ]
+            else:
+                handler = registration or getattr(self, name.replace(".", "_").replace("-", "_"), None)
+                owner = None
+                exposed = True
                 args = [
                     param.name
                     for param in inspect.signature(handler).parameters.values()
                     if param.kind in (param.POSITIONAL_OR_KEYWORD, param.KEYWORD_ONLY)
-                ]
-            alias_of = None
-            if "_" in name:
+                ] if handler is not None else []
+
+            alias_of = COMMAND_ALIASES.get(name)
+            if alias_of is None and registration is None and "_" in name:
                 dotted = name.replace("_", ".", 1)
                 if dotted in BUILTIN_COMMANDS:
                     alias_of = dotted
-            out.append({"name": name, "args": args, "alias_of": alias_of, "exposed": alias_of is None})
+            row = {"name": name, "args": args, "alias_of": alias_of, "exposed": exposed and alias_of is None}
+            if owner is not None:
+                row["plugin"] = owner
+            out.append(row)
         return out
 
     async def ui_contributions(self) -> dict[str, Any]:
@@ -564,15 +742,33 @@ class Commands:
     async def dispatch(self, command: str, args: dict[str, Any] | None = None) -> Any:
         """Generic command dispatcher for JSON-based frontend interfaces (``POST /commands/<name>``)."""
         params = args or {}
+        if not isinstance(params, dict):
+            raise HarnessError("Command arguments must be a JSON object")
         if command in BUILTIN_COMMANDS:
             handler = getattr(self, command.replace(".", "_"))
             return await handler(**params)
 
-        if command in self._custom_commands:
-            handler = self._custom_commands[command]
-            res = handler(**params)
-            if asyncio.iscoroutine(res):
-                return await res
-            return res
-
-        raise HarnessError(f"Unknown command: '{command}'")
+        registration = self._custom_commands.get(command)
+        if registration is None:
+            raise HarnessError(f"Unknown command: '{command}'")
+        if isinstance(registration, RegisteredPluginCommand):
+            if not registration.exposed:
+                raise HarnessError(f"Command '{command}' is not exposed to frontends")
+            handler = registration.handler
+            if registration.args_schema is not None:
+                try:
+                    validate_schema_value(params, registration.args_schema, path=command)
+                except SettingsValidationError as err:
+                    raise HarnessError(f"Invalid arguments for command '{command}': {err}") from err
+            if "_context" in params:
+                raise HarnessError("'_context' is reserved for the kernel plugin-command runtime")
+            call_params = dict(params)
+            if "_context" in inspect.signature(handler).parameters:
+                call_params["_context"] = self._plugin_command_context
+        else:
+            handler = registration
+            call_params = params
+        result = handler(**call_params)
+        if inspect.isawaitable(result):
+            return await result
+        return result

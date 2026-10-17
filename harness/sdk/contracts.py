@@ -19,6 +19,8 @@ from harness.sdk.types import (
     ModelInfo,
     ModelRequest,
     ProviderCaps,
+    SandboxAvailability,
+    SandboxPolicy,
     ToolCall,
     ToolResult,
     ToolSpec,
@@ -119,10 +121,25 @@ class Process(Protocol):
 @runtime_checkable
 class Executor(Protocol):
     name: str  # "local", "worktree", "docker"
-    isolation: Literal["none", "worktree", "container", "vm"]
+    isolation: Literal["none", "worktree", "container", "vm", "os-sandbox"]
 
     async def start(self, req: ExecRequest) -> Process:
         """Launches process and returns active Process handle."""
+        ...
+
+
+@runtime_checkable
+class SandboxBackend(Protocol):
+    """OS process confinement used by the executor seam, independent of a tool or UI."""
+
+    name: str  # e.g. "bwrap" or "seatbelt"
+
+    def available(self) -> SandboxAvailability:
+        """Probe the host and report enforcement; `available=False` must never mean "try unconfined"."""
+        ...
+
+    def wrap(self, req: ExecRequest, policy: SandboxPolicy) -> ExecRequest:
+        """Return a new request whose command is confined by this backend; never mutate `req`."""
         ...
 
 

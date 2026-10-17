@@ -1,0 +1,25 @@
+name: present_artifact
+kind: web
+summary: An artifact created in the workspace is explicitly marked as the deliverable and its durable event reaches the real web client.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: allow
+  kernel.security.destructive_blocking: false
+turns:
+  - prompt: "Create a short final report artifact, then present it with the caption Final report."
+expect:
+  tools_called: [create_artifact, present]
+  files:
+    .harness/artifacts/final.md: {contains: "# Final report"}
+  event_types_include: [deliverable.presented, workspace.changes, turn.completed]
+  dom_turns_completed: true
+  dom_plugin_modules_served: true
+  dom_deliverable:
+    kind: artifact
+    path: .harness/artifacts/final.md
+    url: /artifacts/final.md
+    sandboxed: true
+  dom_artifact_tab_active: true
+  timeline_contains: ["Final report", "Artifact 'final.md' created successfully", "Presented final.md — Final report"]
+  event_types_exclude: [turn.error, turn.cancelled, approval.required]
+  no_console_errors: true

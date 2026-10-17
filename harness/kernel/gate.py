@@ -13,7 +13,8 @@ from typing import Any, Literal
 
 from harness.kernel.approvals import ApprovalBroker
 from harness.kernel.bus import EventBus
-from harness.kernel.context import HookContextImpl, PolicyContextImpl
+from harness.kernel.context import HookContextImpl, PolicyContextImpl, append_and_publish_record
+from harness.kernel.interactions import InteractionBroker
 from harness.kernel.jail import PathOutsideWorkspace, WorkspaceJail
 from harness.kernel.registry import PluginRegistry
 from harness.kernel.sanitizer import sanitize_output
@@ -22,7 +23,15 @@ from harness.kernel.settings import SettingsStore, validate_schema_value
 from harness.sdk.context import PolicyContext, ToolContext
 from harness.sdk.contracts import Executor, Policy, Process
 from harness.sdk.errors import CapabilityDenied, SettingsValidationError
-from harness.sdk.events import Event, ToolCallResult, ToolCallStarted, ToolDecision, ToolOutputDelta, UiCard
+from harness.sdk.events import (
+    Event,
+    EventPayload,
+    ToolCallResult,
+    ToolCallStarted,
+    ToolDecision,
+    ToolOutputDelta,
+    UiCard,
+)
 from harness.sdk.types import (
     RISK_ORDER,
     Action,
@@ -99,68 +108,67 @@ class WorkspaceJailPolicy(Policy):
 
 
 class PermissionModesPolicy(Policy):
-    """Enforces plan, allow, ask, and bypass permission modes."""
+    """Fallback copy of the plugin policy for kernels booted without the policy plugin.
+
+    The built-in plugin is preferred when registered; this fallback keeps small embedders and tests using the
+    same fail-closed sandbox rules. Keep the two policy implementations in lockstep (the flow test pins the
+    important decisions).
+    """
 
     name = "permission_modes"
-    order = 900  # Evaluated towards the end of policy chain
+    order = 900
 
-    def __init__(self, settings: SettingsStore):
+    def __init__(self, settings: SettingsStore, sandbox: Any = None):
         self.settings = settings
+        self.sandbox = sandbox
 
     async def evaluate(self, call: ToolCall, spec: ToolSpec, ctx: PolicyContext) -> Decision:
-        # Check if session principal holds approval:bypass capability
-        # Note: approval:bypass is NEVER grantable to plugins (clamped by registry)
-        if Capability.APPROVAL_BYPASS in ctx.capabilities:
-            return Decision(action=Action.ALLOW, policy=self.name)
-
         mode = self.settings.get("kernel.security.permission_mode", "ask")
+        destructive_blocking = self.settings.get("kernel.security.destructive_blocking", True)
+        sandbox_mode = self.settings.get("kernel.sandbox.mode", "off")
+        exec_in_sandbox = self.settings.get("kernel.security.exec_in_sandbox", "ask")
+        sandbox_status = self.sandbox.status() if self.sandbox is not None else {
+            "mode": sandbox_mode,
+            "backend": "none",
+            "available": False,
+            "enforcement": "none",
+            "reason": "No sandbox service is registered.",
+            "network": False,
+        }
+        uses_executor = spec.risk_class == RiskClass.EXEC or "exec" in spec.capabilities
+        metadata = {"sandbox": sandbox_status} if uses_executor else {}
         risk = spec.risk_class
+        capability_bypass = Capability.APPROVAL_BYPASS in getattr(ctx, "capabilities", frozenset())
 
-        if mode == "plan":
-            if risk != RiskClass.READ:
-                return Decision(
-                    action=Action.DENY,
-                    reason=f"Permission mode 'plan' denies non-read action '{spec.name}' (risk: {risk.value})",
-                    risk=risk,
-                    policy=self.name,
-                )
-            return Decision(action=Action.ALLOW, policy=self.name)
+        if mode == "plan" and not capability_bypass and risk in (RiskClass.WRITE, RiskClass.EXEC, RiskClass.DESTRUCTIVE):
+            return Decision(action=Action.DENY, reason=f"Execution of '{call.name}' denied in plan mode.", risk=risk, policy=self.name, metadata=metadata)
 
-        if mode == "allow":
-            if risk == RiskClass.DESTRUCTIVE:
-                return Decision(
-                    action=Action.ASK,
-                    reason=f"Destructive action '{spec.name}' requires approval in 'allow' mode",
-                    risk=risk,
-                    policy=self.name,
-                )
-            return Decision(action=Action.ALLOW, policy=self.name)
-
-        if mode == "ask":
-            if risk == RiskClass.READ:
-                return Decision(action=Action.ALLOW, policy=self.name)
-
-            if risk == RiskClass.DESTRUCTIVE:
-                destructive_blocking = self.settings.get(
-                    "kernel.security.destructive_blocking", True
-                )
-                if destructive_blocking:
-                    return Decision(
-                        action=Action.DENY,
-                        reason=f"Destructive action '{spec.name}' blocked by kernel security policy",
-                        risk=risk,
-                        policy=self.name,
-                    )
-
+        # A principal with approval:bypass can skip interactive approval, never a required OS boundary.
+        if uses_executor and sandbox_mode == "required" and not sandbox_status.get("available"):
             return Decision(
-                action=Action.ASK,
-                reason=f"Action '{spec.name}' (risk: {risk.value}) requires user approval in 'ask' mode",
+                action=Action.DENY,
+                reason=f"sandbox unavailable on this host: {sandbox_status.get('reason') or 'no OS sandbox backend is available'}",
                 risk=risk,
                 policy=self.name,
+                metadata=metadata,
             )
+        if sandbox_mode not in ("required", "preferred", "off") and uses_executor:
+            return Decision(action=Action.DENY, reason=f"Invalid sandbox mode {sandbox_mode!r}; refusing executor call.", risk=risk, policy=self.name, metadata=metadata)
 
-        return Decision(action=Action.ALLOW, policy=self.name)
+        if mode == "bypass" or capability_bypass:
+            return Decision(action=Action.ALLOW, policy=self.name, metadata=metadata)
+        if risk == RiskClass.DESTRUCTIVE and destructive_blocking:
+            return Decision(action=Action.DENY, reason=f"Destructive action '{call.name}' blocked by security policy.", risk=risk, policy=self.name, metadata=metadata)
 
+        if uses_executor and sandbox_mode == "preferred" and not sandbox_status.get("available"):
+            if mode != "bypass" and not capability_bypass:
+                detail = sandbox_status.get("reason") or "no OS sandbox backend is available"
+                return Decision(action=Action.ASK, reason=f"Sandbox unavailable; approve unconfined execution for '{call.name}': {detail}", risk=risk, policy=self.name, metadata=metadata)
+        if uses_executor and mode == "ask" and sandbox_mode != "off" and sandbox_status.get("available") is True and exec_in_sandbox == "allow":
+            return Decision(action=Action.ALLOW, policy=self.name, metadata=metadata)
+        if mode == "ask" and risk in (RiskClass.WRITE, RiskClass.EXEC, RiskClass.DESTRUCTIVE):
+            return Decision(action=Action.ASK, reason=f"Approval required for '{call.name}' ({risk.value}).", risk=risk, policy=self.name, metadata=metadata)
+        return Decision(action=Action.ALLOW, policy=self.name, metadata=metadata)
 
 class ToolContextImpl(ToolContext):
     """ToolContext provided to tool handlers during execution."""
@@ -174,23 +182,72 @@ class ToolContextImpl(ToolContext):
         executor: Executor | None,
         bus: EventBus | None = None,
         session_id: str = "",
+        turn_id: str | None = None,
+        turn_state: dict[str, Any] | None = None,
+        log: Any = None,
         plugin_name: str = "",
         inbox: Any = None,
+        job_service: Any = None,
+        interactions: InteractionBroker | None = None,
+        turn_cancel_event: asyncio.Event | None = None,
     ):
-        # WS-03 cooperative timeout state, filled in by the gate around the handler call.
+        # WS-03 cooperative timeout state, filled in by the gate around the handler call. This is deliberately
+        # separate from the turn-level cancellation signal: timing out one tool must not cancel the whole turn.
         self.deadline: float | None = None
         self.cancel_event = asyncio.Event()
+        self._turn_cancel_event = turn_cancel_event
         self._output_buffer: list[str] = []
         self._live_procs: list[Any] = []
         self.call_id = call_id
+        self.session_id = session_id
+        self.turn_id = turn_id
+        self.turn_state = turn_state if turn_state is not None else {}
         self.workspace = workspace
         self.data_dir = data_dir
         self.capabilities = capabilities
         self._executor = executor
         self._bus = bus
         self._session_id = session_id
+        self._turn_id = turn_id
+        self._log = log
         self._plugin_name = plugin_name
         self._inbox = inbox
+        self._job_service = job_service
+        self.jobs = (
+            job_service.for_session(session_id, turn_id)
+            if job_service is not None and session_id
+            else None
+        )
+        self._interactions = interactions
+
+    def remaining_time(self) -> float:
+        """Seconds until the gate's handler deadline, or infinity outside a gated call."""
+        if self.deadline is None:
+            return float("inf")
+        try:
+            return max(0.0, self.deadline - asyncio.get_running_loop().time())
+        except RuntimeError:
+            return 0.0
+
+    async def ask_user(
+        self,
+        questions: list[dict[str, Any]],
+        timeout_s: float | None = None,
+    ) -> dict[str, Any] | None:
+        """Wait for the current interactive client to answer a structured question."""
+        if self._interactions is None or self.remaining_time() <= 0:
+            return None
+        remaining = self.remaining_time()
+        requested_timeout = 1800.0 if timeout_s is None else max(0.0, float(timeout_s))
+        effective_timeout = min(remaining, requested_timeout)
+        return await self._interactions.ask(
+            "question",
+            {"questions": questions, "call_id": self.call_id},
+            timeout_s=effective_timeout,
+            session_id=self._session_id,
+            turn_id=self._turn_id,
+            cancel_event=self._turn_cancel_event,
+        )
 
     @property
     def executor(self) -> Executor:
@@ -244,6 +301,7 @@ class ToolContextImpl(ToolContext):
             evt = Event(
                 type="tool.output.delta",
                 session_id=self._session_id,
+                turn_id=self._turn_id,
                 data=ToolOutputDelta(
                     call_id=self.call_id,
                     stream=stream,
@@ -252,42 +310,91 @@ class ToolContextImpl(ToolContext):
             )
             self._bus.publish(evt)
 
+    async def emit_record(
+        self,
+        payload: EventPayload,
+        *,
+        content: str,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Persist a durable plugin fact before notifying frontends."""
+        return await append_and_publish_record(
+            log=self._log,
+            bus=self._bus,
+            session_id=self._session_id,
+            turn_id=self._turn_id,
+            payload=payload,
+            content=content,
+            metadata=metadata,
+        )
+
     def background(self, proc: Process, label: str = "") -> str:
-        """Registers a process with background inbox and returns task_id."""
+        """Registers a process with the durable jobs service when available, else the legacy inbox."""
+        if self.jobs is not None and self._inbox is self._job_service:
+            return self.jobs.register_process(proc, label=label)
         import uuid
+
         task_id = f"task_{uuid.uuid4().hex[:8]}"
         if self._inbox is not None:
-            self._inbox.register_task(task_id, proc, label=label)
+            try:
+                self._inbox.register_task(task_id, proc, label=label, session_id=self._session_id)
+            except TypeError:
+                self._inbox.register_task(task_id, proc, label=label)
         return task_id
 
     def get_task(self, task_id: str) -> dict[str, Any] | None:
-        """Gets status dictionary for a registered background task."""
+        """Gets status dictionary for a registered task or job."""
+        if self.jobs is not None:
+            return self.jobs.get_task(task_id)
         if self._inbox is not None:
-            return self._inbox.get_status(task_id)
+            try:
+                return self._inbox.get_status(task_id, session_id=self._session_id)
+            except TypeError:
+                return self._inbox.get_status(task_id)
         return None
 
     def list_tasks(self) -> list[dict[str, Any]]:
-        """Lists all registered background tasks."""
+        """Lists tasks/jobs in this session."""
+        if self.jobs is not None:
+            return self.jobs.list_tasks()
         if self._inbox is not None:
-            return self._inbox.list_tasks()
+            try:
+                return self._inbox.list_tasks(session_id=self._session_id)
+            except TypeError:
+                return self._inbox.list_tasks()
         return []
 
     async def kill_task(self, task_id: str) -> bool:
-        """Terminates a running background task."""
+        """Terminates a registered task or job."""
+        if self.jobs is not None:
+            return await self.jobs.kill_task(task_id)
         if self._inbox is not None:
-            return await self._inbox.kill(task_id)
+            try:
+                return await self._inbox.kill(task_id, session_id=self._session_id)
+            except TypeError:
+                return await self._inbox.kill(task_id)
         return False
 
     async def send_task_input(self, task_id: str, text: str) -> bool:
-        """Sends input text to a running background task."""
+        """Sends input text to a running background task or job."""
+        if self.jobs is not None:
+            return await self.jobs.send_task_input(task_id, text)
         if self._inbox is not None:
-            return await self._inbox.send_input(task_id, text)
+            try:
+                return await self._inbox.send_input(task_id, text, session_id=self._session_id)
+            except TypeError:
+                return await self._inbox.send_input(task_id, text)
         return False
 
     async def wait_task(self, task_id: str, timeout_s: float | None = None) -> Any:
-        """Waits for background task to complete and returns exit code."""
+        """Waits for a background task/job to complete and returns its exit code."""
+        if self.jobs is not None:
+            return await self.jobs.wait_task(task_id, timeout_s=timeout_s)
         if self._inbox is not None:
-            return await self._inbox.wait_task(task_id, timeout_s=timeout_s)
+            try:
+                return await self._inbox.wait_task(task_id, timeout_s=timeout_s, session_id=self._session_id)
+            except TypeError:
+                return await self._inbox.wait_task(task_id, timeout_s=timeout_s)
         return None
 
 
@@ -314,10 +421,21 @@ class PolicyGate:
         self.approvals = approvals
         self.bus = bus
         self.inbox = inbox
+        get_service = getattr(registry, "get_service", None)
+        self.jobs = get_service("jobs") if callable(get_service) else None
 
         # Built-in kernel policies
         self.jail_policy = WorkspaceJailPolicy(jail)
-        self.permission_modes_policy = PermissionModesPolicy(settings)
+        # The policy plugin is the source when installed; this gate-local version is only the fallback for an
+        # embedder that booted without it. It used to be appended *in addition* to the registered policy, which
+        # duplicated ASK reasons and meant two independent implementations could disagree.
+        registered_modes = next(
+            (p for p, _plugin in registry.policies if getattr(p, "name", None) == "permission_modes"),
+            None,
+        )
+        self.permission_modes_policy = registered_modes or PermissionModesPolicy(
+            settings, sandbox=registry.sandbox
+        )
 
     @property
     def specs(self) -> dict[str, ToolSpec]:
@@ -353,9 +471,11 @@ class PolicyGate:
         call: ToolCall,
         options: dict[str, Any] | None = None,
         session_id: str = "",
+        turn_id: str | None = None,
         principal_capabilities: frozenset[Capability] = frozenset(),
         turn_state: dict[str, Any] | None = None,
         log: Any = None,
+        cancel_event: asyncio.Event | None = None,
     ) -> ToolResult:
         """Executes a single tool call through the complete 9-step PolicyGate pipeline.
 
@@ -444,8 +564,11 @@ class PolicyGate:
         hook_ctx = HookContextImpl(
             session_id=session_id,
             workspace=self.registry.workspace,
+            turn_id=turn_id,
             turn_state=turn_state if turn_state is not None else {},
             bus=self.bus,
+            log=log,
+            settings=self.settings,
         )
         for hook, _h_plugin in self.registry.hooks:
             is_pre = getattr(hook, "event", None) == HookEvent.PRE_TOOL_USE or (
@@ -521,7 +644,10 @@ class PolicyGate:
         # Gather all policies: jail (order 10) -> registered policies -> modes (order 900)
         policies: list[Policy] = [self.jail_policy]
         for p, _ in self.registry.policies:
-            policies.append(p)
+            # The gate chooses one `permission_modes` implementation above (registered plugin or fallback), then
+            # appends it once at the end. The previous chain appended both a registered policy and its fallback.
+            if getattr(p, "name", None) != "permission_modes":
+                policies.append(p)
         policies.append(self.permission_modes_policy)
         policies.sort(key=lambda p: getattr(p, "order", 500))
 
@@ -556,6 +682,7 @@ class PolicyGate:
             if dec.risk and _risk_rank(dec.risk) > _risk_rank(effective_risk):
                 effective_risk = dec.risk
 
+        decision_metadata = next((d.metadata for d in decisions if d.metadata), {})
         effective_risk_val = effective_risk.value if hasattr(effective_risk, "value") else str(effective_risk)
 
         # Policy combination logic:
@@ -580,6 +707,7 @@ class PolicyGate:
                     "policy": first_deny.policy or "policy",
                     "risk": effective_risk_val,
                     "reason": first_deny.reason,
+                    **({"metadata": decision_metadata} if decision_metadata else {}),
                 },
             )
             if self.bus:
@@ -594,6 +722,7 @@ class PolicyGate:
                             policy=first_deny.policy or "policy",
                             risk=effective_risk_val,
                             reason=first_deny.reason,
+                            metadata=decision_metadata or None,
                         ),
                         record=decision_rec,
                     )
@@ -608,7 +737,7 @@ class PolicyGate:
                             is_error=True,
                             duration_ms=dur_ms,
                             preview=err_msg[:2048],
-                            metadata={"policy": first_deny.policy},
+                            metadata={"policy": first_deny.policy, **decision_metadata},
                         ),
                     )
                 )
@@ -617,6 +746,7 @@ class PolicyGate:
         # ---------------------------------------------------------
         # Step 4 & 5: Approvals (when ASK is returned)
         # ---------------------------------------------------------
+        approved_by_human = False
         if asks:
             reasons = "; ".join(a.reason for a in asks if a.reason)
             decision_rec = await self._record(
@@ -630,6 +760,7 @@ class PolicyGate:
                     "policy": asks[0].policy or "policy",
                     "risk": effective_risk_val,
                     "reason": reasons,
+                    **({"metadata": decision_metadata} if decision_metadata else {}),
                 },
             )
             if self.bus:
@@ -644,6 +775,7 @@ class PolicyGate:
                             policy=asks[0].policy or "policy",
                             risk=effective_risk_val,
                             reason=reasons,
+                            metadata=decision_metadata or None,
                         ),
                         record=decision_rec,
                     )
@@ -680,11 +812,12 @@ class PolicyGate:
                                 is_error=True,
                                 duration_ms=dur_ms,
                                 preview=err_msg[:2048],
-                                metadata={"approval": "denied"},
+                                metadata={"approval": "denied", **decision_metadata},
                             ),
                         )
                     )
                 return ToolResult.error(err_msg)
+            approved_by_human = True
 
         # Action is allowed. The record is written whether or not a subscriber is attached — the log is
         # not the bus's copy of itself.
@@ -700,6 +833,7 @@ class PolicyGate:
                     "policy": "policy_gate",
                     "risk": effective_risk_val,
                     "reason": "OK",
+                    **({"metadata": decision_metadata} if decision_metadata else {}),
                 },
             )
             if self.bus:
@@ -714,6 +848,7 @@ class PolicyGate:
                             policy="policy_gate",
                             risk=effective_risk_val,
                             reason="OK",
+                            metadata=decision_metadata or None,
                         ),
                         record=allow_rec,
                     )
@@ -736,6 +871,17 @@ class PolicyGate:
                 executor = self.registry.executors["local"][0]
             else:
                 executor = next(iter(self.registry.executors.values()))[0]
+        sandbox_service = getattr(self.registry, "sandbox", None)
+        if executor is not None and sandbox_service is not None:
+            bypass_mode = self.settings.get("kernel.security.permission_mode", "ask") == "bypass"
+            executor = sandbox_service.wrap_executor(
+                executor,
+                allow_unconfined=(
+                    approved_by_human
+                    or bypass_mode
+                    or Capability.APPROVAL_BYPASS in principal_capabilities
+                ),
+            )
         tool_ctx = ToolContextImpl(
             call_id=call_id,
             workspace=self.registry.workspace,
@@ -744,8 +890,14 @@ class PolicyGate:
             executor=executor,
             bus=self.bus,
             session_id=session_id,
+            turn_id=turn_id,
+            turn_state=turn_state,
+            log=log,
             plugin_name=plugin_name,
             inbox=self.inbox,
+            job_service=self.jobs,
+            interactions=self.approvals.interactions,
+            turn_cancel_event=cancel_event,
         )
 
         # ---------------------------------------------------------

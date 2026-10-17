@@ -515,4 +515,3 @@ def test_model_picker_reads_model_row_fields_and_groups_by_provider_status():
         assert status in picker, f"picker must have a group for status {status!r}"
     assert "Unconfigured (Requires API Key)" not in app_js, "the old unreachable optgroup is gone"
     assert "m.configured !== false" not in picker, "status is derived by the kernel, not re-derived client-side"
-

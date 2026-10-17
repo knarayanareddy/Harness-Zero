@@ -12,6 +12,9 @@
 //      NEW_SESSION=1 (click New Session first), APPROVE=1 (click approve when asked), MODEL
 import { JSDOM, VirtualConsole } from 'jsdom';
 import path from 'node:path';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import { pathToFileURL } from 'node:url';
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8765';
 const STATIC = process.env.STATIC || path.resolve('harness/frontends/web/static');
@@ -20,6 +23,7 @@ const WAIT_MS = parseInt(process.env.WAIT_MS || '6000', 10);
 const NEW_SESSION = process.env.NEW_SESSION === '1';
 const RELOAD = process.env.RELOAD === '1'; // simulate a page refresh on an existing session: no clicks, no prompts
 const APPROVE = process.env.APPROVE === '1';
+const QUESTION_ANSWERS = process.env.QUESTION_ANSWERS ? JSON.parse(process.env.QUESTION_ANSWERS) : [];
 const MODEL = process.env.MODEL || '';
 const MODEL_PROVIDER = process.env.MODEL_PROVIDER || '';
 const SETTINGS_PROBE = process.env.SETTINGS_PROBE === '1';
@@ -75,11 +79,36 @@ g.fetch = async (url, opts = {}) => {
 window.fetch = g.fetch;
 function safeJson(s) { try { return JSON.parse(String(s)); } catch { return String(s).slice(0, 200); } }
 
+// `loadPluginModules()` normally relies on browser ESM importing the kernel-advertised HTTP URL. Node cannot
+// import `http:` modules, so this DOM lane fetches those exact bytes and rewrites their shipped `/static/` imports
+// to local file URLs. The app receives this hook only in the isolated test process; browsers keep native import().
+const pluginModuleDir = await mkdtemp(path.join(os.tmpdir(), 'harness-plugin-ui-'));
+g.__harnessPluginModuleLoader = async (entry) => {
+  const response = await g.fetch(entry.url);
+  if (!response.ok) throw new Error(`plugin module fetch failed: ${entry.url} -> ${response.status}`);
+  const staticRoot = path.resolve(STATIC);
+  const source = await response.text();
+  const rewritten = source.replace(/(['"])\/static\/([^'"]+)\1/g, (_match, quote, relative) => {
+    const target = path.resolve(staticRoot, relative);
+    if (target !== staticRoot && !target.startsWith(`${staticRoot}${path.sep}`)) {
+      throw new Error(`plugin import escaped the shipped static tree: ${relative}`);
+    }
+    return `${quote}${pathToFileURL(target).href}${quote}`;
+  });
+  const filename = path.join(pluginModuleDir, `${String(entry.plugin || 'plugin').replace(/[^a-z0-9_-]/gi, '_')}.mjs`);
+  await writeFile(filename, rewritten, 'utf8');
+  return import(pathToFileURL(filename).href);
+};
+window.__harnessPluginModuleLoader = g.__harnessPluginModuleLoader;
+
 // EventSource polyfill with browser semantics: named frames -> addEventListener(type); unnamed -> onmessage.
 const sseSeen = [];
 let lastTerminal = 0; // count of turn.completed/error/cancelled frames observed on the wire
 let completedOk = 0;  // count of turn.completed only
 let approvalsSeen = [];
+let questionsSeen = [];
+let questionAnswersSubmitted = 0;
+let questionWaitingSeen = false;
 class ES {
   constructor(url) {
     this.url = String(url).startsWith('http') ? String(url) : `${BASE}${url}`;
@@ -117,6 +146,7 @@ class ES {
             if (['turn.completed', 'turn.error', 'turn.cancelled'].includes(env.type)) lastTerminal++;
             if (env.type === 'turn.completed') completedOk++;
             if (env.type === 'approval.required') approvalsSeen.push(env.data?.approval_id);
+            if (env.type === 'question.asked') questionsSeen.push(env.data || {});
           } catch {}
           if (type === 'message') this.onmessage?.(ev);
           (this._listeners[type] || []).forEach((f) => f(ev));
@@ -139,6 +169,12 @@ const txt = (sel) => ($(sel)?.textContent || '').replace(/\s+/g, ' ').trim();
 await sleep(1500);
 
 const report = { app_booted: !!window.HarnessApp };
+const securityBadge = $('#permission-mode-badge');
+report.security_badge = securityBadge ? {
+  text: securityBadge.textContent.replace(/\s+/g, ' ').trim(),
+  state: securityBadge.dataset.state || null,
+  title: securityBadge.title || '',
+} : null;
 const timelineText = () => ($('#timeline')?.textContent || '').replace(/\s+/g, ' ').trim();
 if (RELOAD) {
   // What the user sees right after pressing F5 on a daemon that has an active session.
@@ -194,23 +230,67 @@ for (const prompt of PROMPTS) {
       const btn = window.document.querySelector('button[data-action="approve-approval"]') || $('#btn-approval-approve');
       if (btn) { btn.click(); approved++; }
     }
+    const waiting = $('#question-waiting');
+    if (waiting && !waiting.classList.contains('hidden')) questionWaitingSeen = true;
+    if (QUESTION_ANSWERS.length > questionAnswersSubmitted && questionsSeen[questionAnswersSubmitted]) {
+      const questionEvent = questionsSeen[questionAnswersSubmitted];
+      const card = [...window.document.querySelectorAll('.harness-card-question[data-interaction-id]')]
+        .find((item) => item.dataset.interactionId === questionEvent.interaction_id);
+      const form = card?.querySelector('form[data-question-form]');
+      if (form) {
+        const answerMap = QUESTION_ANSWERS[questionAnswersSubmitted] || {};
+        for (const question of questionEvent.questions || []) {
+          const answer = answerMap[question.id] || {};
+          const optionId = typeof answer === 'string' ? answer : (answer.option_id || '');
+          const radio = [...form.querySelectorAll('input[type="radio"][data-question-id]')]
+            .find((input) => input.dataset.questionId === question.id && input.value === optionId);
+          if (radio) radio.checked = true;
+          const custom = [...form.querySelectorAll('input[data-question-custom-id]')]
+            .find((input) => input.dataset.questionCustomId === question.id);
+          if (custom && typeof answer === 'object') custom.value = answer.custom_text || '';
+        }
+        form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+        questionAnswersSubmitted++;
+      }
+    }
     if (lastTerminal > before) { await sleep(300); break; }
   }
   turns.push({ prompt, completed: completedOk > okBefore, terminal: lastTerminal > before, waited_ms: Date.now() - start, approved });
 }
 
 report.turns = turns;
+report.questions_answered = questionAnswersSubmitted;
+report.question_waiting_seen = questionWaitingSeen;
 report.active_session_after = window.HarnessApp?.activeSessionId || null;
 const timeline = $('#timeline');
 report.timeline_children = timeline ? timeline.children.length : null;
 report.timeline_text = timeline ? timeline.textContent.replace(/\s+/g, ' ').trim() : null;
 report.notices = [...window.document.querySelectorAll('#timeline .notice, #timeline [data-level], #timeline .timeline-notice')].map((n) => n.textContent.replace(/\s+/g, ' ').trim()).slice(0, 10);
+const presented = window.document.querySelector('#studio-content-area .deliverable-viewer');
+const presentedFrame = presented?.querySelector('iframe');
+report.deliverable_viewer = presented ? {
+  kind: presented.dataset.kind || null,
+  path: presented.dataset.path || null,
+  url: presentedFrame ? new URL(presentedFrame.src).pathname : null,
+  sandboxed: !!presentedFrame && presentedFrame.getAttribute('sandbox') === '',
+} : null;
+report.artifact_tab_active = window.document.querySelector('.studio-tabs .studio-tab.active')?.getAttribute('data-tab') === 'artifact';
 report.status_text = txt('#status-text') || null;
 if (SETTINGS_PROBE && window.HarnessApp?.openSettings) {
   // The settings panel is schema-driven (`settings.schema` → group tabs); the old ui_smoke lane checked this.
   window.HarnessApp.openSettings();
   await sleep(1500);
   report.settings_groups = [...window.document.querySelectorAll('#settings-content [data-group]')].map((b) => b.textContent.replace(/\s+/g, ' ').trim());
+  const securityTab = [...window.document.querySelectorAll('#settings-content [data-group]')]
+    .find((b) => b.textContent.replace(/\s+/g, ' ').trim() === 'Security & Sandboxing');
+  securityTab?.click();
+  await sleep(200);
+  const presetControl = window.document.getElementById('input_kernel.security.preset');
+  const extraReadableControl = window.document.getElementById('input_kernel.sandbox.extra_readable');
+  report.security_settings_controls = {
+    preset: presetControl ? { tag: presetControl.tagName.toLowerCase(), type: presetControl.getAttribute('data-setting-type') } : null,
+    extra_readable: extraReadableControl ? { tag: extraReadableControl.tagName.toLowerCase(), type: extraReadableControl.getAttribute('data-setting-type') } : null,
+  };
   report.settings_modal_hidden = $('#settings-modal')?.classList.contains('hidden') ?? null; // stylesheets are not fetched in this lane; the cascade is covered by tests/frontends/test_ui_coherence.py
   window.HarnessApp.closeSettings?.();
 }
@@ -237,6 +317,12 @@ if (PLUGINS_PROBE && window.HarnessApp) {
     // report is never written into `golden/`), and the Plugins pane legitimately holds tens of cards — a short
     // slice made a real pane look like it was missing its own row.
     report.panel_texts[id] = pane ? pane.textContent.replace(/\s+/g, ' ').trim().slice(0, 20000) : null;
+  }
+  await click(doc.querySelector('.studio-tabs [data-tab="diffs"]'), 500);
+  const diffButton = doc.querySelector('#panel-diffs .diff-file-button:not(:disabled)');
+  if (diffButton) {
+    await click(diffButton, 500);
+    report.diff_preview = doc.querySelector('#panel-diffs .diff-file-content:not(.hidden)')?.textContent || '';
   }
   await click(doc.querySelector('.studio-tabs [data-tab="plugins"]'), 1200);
   const host = doc.getElementById('panel-plugins');
@@ -297,10 +383,9 @@ if (PLUGINS_PROBE && window.HarnessApp) {
     };
   }
 
-  // Every URL `ui.contributions` advertises is fetched from inside the page. This lane cannot *execute* a
-  // plugin's module (Node's ESM loader will not import over http, and the client's own modules are read from
-  // disk), but it can prove the address the kernel handed the browser is served — which is the half that
-  // broke silently in WS-05b, where the URL pointed into the client's own `/static/` tree and 404'd.
+  // Every URL `ui.contributions` advertises is fetched from inside the page. The loader above executes the
+  // fetched module bytes and resolves their core imports to the shipped client files; this second request keeps
+  // the advertised URL itself covered too (the WS-05b failure was a bad URL that 404'd).
   const modules = (window.HarnessApp?.ui?.client_modules) || [];
   report.client_module_urls = modules.map((entry) => entry.url);
   report.plugin_module_status = {};
@@ -318,6 +403,7 @@ report.sse_events = sseSeen;
 report.submit_bodies = submitBodies;
 report.fetch_log = fetchLog;
 report.console_tail = consoleLog.slice(-15);
+await rm(pluginModuleDir, { recursive: true, force: true });
 console.log(JSON.stringify(report));
 window.HarnessApp?.events?.disconnect?.();
 process.exit(0);

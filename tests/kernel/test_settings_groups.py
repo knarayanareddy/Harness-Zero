@@ -99,7 +99,11 @@ async def test_the_aggregated_schema_groups_by_family_and_carries_owners(kernel)
     assert "Hooks" in groups, f"hook settings have no tab of their own; groups={sorted(groups)}"
     hook_props = {k: v for k, v in props.items() if v["x-ui"].get("owner", "").startswith("hook-")}
     assert hook_props, "the hook plugins' settings vanished from the surface"
-    assert {v["x-ui"]["group"] for v in hook_props.values()} == {"Hooks"}
+    hook_groups = {v["x-ui"]["group"] for v in hook_props.values()}
+    assert hook_groups <= {"Hooks", "Checkpoints"}
+    assert "Hooks" in hook_groups, "hooks without an explicit group use their family tab"
+    checkpoint_props = [v for v in hook_props.values() if v["x-ui"].get("owner") == "hook-checkpoints"]
+    assert checkpoint_props and {v["x-ui"]["group"] for v in checkpoint_props} == {"Checkpoints"}
 
     # The catch-all must stay the *exception*: at most one property from a family we know about.
     dumped = {k for k, v in props.items() if v["x-ui"].get("group") == PLUGIN_TAB_DEFAULT}

@@ -59,9 +59,26 @@ async def test_plugin_rows_are_the_plugin_tree():
 @pytest.mark.asyncio
 async def test_command_rows_are_the_dispatcher_catalogue():
     cat = await _catalog()
-    assert [c["name"] for c in cat["commands"]] == list(BUILTIN_COMMANDS)
+    names = [row["name"] for row in cat["commands"]]
+    assert names[: len(BUILTIN_COMMANDS)] == list(BUILTIN_COMMANDS)
+    plugin_rows = {
+        row["name"]: row
+        for row in cat["commands"]
+        if row["plugin"] == "hook-checkpoints"
+    }
+    assert {
+        "plugins.hook-checkpoints.changes",
+        "plugins.hook-checkpoints.diff",
+        "plugins.hook-checkpoints.restore",
+    } <= set(plugin_rows)
+    assert plugin_rows["plugins.hook-checkpoints.changes"]["args"][0]["name"] == "session_id"
+    assert all(row["exposed"] and row["handler"].startswith("harness/plugins/") for row in plugin_rows.values())
     for row in cat["commands"]:
-        assert row["handler"].endswith(row["name"].replace(".", "_").replace("-", "_")), row
+        if row["plugin"]:
+            assert row["name"].startswith(f"plugins.{row['plugin']}.")
+            assert row["handler"].startswith("harness/plugins/"), row
+        else:
+            assert row["handler"].endswith(row["name"].replace(".", "_").replace("-", "_")), row
         if not row["alias"]:
             assert row["summary"], f"{row['name']} has no docstring — the command table would be blank"
 
@@ -110,6 +127,28 @@ async def test_web_client_calls_only_registered_commands():
     cat = await _catalog()
     assert cat["ui"]["unknown_client_commands"] == []
     assert "submit_turn" in cat["ui"]["client_commands"]
+
+
+@pytest.mark.asyncio
+async def test_plugin_owned_panels_and_renderers_are_in_the_static_ui_contract():
+    cat = await _catalog()
+    panel = next(row for row in cat["ui"]["panels"] if row["id"] == "diffs")
+    assert panel["plugin"] == "hook-checkpoints"
+    assert panel["command"] == "plugins.hook-checkpoints.changes"
+
+    renderers = {(row["plugin"], row["kind"]) for row in cat["ui"]["plugin_record_renderers"]}
+    assert {
+        ("hook-checkpoints", "workspace.changes"),
+        ("hook-checkpoints", "checkpoint.restored"),
+        ("tools-deliverables", "deliverable.presented"),
+    } <= renderers
+    module_owners = {row["plugin"] for row in cat["ui"]["client_modules"]}
+    assert {"hook-checkpoints", "tools-deliverables"} <= module_owners
+
+    contract = (REPO_ROOT / CATALOG_DIR / "UI_CONTRACT.md").read_text(encoding="utf-8")
+    assert "### Plugin-owned record renderers" in contract
+    assert "`deliverable.presented`" in contract
+    assert "`workspace.changes`" in contract
 
 
 @pytest.mark.asyncio

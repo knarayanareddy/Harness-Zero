@@ -127,6 +127,23 @@ async def test_create_artifact_tool_traversal(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_create_artifact_refuses_symlinked_harness_artifact_directory(tmp_path: Path):
+    workspace = tmp_path / "ws"
+    private = workspace / ".harness" / "private"
+    private.mkdir(parents=True)
+    (private / "secret.md").write_text("keep", encoding="utf-8")
+    (workspace / ".harness" / "artifacts").symlink_to(private, target_is_directory=True)
+    ctx = MagicMock()
+    ctx.data_dir = workspace / ".harness" / "tools" / "create_artifact"
+    ctx.workspace = workspace
+
+    result = await handle_create_artifact({"name": "secret.md", "content": "overwrite"}, ctx)
+
+    assert result.is_error
+    assert (private / "secret.md").read_text(encoding="utf-8") == "keep"
+
+
+@pytest.mark.asyncio
 async def test_artifact_plugins_registration(tmp_path: Path):
     """Both stores.fs_artifacts and tools.artifacts register cleanly with PluginRegistry."""
     bus = EventBus()

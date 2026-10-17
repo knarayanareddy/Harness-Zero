@@ -52,6 +52,19 @@ def test_ids_become_ordinals_in_first_seen_order(tmp_path: Path):
     assert n.events(events) == out, "normalisation is deterministic: same input, same ordinals"
 
 
+def test_shadow_checkpoint_endpoints_share_stable_sha_ordinals(tmp_path: Path):
+    n = _norm(tmp_path)
+    base = "1" * 40
+    head = "2" * 40
+    normalized = n.value({"base": base, "head": head, "checkpoint_id": base, "sha": head})
+    assert normalized == {
+        "base": "sha#1",
+        "checkpoint_id": "sha#1",
+        "head": "sha#2",
+        "sha": "sha#2",
+    }
+
+
 def test_an_id_in_prose_is_relabelled_exactly_like_the_key_version(tmp_path: Path):
     # `_HEX_ID` in `text()` exists because ids show up inside messages, tool output and notices, not just
     # under `call_id` keys. Both routes must consult the same ordinal table, or a golden reads as two
