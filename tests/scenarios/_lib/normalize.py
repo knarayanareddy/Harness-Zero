@@ -91,7 +91,10 @@ class Normalizer:
         # macOS resolves its temp root through /var (a symlink), while error messages may report
         # the canonical /private/var path. Normalize both spellings of the active root, not just /tmp.
         temp_root = tempfile.gettempdir()
-        for root in {temp_root, str(Path(temp_root).resolve())}:
+        roots = {temp_root, str(Path(temp_root).resolve())}
+        # The alias may be a suffix of the canonical /private/var path; replace the longer spelling first
+        # so it cannot leave a literal /private prefix ahead of the <tmp> token.
+        for root in sorted(roots, key=len, reverse=True):
             for separator in {"/", os.sep}:
                 prefix = root.rstrip("/\\") + separator
                 self._paths.append((prefix, "<tmp>/"))

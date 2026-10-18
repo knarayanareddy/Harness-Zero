@@ -83,6 +83,25 @@ def test_active_system_temp_root_is_normalized(tmp_path: Path):
     assert n.text(f"outside the jail: {raw_temp_root}/etc/hostname") == "outside the jail: <tmp>/etc/hostname"
 
 
+def test_macos_temp_alias_is_replaced_after_its_longer_canonical_path(tmp_path: Path, monkeypatch):
+    raw_root = "/var/folders/example/T"
+    canonical_root = f"/private{raw_root}"
+    real_resolve = Path.resolve
+
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: raw_root)
+
+    def resolve_with_macos_temp_symlink(path: Path, *args, **kwargs) -> Path:
+        if str(path) == raw_root:
+            return Path(canonical_root)
+        return real_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", resolve_with_macos_temp_symlink)
+    n = _norm(tmp_path)
+
+    assert n.text(f"outside the jail: {canonical_root}/etc/hostname") == "outside the jail: <tmp>/etc/hostname"
+    assert n.text(f"outside the jail: {raw_root}/etc/hostname") == "outside the jail: <tmp>/etc/hostname"
+
+
 def test_a_second_session_in_the_same_run_gets_its_own_label(tmp_path: Path):
     n = _norm(tmp_path)
     assert n.value("session_0f2b1c9d", "session_id") == "<session>"
