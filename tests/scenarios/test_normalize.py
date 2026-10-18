@@ -7,6 +7,7 @@ leaks into prose still shows up as a stable token and an id-swap between two run
 """
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 from _lib.normalize import LIVE_NOISE, Normalizer, collapse_deltas
@@ -17,22 +18,40 @@ def _norm(tmp_path: Path, **kw) -> Normalizer:
     return Normalizer(workspace=tmp_path / "ws", session_id="session_0f2b1c9d", **kw)
 
 
-def test_bwrap_unavailability_reason_is_host_independent(tmp_path: Path):
+def test_platform_sandbox_probe_details_are_host_independent(tmp_path: Path):
     n = _norm(tmp_path)
-    missing = {
+    linux = {
         "backend": "bwrap",
         "available": False,
-        "reason": "bubblewrap (bwrap) not found on PATH; install bubblewrap to enable process confinement",
-    }
-    blocked = {
-        "backend": "bwrap",
-        "available": False,
+        "enforcement": "none",
+        "mode": "preferred",
+        "network": False,
         "reason": "bwrap is present but the required user/PID/network namespaces are unavailable: permission denied",
     }
+    macos = {
+        "backend": "seatbelt",
+        "available": True,
+        "enforcement": "full",
+        "mode": "preferred",
+        "network": False,
+        "reason": "sandbox-exec probe succeeded",
+    }
+    expected = {
+        "backend": "<platform sandbox>",
+        "available": "<host-dependent>",
+        "enforcement": "<host-dependent>",
+        "mode": "preferred",
+        "network": False,
+        "reason": "<host-dependent>",
+    }
 
-    assert n.value({"sandbox": missing})["sandbox"]["reason"] == "<bwrap unavailable on this host>"
-    assert n.value({"sandbox": blocked})["sandbox"]["reason"] == "<bwrap unavailable on this host>"
-    assert n.value({"reason": missing["reason"]})["reason"] == missing["reason"]
+    assert n.value({"sandbox": linux})["sandbox"] == expected
+    assert n.value({"sandbox": macos})["sandbox"] == expected
+    # An explicitly disabled backend is configuration, not a runtime probe result.
+    disabled = {"backend": "none", "available": False, "mode": "off", "reason": "Sandbox mode is off."}
+    assert n.value({"sandbox": disabled})["sandbox"] == disabled
+    # Reason strings outside the structured sandbox capability remain ordinary observable text.
+    assert n.value({"reason": linux["reason"]})["reason"] == linux["reason"]
 
 
 def test_request_goldens_ignore_host_only_tools_without_mutating_requests():
@@ -52,6 +71,16 @@ def test_paths_and_the_session_id_become_placeholders(tmp_path: Path):
     assert n.text(f"outside the jail: {tmp_path}/secret.txt") == "outside the jail: <ws-parent>/secret.txt"
     assert n.text("session_0f2b1c9d resumed") == "<session> resumed"
     assert n.text("/tmp/out.log") == "<tmp>/out.log"
+
+
+def test_active_system_temp_root_is_normalized(tmp_path: Path):
+    n = _norm(tmp_path)
+    temp_root = Path(tempfile.gettempdir()).resolve()
+
+    assert n.text(f"outside the jail: {temp_root / 'etc' / 'hostname'}") == "outside the jail: <tmp>/etc/hostname"
+    # When /var is a symlink, both the reported spelling and its canonical spelling are accepted.
+    raw_temp_root = tempfile.gettempdir()
+    assert n.text(f"outside the jail: {raw_temp_root}/etc/hostname") == "outside the jail: <tmp>/etc/hostname"
 
 
 def test_a_second_session_in_the_same_run_gets_its_own_label(tmp_path: Path):

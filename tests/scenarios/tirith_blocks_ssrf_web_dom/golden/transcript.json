@@ -51,12 +51,12 @@
       "call_id": "call#1",
       "metadata": {
         "sandbox": {
-          "available": false,
-          "backend": "bwrap",
-          "enforcement": "none",
+          "available": "<host-dependent>",
+          "backend": "<platform sandbox>",
+          "enforcement": "<host-dependent>",
           "mode": "preferred",
           "network": false,
-          "reason": "<bwrap unavailable on this host>"
+          "reason": "<host-dependent>"
         }
       },
       "plugin": "shell-tools",

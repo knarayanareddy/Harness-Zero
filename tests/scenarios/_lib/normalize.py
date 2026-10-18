@@ -4,13 +4,16 @@ Rules (applied recursively to dicts/lists/strings):
   * keys that are pure noise are dropped (timestamps, durations, costs, byte sizes)
   * ids are replaced by stable ordinals in first-seen order (``evt#1``, ``call#1`` …)
   * absolute workspace / tmp paths become ``<ws>`` / ``<tmp>``
+  * active sandbox-probe details become a host-independent placeholder
   * the active session id becomes ``<session>``
 The same normaliser is used for both lanes so a value cannot be "stable" in one
 golden and "noise" in the other.
 """
 from __future__ import annotations
 
+import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -85,6 +88,13 @@ class Normalizer:
             self._paths.append((raw, token))
         self._paths.append(("/tmp/", "<tmp>/"))
         self._paths.append(("/private/tmp/", "<tmp>/"))
+        # macOS resolves its temp root through /var (a symlink), while error messages may report
+        # the canonical /private/var path. Normalize both spellings of the active root, not just /tmp.
+        temp_root = tempfile.gettempdir()
+        for root in {temp_root, str(Path(temp_root).resolve())}:
+            for separator in {"/", os.sep}:
+                prefix = root.rstrip("/\\") + separator
+                self._paths.append((prefix, "<tmp>/"))
         self.session_id = session_id
 
     def ordinal(self, kind: str, value: str) -> str:
@@ -107,8 +117,17 @@ class Normalizer:
 
     def value(self, v: Any, key: str | None = None) -> Any:
         if isinstance(v, dict):
-            if key == "sandbox" and v.get("backend") == "bwrap" and v.get("available") is False:
-                v = {**v, "reason": "<bwrap unavailable on this host>"}
+            if key == "sandbox" and v.get("backend") not in (None, "none"):
+                # Portable scenarios should not diff merely because Linux selected bubblewrap and macOS
+                # selected Seatbelt, or because one host's probe could enforce while another's could not.
+                # Dedicated sandbox scenarios assert real availability/enforcement directly.
+                v = {
+                    **v,
+                    "backend": "<platform sandbox>",
+                    "available": "<host-dependent>",
+                    "enforcement": "<host-dependent>",
+                    "reason": "<host-dependent>",
+                }
             out: dict[str, Any] = {}
             for k in sorted(v):
                 if k in DROP_KEYS:
