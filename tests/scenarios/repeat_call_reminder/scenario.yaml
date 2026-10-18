@@ -1,0 +1,19 @@
+name: repeat_call_reminder
+kind: kernel
+summary: >-
+  The model re-runs the same command three times. The guard counts identical calls inside the turn and
+  appends a note to the third result, so the spin is visible to the model instead of only to the reader
+  of the transcript.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: allow
+  # This scenario tests repeated-call handling, not sandbox enforcement; keep it portable to hosts without bwrap.
+  kernel.sandbox.mode: "off"
+turns:
+  - prompt: "Check the build status"
+expect:
+  tools_called: [run_command, run_command, run_command]
+  model_saw:
+    - "Note: this is the 3rd identical call to run_command with the same arguments in this turn."
+  event_types_include: [tool.repeat_detected]
+  reload_equals_live: true

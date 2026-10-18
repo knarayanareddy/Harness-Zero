@@ -120,7 +120,7 @@ async def test_memory_tools_execution(tmp_path: Path):
     )
     assert not rem_res.is_error
     assert "Permanently remembered fact" in rem_res.output
-    assert len(rem_res.cards) == 1
+    assert rem_res.cards == []  # the result text is the confirmation; no duplicate notice card
 
     # Index a turn for searching
     index = FTS5SearchIndex(db_path)

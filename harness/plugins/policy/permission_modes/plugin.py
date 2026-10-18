@@ -16,7 +16,7 @@ class PermissionModesPlugin:
         self.manifest = manifest
 
     async def setup(self, ctx: PluginContext) -> None:
-        ctx.register_policy(PermissionModesPolicy(settings=ctx.settings))
+        ctx.register_policy(PermissionModesPolicy(settings=ctx.settings, sandbox=ctx.sandbox))
 
     async def teardown(self) -> None:
         pass

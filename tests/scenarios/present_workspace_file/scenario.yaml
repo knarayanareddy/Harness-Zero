@@ -1,0 +1,27 @@
+name: present_workspace_file
+kind: web
+summary: A workspace file is explicitly marked as the deliverable and opens in the sandboxed file viewer.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: allow
+  kernel.security.destructive_blocking: false
+workspace_files:
+  report.md: "# Workspace report\n\nThe requested result.\n"
+turns:
+  - prompt: "Present report.md as the final report."
+expect:
+  tools_called: [present]
+  files:
+    report.md: {contains: "# Workspace report"}
+  event_types_include: [deliverable.presented, workspace.changes, turn.completed]
+  dom_turns_completed: true
+  dom_plugin_modules_served: true
+  dom_deliverable:
+    kind: file
+    path: report.md
+    url: /workspace-files/report.md
+    sandboxed: true
+  dom_artifact_tab_active: true
+  timeline_contains: ["Presented report.md — Final report"]
+  event_types_exclude: [turn.error, turn.cancelled, approval.required]
+  no_console_errors: true

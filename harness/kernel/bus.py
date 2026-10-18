@@ -26,10 +26,12 @@ class Subscriber:
         types: frozenset[str] | None = None,
         interactive: bool = True,
         max_queue_size: int = 1000,
+        session_id: str | None = None,
     ):
         self.id = sub_id
         self.types = types
         self.interactive = interactive
+        self.session_id = session_id
         self.max_queue_size = max_queue_size
         self.queue: asyncio.Queue[Event] = asyncio.Queue(maxsize=max_queue_size)
         self.lagging = False
@@ -71,6 +73,7 @@ class EventBus:
         types: list[str] | set[str] | frozenset[str] | None = None,
         interactive: bool = True,
         max_queue_size: int | None = None,
+        session_id: str | None = None,
     ) -> Subscriber:
         """Creates and registers a new subscriber with a bounded event queue."""
         sub_id = f"sub_{uuid.uuid4().hex[:8]}"
@@ -81,6 +84,7 @@ class EventBus:
             types=filter_types,
             interactive=interactive,
             max_queue_size=qsize,
+            session_id=session_id,
         )
         self._subscribers[sub_id] = sub
         return sub
@@ -90,9 +94,21 @@ class EventBus:
         sub_id = sub.id if isinstance(sub, Subscriber) else sub
         self._subscribers.pop(sub_id, None)
 
-    def has_interactive_subscribers(self) -> bool:
-        """Checks if any active subscriber declared interactive=True."""
-        return any(s.interactive for s in self._subscribers.values())
+    def has_interactive_subscribers(self, session_id: str | None = None) -> bool:
+        """Checks for an interactive client, optionally scoped to a session.
+
+        A subscriber with no session id is a workspace-wide client (the current web event stream and CLI
+        REPL), so it can answer questions in any session. Session-aware frontends may opt into a narrower
+        subscription without changing the behavior of existing callers.
+        """
+        return any(
+            s.interactive and (session_id is None or s.session_id is None or s.session_id == session_id)
+            for s in self._subscribers.values()
+        )
+
+    def has_interactive_subscriber(self, session_id: str | None = None) -> bool:
+        """Singular spelling used by interaction brokers; kept alongside the original plural API."""
+        return self.has_interactive_subscribers(session_id)
 
     def publish(self, event: Event) -> None:
         """

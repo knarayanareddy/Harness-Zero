@@ -1,0 +1,5334 @@
+{
+  "cards": {
+    "approval": [
+      "approval_id",
+      "details",
+      "options",
+      "summary"
+    ],
+    "artifact": [
+      "media_type",
+      "name",
+      "request_feedback",
+      "url"
+    ],
+    "code": [
+      "body",
+      "language",
+      "path"
+    ],
+    "diff": [
+      "path",
+      "stats",
+      "unified"
+    ],
+    "form": [
+      "form_id",
+      "schema",
+      "submit_label"
+    ],
+    "markdown": [
+      "body"
+    ],
+    "notice": [
+      "body",
+      "level"
+    ],
+    "progress": [
+      "label",
+      "value"
+    ],
+    "table": [
+      "columns",
+      "rows"
+    ],
+    "tree": [
+      "nodes"
+    ]
+  },
+  "commands": [
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": "None",
+          "name": "session_id",
+          "type": "str | None"
+        },
+        {
+          "default": "''",
+          "name": "prompt",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "media",
+          "type": "list[Any] | None"
+        },
+        {
+          "default": "None",
+          "name": "options",
+          "type": "dict[str, Any] | None"
+        },
+        {
+          "default": "None",
+          "name": "model",
+          "type": "str | None"
+        },
+        {
+          "default": "None",
+          "name": "provider",
+          "type": "str | None"
+        },
+        {
+          "default": "None",
+          "name": "strategy",
+          "type": "str | None"
+        }
+      ],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:submit_turn",
+      "name": "submit_turn",
+      "plugin": null,
+      "summary": "Submits a user prompt turn to a session."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "session_id",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:cancel_turn",
+      "name": "cancel_turn",
+      "plugin": null,
+      "summary": "Signals cancellation to an active turn in session."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": "None",
+          "name": "approval_id",
+          "type": "str | None"
+        },
+        {
+          "default": "None",
+          "name": "request_id",
+          "type": "str | None"
+        },
+        {
+          "default": "None",
+          "name": "approved",
+          "type": "bool | None"
+        },
+        {
+          "default": "None",
+          "name": "decision",
+          "type": "str | None"
+        },
+        {
+          "default": "'user'",
+          "name": "by",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "reason",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "feedback",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:resolve_approval",
+      "name": "resolve_approval",
+      "plugin": null,
+      "summary": "Resolves an in-flight approval request."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "interaction_id",
+          "type": "str"
+        },
+        {
+          "default": null,
+          "name": "answers",
+          "type": "dict[str, Any]"
+        },
+        {
+          "default": "'user'",
+          "name": "by",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:question_answer",
+      "name": "question.answer",
+      "plugin": null,
+      "summary": "Resolves a pending structured question after validating its option ids and custom text."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "form_id",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "data",
+          "type": "dict[str, Any] | None"
+        }
+      ],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:form_submit",
+      "name": "form.submit",
+      "plugin": null,
+      "summary": "Handles generic forms; routes pending ask_user forms through the compatibility alias."
+    },
+    {
+      "alias": true,
+      "args": [
+        {
+          "default": null,
+          "name": "form_id",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "data",
+          "type": "dict[str, Any] | None"
+        }
+      ],
+      "called_by_web_client": false,
+      "exposed": false,
+      "handler": "harness/kernel/commands.py:form_submit",
+      "name": "form_submit",
+      "plugin": null,
+      "summary": "Handles generic forms; routes pending ask_user forms through the compatibility alias."
+    },
+    {
+      "alias": false,
+      "args": [],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:sessions_list",
+      "name": "sessions.list",
+      "plugin": null,
+      "summary": "Lists historical and active sessions in the workspace."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": "None",
+          "name": "session_id",
+          "type": "str | None"
+        },
+        {
+          "default": "None",
+          "name": "metadata",
+          "type": "dict[str, Any] | None"
+        }
+      ],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:sessions_create",
+      "name": "sessions.create",
+      "plugin": null,
+      "summary": "Creates and initializes a new session."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "session_id",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:sessions_get",
+      "name": "sessions.get",
+      "plugin": null,
+      "summary": "Retrieves session details and full history trajectory."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "session_id",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:sessions_switch",
+      "name": "sessions.switch",
+      "plugin": null,
+      "summary": "Switches active session and emits session.switched."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "path",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "default",
+          "type": "Any"
+        }
+      ],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:settings_get",
+      "name": "settings.get",
+      "plugin": null,
+      "summary": "Reads namespaced setting value, or checks secret existence with has_secret."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "path",
+          "type": "str"
+        },
+        {
+          "default": null,
+          "name": "value",
+          "type": "Any"
+        }
+      ],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:settings_set",
+      "name": "settings.set",
+      "plugin": null,
+      "summary": "Updates setting value under schema validation, routing secrets to Secrets store."
+    },
+    {
+      "alias": false,
+      "args": [],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:settings_schema",
+      "name": "settings.schema",
+      "plugin": null,
+      "summary": "``settings.schema`` \u2192 the settings surface aggregated from the *registered* schemas."
+    },
+    {
+      "alias": false,
+      "args": [],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:models_list",
+      "name": "models.list",
+      "plugin": null,
+      "summary": "``models.list`` \u2192 ``ModelRow`` dicts for every model every provider knows about."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "path",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": false,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:files_read",
+      "name": "files.read",
+      "plugin": null,
+      "summary": "Reads file within workspace jail boundaries as user principal."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "path",
+          "type": "str"
+        },
+        {
+          "default": null,
+          "name": "content",
+          "type": "str"
+        },
+        {
+          "default": "False",
+          "name": "is_base64",
+          "type": "bool"
+        }
+      ],
+      "called_by_web_client": false,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:files_write",
+      "name": "files.write",
+      "plugin": null,
+      "summary": "Writes file within workspace jail atomically as user principal."
+    },
+    {
+      "alias": false,
+      "args": [],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:plugins_list",
+      "name": "plugins.list",
+      "plugin": null,
+      "summary": "Lists every discovered plugin with what an operator needs in order to judge it."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "name",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": false,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:plugins_info",
+      "name": "plugins.info",
+      "plugin": null,
+      "summary": "Retrieves manifest details and capabilities for a named plugin."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "name",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": false,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:plugins_enable",
+      "name": "plugins.enable",
+      "plugin": null,
+      "summary": "Removes plugin from disabled list in settings."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "name",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": false,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:plugins_disable",
+      "name": "plugins.disable",
+      "plugin": null,
+      "summary": "Adds plugin to disabled list in settings."
+    },
+    {
+      "alias": true,
+      "args": [
+        {
+          "default": "None",
+          "name": "session_id",
+          "type": "str | None"
+        }
+      ],
+      "called_by_web_client": false,
+      "exposed": false,
+      "handler": "harness/kernel/commands.py:approvals_list",
+      "name": "approvals.list",
+      "plugin": null,
+      "summary": "Compatibility alias for ``interactions.list``; includes pending approvals and questions."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": "None",
+          "name": "session_id",
+          "type": "str | None"
+        }
+      ],
+      "called_by_web_client": false,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:interactions_list",
+      "name": "interactions.list",
+      "plugin": null,
+      "summary": "Lists pending approvals and questions, optionally filtered to one session."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": "None",
+          "name": "session_id",
+          "type": "str | None"
+        }
+      ],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:economics",
+      "name": "economics",
+      "plugin": null,
+      "summary": "Returns the ``EconomicsSnapshot`` for a session (defaults to the active session)."
+    },
+    {
+      "alias": false,
+      "args": [],
+      "called_by_web_client": false,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:commands_list",
+      "name": "commands.list",
+      "plugin": null,
+      "summary": "``commands.list`` \u2192 every command a frontend may dispatch, with its argument names."
+    },
+    {
+      "alias": false,
+      "args": [],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:ui_contributions",
+      "name": "ui.contributions",
+      "plugin": null,
+      "summary": "``ui.contributions`` \u2192 what the client mounts: panels, record renderers, client modules, settings tabs."
+    },
+    {
+      "alias": false,
+      "args": [],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/kernel/commands.py:security_status",
+      "name": "security.status",
+      "plugin": null,
+      "summary": "``security.status`` \u2192 the preset in effect, what it resolves to, and what the user changed."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "session_id",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/plugins/hooks/checkpoints/plugin.py:_changes",
+      "name": "plugins.hook-checkpoints.changes",
+      "plugin": "hook-checkpoints",
+      "summary": "Read a session's durable workspace-change and restore records."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "path",
+          "type": "str"
+        },
+        {
+          "default": null,
+          "name": "base",
+          "type": "str"
+        },
+        {
+          "default": null,
+          "name": "head",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/plugins/hooks/checkpoints/plugin.py:_diff",
+      "name": "plugins.hook-checkpoints.diff",
+      "plugin": "hook-checkpoints",
+      "summary": "Fetch a bounded unified diff for one workspace file between two snapshots."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "session_id",
+          "type": "str"
+        },
+        {
+          "default": null,
+          "name": "sha",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/plugins/hooks/checkpoints/plugin.py:_restore",
+      "name": "plugins.hook-checkpoints.restore",
+      "plugin": "hook-checkpoints",
+      "summary": "Restore the session workspace to a snapshot after explicit user approval."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "session_id",
+          "type": "str"
+        },
+        {
+          "default": null,
+          "name": "job_id",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/plugins/tools/jobs/registry.py:command_kill",
+      "name": "plugins.tools-jobs.kill",
+      "plugin": "tools-jobs",
+      "summary": "Plugin command registered by `tools-jobs`."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "session_id",
+          "type": "str"
+        }
+      ],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/plugins/tools/jobs/registry.py:command_list",
+      "name": "plugins.tools-jobs.list",
+      "plugin": "tools-jobs",
+      "summary": "Plugin command registered by `tools-jobs`."
+    },
+    {
+      "alias": false,
+      "args": [
+        {
+          "default": null,
+          "name": "session_id",
+          "type": "str"
+        },
+        {
+          "default": null,
+          "name": "job_id",
+          "type": "str"
+        },
+        {
+          "default": "50",
+          "name": "tail_lines",
+          "type": "int"
+        },
+        {
+          "default": "None",
+          "name": "since_offset",
+          "type": "int"
+        }
+      ],
+      "called_by_web_client": true,
+      "exposed": true,
+      "handler": "harness/plugins/tools/jobs/registry.py:command_output",
+      "name": "plugins.tools-jobs.output",
+      "plugin": "tools-jobs",
+      "summary": "Plugin command registered by `tools-jobs`."
+    }
+  ],
+  "coverage": {
+    "commands_exercised": [
+      "cancel_turn",
+      "economics",
+      "form.submit",
+      "models.list",
+      "plugins.hook-checkpoints.changes",
+      "plugins.hook-checkpoints.diff",
+      "plugins.hook-checkpoints.restore",
+      "plugins.list",
+      "plugins.tools-jobs.kill",
+      "plugins.tools-jobs.list",
+      "plugins.tools-jobs.output",
+      "question.answer",
+      "resolve_approval",
+      "security.status",
+      "sessions.create",
+      "sessions.get",
+      "sessions.list",
+      "sessions.switch",
+      "settings.get",
+      "settings.schema",
+      "settings.set",
+      "submit_turn",
+      "ui.contributions"
+    ],
+    "commands_unexercised": [
+      "commands.list",
+      "files.read",
+      "files.write",
+      "interactions.list",
+      "plugins.disable",
+      "plugins.enable",
+      "plugins.info"
+    ],
+    "tools_covered": [
+      "ask_user",
+      "checkpoint_restore",
+      "create_artifact",
+      "edit_file",
+      "job_start",
+      "present",
+      "remember",
+      "run_command",
+      "search_memory",
+      "view_file",
+      "view_skill",
+      "write_to_file"
+    ],
+    "tools_uncovered": [
+      "job_kill",
+      "job_list",
+      "job_output",
+      "manage_task",
+      "read_resource",
+      "search_codebase"
+    ]
+  },
+  "events": [
+    {
+      "client_renderer": "app.js",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "approval_id",
+        "call_id",
+        "details",
+        "kind",
+        "options",
+        "record_kind",
+        "summary",
+        "timeout_s"
+      ],
+      "payload": "ApprovalRequired",
+      "producers": [
+        "harness/kernel/interactions.py"
+      ],
+      "record_kind": "approval.requested",
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "reload_equals_live_web_dom",
+        "restore_turn"
+      ],
+      "transient": false,
+      "type": "approval.required"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "approval_id",
+        "approved",
+        "by",
+        "reason",
+        "record_kind"
+      ],
+      "payload": "ApprovalResolved",
+      "producers": [
+        "harness/kernel/interactions.py"
+      ],
+      "record_kind": "approval.resolved",
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "reload_equals_live_web_dom",
+        "restore_turn"
+      ],
+      "transient": false,
+      "type": "approval.resolved"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "label",
+        "record_kind",
+        "sha"
+      ],
+      "payload": "CheckpointCreated",
+      "producers": [],
+      "record_kind": "checkpoint.created",
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "runaway_tool_loop_kernel",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "security_preset_badge_web_dom",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "settings_tab_from_plugin_schema",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ],
+      "transient": false,
+      "type": "checkpoint.created"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "files_touched",
+        "label",
+        "record_kind",
+        "sha"
+      ],
+      "payload": "CheckpointRestored",
+      "producers": [],
+      "record_kind": "checkpoint.restored",
+      "scenarios": [
+        "restore_turn"
+      ],
+      "transient": false,
+      "type": "checkpoint.restored"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "carries_record",
+        "duration_ms",
+        "record_kind",
+        "summary_tokens"
+      ],
+      "payload": "CompactionCompleted",
+      "producers": [
+        "harness/kernel/compaction.py"
+      ],
+      "record_kind": "compaction.summary",
+      "scenarios": [],
+      "transient": false,
+      "type": "compaction.completed"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "estimated_tokens",
+        "transient"
+      ],
+      "payload": "CompactionStarted",
+      "producers": [
+        "harness/kernel/compaction.py"
+      ],
+      "record_kind": null,
+      "scenarios": [],
+      "transient": true,
+      "type": "compaction.started"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "blocks",
+        "history_messages",
+        "total_tokens",
+        "transient"
+      ],
+      "payload": "ContextAssembled",
+      "producers": [
+        "harness/kernel/context.py"
+      ],
+      "record_kind": null,
+      "scenarios": [],
+      "transient": true,
+      "type": "context.assembled"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "cap_usd",
+        "lifetime_usd",
+        "session_usd",
+        "transient",
+        "turn_usd",
+        "unknown_pricing",
+        "usage"
+      ],
+      "payload": "CostUpdated",
+      "producers": [
+        "harness/kernel/runner.py"
+      ],
+      "record_kind": null,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "runaway_tool_loop_kernel",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "security_preset_badge_web_dom",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "settings_tab_from_plugin_schema",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ],
+      "transient": true,
+      "type": "cost.updated"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "caption",
+        "kind",
+        "path",
+        "record_kind",
+        "sha256",
+        "size",
+        "turn_id"
+      ],
+      "payload": "DeliverablePresented",
+      "producers": [],
+      "record_kind": "deliverable.presented",
+      "scenarios": [
+        "present_artifact",
+        "present_workspace_file"
+      ],
+      "transient": false,
+      "type": "deliverable.presented"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "command",
+        "duration_ms",
+        "event",
+        "hook",
+        "outcome"
+      ],
+      "payload": "HookFired",
+      "producers": [
+        "harness/plugins/bridges/shell_hooks/hook.py"
+      ],
+      "record_kind": null,
+      "scenarios": [],
+      "transient": false,
+      "type": "hook.fired"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "duration_ms",
+        "exit_code",
+        "job_id",
+        "label",
+        "reason",
+        "record_kind",
+        "tail"
+      ],
+      "payload": "JobExited",
+      "producers": [],
+      "record_kind": "job.exited",
+      "scenarios": [
+        "job_finishes_between_turns"
+      ],
+      "transient": false,
+      "type": "job.exited"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "job_id",
+        "offset_end",
+        "offset_start",
+        "record_kind",
+        "stream",
+        "text"
+      ],
+      "payload": "JobOutput",
+      "producers": [],
+      "record_kind": "job.output",
+      "scenarios": [
+        "job_finishes_between_turns"
+      ],
+      "transient": false,
+      "type": "job.output"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "command",
+        "cwd",
+        "job_id",
+        "label",
+        "pid",
+        "record_kind",
+        "sandbox",
+        "started_at"
+      ],
+      "payload": "JobStarted",
+      "producers": [],
+      "record_kind": "job.started",
+      "scenarios": [
+        "job_finishes_between_turns"
+      ],
+      "transient": false,
+      "type": "job.started"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "attempt",
+        "error",
+        "server",
+        "session_id_present",
+        "state",
+        "tools_count",
+        "transient",
+        "transport"
+      ],
+      "payload": "McpServerStatus",
+      "producers": [],
+      "record_kind": null,
+      "scenarios": [],
+      "transient": true,
+      "type": "mcp.server.status"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "added",
+        "record_kind",
+        "removed",
+        "server"
+      ],
+      "payload": "McpToolsChanged",
+      "producers": [],
+      "record_kind": "system.notice",
+      "scenarios": [],
+      "transient": false,
+      "type": "mcp.tools.changed"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "record_kind",
+        "stop_reason",
+        "usage"
+      ],
+      "payload": "ModelCompleted",
+      "producers": [],
+      "record_kind": "assistant.message",
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "runaway_tool_loop_kernel",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "security_preset_badge_web_dom",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "settings_tab_from_plugin_schema",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ],
+      "transient": false,
+      "type": "model.completed"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "message"
+      ],
+      "payload": "ModelNotice",
+      "producers": [
+        "harness/kernel/runner.py"
+      ],
+      "record_kind": null,
+      "scenarios": [],
+      "transient": false,
+      "type": "model.notice"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "model",
+        "provider",
+        "request_tokens_estimate",
+        "transient"
+      ],
+      "payload": "ModelStarted",
+      "producers": [
+        "harness/kernel/runner.py"
+      ],
+      "record_kind": null,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "runaway_tool_loop_kernel",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "security_preset_badge_web_dom",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "settings_tab_from_plugin_schema",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ],
+      "transient": true,
+      "type": "model.started"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "text",
+        "transient"
+      ],
+      "payload": "ModelTextDelta",
+      "producers": [
+        "harness/kernel/runner.py"
+      ],
+      "record_kind": null,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "security_preset_badge_web_dom",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "settings_tab_from_plugin_schema",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ],
+      "transient": true,
+      "type": "model.text.delta"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "text",
+        "transient"
+      ],
+      "payload": "ModelThinkingDelta",
+      "producers": [
+        "harness/kernel/runner.py"
+      ],
+      "record_kind": null,
+      "scenarios": [
+        "thinking_then_answer_web"
+      ],
+      "transient": true,
+      "type": "model.thinking.delta"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "arguments",
+        "call_id",
+        "name",
+        "transient"
+      ],
+      "payload": "ModelToolCall",
+      "producers": [
+        "harness/kernel/runner.py"
+      ],
+      "record_kind": null,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "runaway_tool_loop_kernel",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ],
+      "transient": true,
+      "type": "model.tool_call"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "error",
+        "name"
+      ],
+      "payload": "PluginError",
+      "producers": [
+        "harness/kernel/registry.py"
+      ],
+      "record_kind": null,
+      "scenarios": [],
+      "transient": false,
+      "type": "plugin.error"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "capabilities",
+        "name",
+        "provides",
+        "trust",
+        "version"
+      ],
+      "payload": "PluginLoaded",
+      "producers": [
+        "harness/kernel/registry.py"
+      ],
+      "record_kind": null,
+      "scenarios": [],
+      "transient": false,
+      "type": "plugin.loaded"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "answers",
+        "by",
+        "call_id",
+        "interaction_id",
+        "reason",
+        "record_kind",
+        "status",
+        "turn_id"
+      ],
+      "payload": "QuestionAnswered",
+      "producers": [
+        "harness/kernel/interactions.py"
+      ],
+      "record_kind": "question.answered",
+      "scenarios": [
+        "ask_user_answered"
+      ],
+      "transient": false,
+      "type": "question.answered"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "call_id",
+        "interaction_id",
+        "questions",
+        "record_kind",
+        "timeout_s",
+        "turn_id"
+      ],
+      "payload": "QuestionAsked",
+      "producers": [
+        "harness/kernel/interactions.py"
+      ],
+      "record_kind": "question.asked",
+      "scenarios": [
+        "ask_user_answered"
+      ],
+      "transient": false,
+      "type": "question.asked"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "model",
+        "provider",
+        "session_id",
+        "strategy",
+        "workspace"
+      ],
+      "payload": "SessionStarted",
+      "producers": [
+        "harness/kernel/session.py"
+      ],
+      "record_kind": null,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "runaway_tool_loop_kernel",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "security_preset_badge_web_dom",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "settings_tab_from_plugin_schema",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ],
+      "transient": false,
+      "type": "session.started"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "session_id",
+        "workspace"
+      ],
+      "payload": "SessionSwitched",
+      "producers": [
+        "harness/kernel/session.py"
+      ],
+      "record_kind": null,
+      "scenarios": [],
+      "transient": false,
+      "type": "session.switched"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "paths"
+      ],
+      "payload": "SettingsChanged",
+      "producers": [
+        "harness/kernel/commands.py"
+      ],
+      "record_kind": null,
+      "scenarios": [],
+      "transient": false,
+      "type": "settings.changed"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "code",
+        "level",
+        "message",
+        "record_kind"
+      ],
+      "payload": "SystemNotice",
+      "producers": [
+        "harness/kernel/runner.py",
+        "harness/plugins/hooks/checkpoints/hook.py"
+      ],
+      "record_kind": "system.notice",
+      "scenarios": [
+        "job_finishes_between_turns"
+      ],
+      "transient": false,
+      "type": "system.notice"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "exit_code",
+        "label",
+        "tail",
+        "task_id"
+      ],
+      "payload": "TaskCompleted",
+      "producers": [
+        "harness/kernel/inbox.py"
+      ],
+      "record_kind": null,
+      "scenarios": [],
+      "transient": false,
+      "type": "task.completed"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "label",
+        "task_id"
+      ],
+      "payload": "TaskStarted",
+      "producers": [
+        "harness/kernel/inbox.py"
+      ],
+      "record_kind": null,
+      "scenarios": [],
+      "transient": false,
+      "type": "task.started"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "arguments",
+        "call_id",
+        "name",
+        "plugin",
+        "risk",
+        "transient"
+      ],
+      "payload": "ToolCallStarted",
+      "producers": [
+        "harness/kernel/gate.py"
+      ],
+      "record_kind": null,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "runaway_tool_loop_kernel",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ],
+      "transient": true,
+      "type": "tool.call"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "action",
+        "call_id",
+        "metadata",
+        "plugin",
+        "policy",
+        "reason",
+        "record_kind",
+        "risk"
+      ],
+      "payload": "ToolDecision",
+      "producers": [
+        "harness/kernel/gate.py"
+      ],
+      "record_kind": "tool.decision",
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "runaway_tool_loop_kernel",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ],
+      "transient": false,
+      "type": "tool.decision"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "call_id",
+        "stream",
+        "text",
+        "transient"
+      ],
+      "payload": "ToolOutputDelta",
+      "producers": [
+        "harness/kernel/gate.py"
+      ],
+      "record_kind": null,
+      "scenarios": [
+        "huge_tool_output_pruned_and_spilled",
+        "repeat_call_reminder"
+      ],
+      "transient": true,
+      "type": "tool.output.delta"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "blocked",
+        "call_id",
+        "count",
+        "name",
+        "transient"
+      ],
+      "payload": "ToolRepeatDetected",
+      "producers": [],
+      "record_kind": null,
+      "scenarios": [
+        "repeat_call_reminder"
+      ],
+      "transient": true,
+      "type": "tool.repeat_detected"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "call_id",
+        "carries_record",
+        "duration_ms",
+        "is_error",
+        "metadata",
+        "name",
+        "preview",
+        "record_kind"
+      ],
+      "payload": "ToolCallResult",
+      "producers": [
+        "harness/kernel/gate.py"
+      ],
+      "record_kind": "tool.result",
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "runaway_tool_loop_kernel",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ],
+      "transient": false,
+      "type": "tool.result"
+    },
+    {
+      "client_renderer": "none (live only)",
+      "durable": false,
+      "fields": [
+        "EVENT_TYPE",
+        "call_id",
+        "name",
+        "original_chars",
+        "shown_chars",
+        "spill_path",
+        "transient"
+      ],
+      "payload": "ToolResultPruned",
+      "producers": [],
+      "record_kind": null,
+      "scenarios": [
+        "huge_tool_output_pruned_and_spilled"
+      ],
+      "transient": true,
+      "type": "tool.result.pruned"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "reason",
+        "record_kind"
+      ],
+      "payload": "TurnCancelled",
+      "producers": [],
+      "record_kind": "turn.cancelled",
+      "scenarios": [],
+      "transient": false,
+      "type": "turn.cancelled"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "duration_ms",
+        "record_kind",
+        "stop_reason",
+        "tool_calls",
+        "usage"
+      ],
+      "payload": "TurnCompleted",
+      "producers": [],
+      "record_kind": "turn.completed",
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "runaway_tool_loop_kernel",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "security_preset_badge_web_dom",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "settings_tab_from_plugin_schema",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ],
+      "transient": false,
+      "type": "turn.completed"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "kind",
+        "message",
+        "record_kind",
+        "retryable"
+      ],
+      "payload": "TurnError",
+      "producers": [],
+      "record_kind": "turn.error",
+      "scenarios": [],
+      "transient": false,
+      "type": "turn.error"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "model",
+        "options",
+        "prompt_preview",
+        "provider",
+        "record_kind",
+        "strategy"
+      ],
+      "payload": "TurnStarted",
+      "producers": [],
+      "record_kind": "user.message",
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "runaway_tool_loop_kernel",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "security_preset_badge_web_dom",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "settings_tab_from_plugin_schema",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ],
+      "transient": false,
+      "type": "turn.started"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "card",
+        "record_kind"
+      ],
+      "payload": "UiCard",
+      "producers": [
+        "harness/kernel/commands.py",
+        "harness/kernel/gate.py",
+        "harness/plugins/bridges/shell_hooks/hook.py"
+      ],
+      "record_kind": "ui.card",
+      "scenarios": [
+        "edit_without_read_blocked",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "present_artifact",
+        "present_workspace_file",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "restore_turn",
+        "skills_view_kernel"
+      ],
+      "transient": false,
+      "type": "ui.card"
+    },
+    {
+      "client_renderer": "app.js",
+      "durable": true,
+      "fields": [
+        "EVENT_TYPE",
+        "added",
+        "base",
+        "files",
+        "head",
+        "record_kind",
+        "removed",
+        "snapshot_skipped",
+        "truncated",
+        "turn_id"
+      ],
+      "payload": "WorkspaceChanges",
+      "producers": [],
+      "record_kind": "workspace.changes",
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "runaway_tool_loop_kernel",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "security_preset_badge_web_dom",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "settings_tab_from_plugin_schema",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ],
+      "transient": false,
+      "type": "workspace.changes"
+    }
+  ],
+  "generated_by": "harness catalog gen",
+  "plugins": [
+    {
+      "capabilities": [
+        "exec"
+      ],
+      "entry": "harness.plugins.bridges.acp.plugin:ACPBridgePlugin",
+      "family": "bridges",
+      "loaded": true,
+      "name": "bridge-acp",
+      "path": "harness/plugins/bridges/acp",
+      "provides": [
+        "bridge"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Agent Client Protocol frontend bridge over stdio for IDE and editor integrations",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "exec",
+        "net",
+        "secrets"
+      ],
+      "entry": "harness.plugins.bridges.mcp_client.plugin:MCPClientBridgePlugin",
+      "family": "bridges",
+      "loaded": true,
+      "name": "bridge-mcp-client",
+      "path": "harness/plugins/bridges/mcp_client",
+      "provides": [
+        "tool"
+      ],
+      "readme": "harness/plugins/bridges/mcp_client/README.md",
+      "readme_sections": [
+        "Summary",
+        "Configuration",
+        "Extension points",
+        "Model experience",
+        "Known limitations"
+      ],
+      "requires": [],
+      "settings_schema": "harness/plugins/bridges/mcp_client/settings.schema.json",
+      "summary": "Model Context Protocol stdio/HTTP client bridge connecting external MCP servers as tools and resources",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "exec"
+      ],
+      "entry": "harness.plugins.bridges.mcp_server.plugin:MCPServerBridgePlugin",
+      "family": "bridges",
+      "loaded": true,
+      "name": "bridge-mcp-server",
+      "path": "harness/plugins/bridges/mcp_server",
+      "provides": [
+        "bridge"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": "harness/plugins/bridges/mcp_server/settings.schema.json",
+      "summary": "Model Context Protocol stdio server bridge exposing Harness tools to external hosts",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "exec"
+      ],
+      "entry": "harness.plugins.bridges.shell_hooks.plugin:ShellHooksBridgePlugin",
+      "family": "bridges",
+      "loaded": true,
+      "name": "bridge-shell-hooks",
+      "path": "harness/plugins/bridges/shell_hooks",
+      "provides": [
+        "hook"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": "harness/plugins/bridges/shell_hooks/settings.schema.json",
+      "summary": "Claude Code-compatible shell hooks bridge supporting stdin JSON, exit codes, and matcher aliases",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.context.identity.plugin:IdentityContextPlugin",
+      "family": "context",
+      "loaded": true,
+      "name": "context-identity",
+      "path": "harness/plugins/context/identity",
+      "provides": [
+        "context"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Core identity context source for Harness-Zero",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read"
+      ],
+      "entry": "harness.plugins.context.instructions_files.plugin:InstructionsFilesPlugin",
+      "family": "context",
+      "loaded": true,
+      "name": "context-instructions",
+      "path": "harness/plugins/context/instructions_files",
+      "provides": [
+        "context"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Project instruction files reader (AGENTS.md, CLAUDE.md, .harness/INSTRUCTIONS.md)",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.context.memories.plugin:MemoriesContextPlugin",
+      "family": "context",
+      "loaded": true,
+      "name": "context-memories",
+      "path": "harness/plugins/context/memories",
+      "provides": [
+        "context"
+      ],
+      "readme": "harness/plugins/context/memories/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Context source injecting remembered facts and architectural decisions into session prompt",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read"
+      ],
+      "entry": "harness.plugins.context.repo_map.plugin:RepoMapContextPlugin",
+      "family": "context",
+      "loaded": true,
+      "name": "context-repo-map",
+      "path": "harness/plugins/context/repo_map",
+      "provides": [
+        "context"
+      ],
+      "readme": "harness/plugins/context/repo_map/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": "harness/plugins/context/repo_map/settings.schema.json",
+      "summary": "Whole-codebase AST symbol mapping and dense architectural context",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.context.skills_catalog.plugin:SkillsCatalogPlugin",
+      "family": "context",
+      "loaded": true,
+      "name": "context-skills-catalog",
+      "path": "harness/plugins/context/skills_catalog",
+      "provides": [
+        "context"
+      ],
+      "readme": "harness/plugins/context/skills_catalog/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Progressive skills catalog context source for prompt assembly",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.context.tool_guidance.plugin:ToolGuidancePlugin",
+      "family": "context",
+      "loaded": true,
+      "name": "context-tool-guidance",
+      "path": "harness/plugins/context/tool_guidance",
+      "provides": [
+        "context"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Tool usage and execution guidance context source",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "exec"
+      ],
+      "entry": "harness.plugins.executors.worktree.plugin:WorktreeExecutorPlugin",
+      "family": "executors",
+      "loaded": true,
+      "name": "executor-worktree",
+      "path": "harness/plugins/executors/worktree",
+      "provides": [
+        "executor"
+      ],
+      "readme": "harness/plugins/executors/worktree/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Async git worktree process executor with isolated branching and base commit tracking",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read",
+        "fs:write"
+      ],
+      "entry": "harness.plugins.tools.fs.plugin:FsToolsPlugin",
+      "family": "tools",
+      "loaded": true,
+      "name": "fs-tools",
+      "path": "harness/plugins/tools/fs",
+      "provides": [
+        "tool"
+      ],
+      "readme": "harness/plugins/tools/fs/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Filesystem inspection, write, and surgical search/replace editing tools",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:write",
+        "exec"
+      ],
+      "entry": "harness.plugins.hooks.checkpoints.plugin:CheckpointsPlugin",
+      "family": "hooks",
+      "loaded": true,
+      "name": "hook-checkpoints",
+      "path": "harness/plugins/hooks/checkpoints",
+      "provides": [
+        "hook",
+        "tool",
+        "command"
+      ],
+      "readme": "harness/plugins/hooks/checkpoints/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": "harness/plugins/hooks/checkpoints/settings.schema.json",
+      "summary": "Private bounded workspace snapshots, change review, and approval-gated restore",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read"
+      ],
+      "entry": "harness.plugins.hooks.read_before_edit.plugin:ReadBeforeEditPlugin",
+      "family": "hooks",
+      "loaded": true,
+      "name": "hook-read-before-edit",
+      "path": "harness/plugins/hooks/read_before_edit",
+      "provides": [
+        "hook"
+      ],
+      "readme": "harness/plugins/hooks/read_before_edit/README.md",
+      "readme_sections": [
+        "Summary",
+        "Configuration",
+        "Extension points",
+        "Model experience",
+        "Known limitations"
+      ],
+      "requires": [],
+      "settings_schema": "harness/plugins/hooks/read_before_edit/settings.schema.json",
+      "summary": "Blocks edit_file/write_to_file on files the model never read or that changed since it did",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.hooks.repeat_call_reminder.plugin:RepeatCallReminderPlugin",
+      "family": "hooks",
+      "loaded": true,
+      "name": "hook-repeat-call-reminder",
+      "path": "harness/plugins/hooks/repeat_call_reminder",
+      "provides": [
+        "hook"
+      ],
+      "readme": "harness/plugins/hooks/repeat_call_reminder/README.md",
+      "readme_sections": [
+        "Summary",
+        "Configuration",
+        "Extension points",
+        "Model experience",
+        "Known limitations"
+      ],
+      "requires": [],
+      "settings_schema": "harness/plugins/hooks/repeat_call_reminder/settings.schema.json",
+      "summary": "Tells the model when it repeats an identical tool call in one turn, and can stop it",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.hooks.tool_result_pruner.plugin:ToolResultPrunerPlugin",
+      "family": "hooks",
+      "loaded": true,
+      "name": "hook-tool-result-pruner",
+      "path": "harness/plugins/hooks/tool_result_pruner",
+      "provides": [
+        "hook"
+      ],
+      "readme": "harness/plugins/hooks/tool_result_pruner/README.md",
+      "readme_sections": [
+        "Summary",
+        "Configuration",
+        "Extension points",
+        "Model experience",
+        "Known limitations"
+      ],
+      "requires": [],
+      "settings_schema": "harness/plugins/hooks/tool_result_pruner/settings.schema.json",
+      "summary": "Keeps the head and the tail of oversized tool results instead of letting truncation drop the diagnosis",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:write"
+      ],
+      "entry": "harness.plugins.hooks.tool_result_spill.plugin:ToolResultSpillPlugin",
+      "family": "hooks",
+      "loaded": true,
+      "name": "hook-tool-result-spill",
+      "path": "harness/plugins/hooks/tool_result_spill",
+      "provides": [
+        "hook"
+      ],
+      "readme": "harness/plugins/hooks/tool_result_spill/README.md",
+      "readme_sections": [
+        "Summary",
+        "Configuration",
+        "Extension points",
+        "Model experience",
+        "Known limitations"
+      ],
+      "requires": [],
+      "settings_schema": "harness/plugins/hooks/tool_result_spill/settings.schema.json",
+      "summary": "Copies oversized tool results into the session directory before truncation, so nothing is lost",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "exec"
+      ],
+      "entry": "harness.plugins.executors.local.plugin:LocalExecutorPlugin",
+      "family": "executors",
+      "loaded": true,
+      "name": "local-executor",
+      "path": "harness/plugins/executors/local",
+      "provides": [
+        "executor"
+      ],
+      "readme": "harness/plugins/executors/local/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Local process executor with output streaming, process management, and cancellation",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "net",
+        "secrets"
+      ],
+      "entry": "harness.plugins.providers.openai_compat.plugin:OpenAICompatPlugin",
+      "family": "providers",
+      "loaded": true,
+      "name": "openai-compat",
+      "path": "harness/plugins/providers/openai_compat",
+      "provides": [
+        "provider"
+      ],
+      "readme": "harness/plugins/providers/openai_compat/README.md",
+      "readme_sections": [
+        "Configuration"
+      ],
+      "requires": [],
+      "settings_schema": "harness/plugins/providers/openai_compat/settings.schema.json",
+      "summary": "Universal OpenAI-compatible LLM Provider (OpenAI, OpenRouter, DeepSeek, Ollama, vLLM)",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.policy.permission_modes.plugin:PermissionModesPlugin",
+      "family": "policy",
+      "loaded": true,
+      "name": "policy-permission-modes",
+      "path": "harness/plugins/policy/permission_modes",
+      "provides": [
+        "policy"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Permission modes policy implementing plan, ask, allow, and bypass modes",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.policy.risk_classifier.plugin:RiskClassifierPlugin",
+      "family": "policy",
+      "loaded": true,
+      "name": "policy-risk-classifier",
+      "path": "harness/plugins/policy/risk_classifier",
+      "provides": [
+        "policy"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Risk classifier policy raising risk level for dangerous and destructive commands",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.policy.tirith.plugin:TirithPolicyPlugin",
+      "family": "policy",
+      "loaded": true,
+      "name": "policy-tirith",
+      "path": "harness/plugins/policy/tirith",
+      "provides": [
+        "policy"
+      ],
+      "readme": "harness/plugins/policy/tirith/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Tirith security capsule policy auditing secret leaks, SSRF network targets, and blast-radius commands",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read"
+      ],
+      "entry": "harness.plugins.policy.workspace_jail.plugin:WorkspaceJailPlugin",
+      "family": "policy",
+      "loaded": true,
+      "name": "policy-workspace-jail",
+      "path": "harness/plugins/policy/workspace_jail",
+      "provides": [
+        "policy"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Workspace jail policy denying path traversal outside the active workspace",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "net",
+        "secrets"
+      ],
+      "entry": "harness.plugins.providers.anthropic.plugin:AnthropicProviderPlugin",
+      "family": "providers",
+      "loaded": true,
+      "name": "provider-anthropic",
+      "path": "harness/plugins/providers/anthropic",
+      "provides": [
+        "provider"
+      ],
+      "readme": "harness/plugins/providers/anthropic/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": "harness/plugins/providers/anthropic/settings.schema.json",
+      "summary": "Anthropic Messages API provider with prompt caching, thinking blocks, and native tool calling",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "net",
+        "secrets"
+      ],
+      "entry": "harness.plugins.providers.gemini.plugin:GeminiProviderPlugin",
+      "family": "providers",
+      "loaded": true,
+      "name": "provider-gemini",
+      "path": "harness/plugins/providers/gemini",
+      "provides": [
+        "provider"
+      ],
+      "readme": "harness/plugins/providers/gemini/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": "harness/plugins/providers/gemini/settings.schema.json",
+      "summary": "Google Gemini generateContent and function calling provider",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.providers.mock.plugin:MockProviderPlugin",
+      "family": "providers",
+      "loaded": true,
+      "name": "provider-mock",
+      "path": "harness/plugins/providers/mock",
+      "provides": [
+        "provider"
+      ],
+      "readme": "harness/plugins/providers/mock/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": "harness/plugins/providers/mock/settings.schema.json",
+      "summary": "Deterministic ScriptedProvider for hermetic tests and offline execution",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "net"
+      ],
+      "entry": "harness.plugins.providers.ollama.plugin:OllamaProviderPlugin",
+      "family": "providers",
+      "loaded": true,
+      "name": "provider-ollama",
+      "path": "harness/plugins/providers/ollama",
+      "provides": [
+        "provider"
+      ],
+      "readme": "harness/plugins/providers/ollama/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": "harness/plugins/providers/ollama/settings.schema.json",
+      "summary": "Local Ollama provider with native tool calling and XML fallback protocol",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.executors.sandbox_bwrap.plugin:BwrapSandboxPlugin",
+      "family": "executors",
+      "loaded": true,
+      "name": "sandbox-bwrap",
+      "path": "harness/plugins/executors/sandbox_bwrap",
+      "provides": [
+        "sandbox"
+      ],
+      "readme": "harness/plugins/executors/sandbox_bwrap/README.md",
+      "readme_sections": [
+        "Summary",
+        "Configuration",
+        "Extension points",
+        "Model experience",
+        "Known limitations"
+      ],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Linux bubblewrap backend for OS-confined executor processes",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.executors.sandbox_seatbelt.plugin:SeatbeltSandboxPlugin",
+      "family": "executors",
+      "loaded": true,
+      "name": "sandbox-seatbelt",
+      "path": "harness/plugins/executors/sandbox_seatbelt",
+      "provides": [
+        "sandbox"
+      ],
+      "readme": "harness/plugins/executors/sandbox_seatbelt/README.md",
+      "readme_sections": [
+        "Summary",
+        "Configuration",
+        "Extension points",
+        "Model experience",
+        "Known limitations"
+      ],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "macOS Seatbelt backend for OS-confined executor processes",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read",
+        "exec"
+      ],
+      "entry": "harness.plugins.tools.search.plugin:SearchToolsPlugin",
+      "family": "tools",
+      "loaded": true,
+      "name": "search-tools",
+      "path": "harness/plugins/tools/search",
+      "provides": [
+        "tool"
+      ],
+      "readme": "harness/plugins/tools/search/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "High-performance codebase regex search tool with ripgrep and Python fallback",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "exec"
+      ],
+      "entry": "harness.plugins.tools.shell.plugin:ShellToolsPlugin",
+      "family": "tools",
+      "loaded": true,
+      "name": "shell-tools",
+      "path": "harness/plugins/tools/shell",
+      "provides": [
+        "tool"
+      ],
+      "readme": "harness/plugins/tools/shell/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Shell command execution and background task management tools",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read",
+        "fs:write"
+      ],
+      "entry": "harness.plugins.stores.cost_ledger.plugin:CostLedgerPlugin",
+      "family": "stores",
+      "loaded": true,
+      "name": "store-cost-ledger",
+      "path": "harness/plugins/stores/cost_ledger",
+      "provides": [
+        "store"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Token economics and persistent cost ledger with per-provider pricing tables",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.stores.fs_artifacts.plugin:FsArtifactsPlugin",
+      "family": "stores",
+      "loaded": true,
+      "name": "store-fs-artifacts",
+      "path": "harness/plugins/stores/fs_artifacts",
+      "provides": [
+        "store"
+      ],
+      "readme": "harness/plugins/stores/fs_artifacts/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Filesystem-backed artifact storage with traversal protection and manifest tracking",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.stores.fts5_search.plugin:Fts5SearchPlugin",
+      "family": "stores",
+      "loaded": true,
+      "name": "store-fts5-search",
+      "path": "harness/plugins/stores/fts5_search",
+      "provides": [
+        "store"
+      ],
+      "readme": "harness/plugins/stores/fts5_search/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "SQLite FTS5 full-text search index and persistent memory store",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read",
+        "fs:write"
+      ],
+      "entry": "harness.plugins.stores.jsonl_transcript.plugin:JsonlTranscriptPlugin",
+      "family": "stores",
+      "loaded": true,
+      "name": "store-jsonl-transcript",
+      "path": "harness/plugins/stores/jsonl_transcript",
+      "provides": [
+        "store"
+      ],
+      "readme": null,
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Append-only dual-log JSONL transcript store with tolerant reads and byte offsets",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read",
+        "fs:write",
+        "exec"
+      ],
+      "entry": "harness.plugins.strategies.architect_editor.plugin:ArchitectEditorStrategyPlugin",
+      "family": "strategies",
+      "loaded": true,
+      "name": "strategy-architect-editor",
+      "path": "harness/plugins/strategies/architect_editor",
+      "provides": [
+        "strategy"
+      ],
+      "readme": "harness/plugins/strategies/architect_editor/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Two-phase Architect/Editor coding strategy with surgical SEARCH/REPLACE diffs and verified testing",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.strategies.single_loop.plugin:SingleLoopStrategyPlugin",
+      "family": "strategies",
+      "loaded": true,
+      "name": "strategy-single-loop",
+      "path": "harness/plugins/strategies/single_loop",
+      "provides": [
+        "strategy"
+      ],
+      "readme": "harness/plugins/strategies/single_loop/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Default single loop agent strategy with reactive background wakeups and STOP hook re-entry",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:write"
+      ],
+      "entry": "harness.plugins.tools.artifacts.plugin:ArtifactsToolPlugin",
+      "family": "tools",
+      "loaded": true,
+      "name": "tool-artifacts",
+      "path": "harness/plugins/tools/artifacts",
+      "provides": [
+        "tool"
+      ],
+      "readme": "harness/plugins/tools/artifacts/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Tools for creating markdown and HTML artifacts with manifest tracking and card generation",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.tools.ask_user.plugin:AskUserPlugin",
+      "family": "tools",
+      "loaded": true,
+      "name": "tool-ask-user",
+      "path": "harness/plugins/tools/ask_user",
+      "provides": [
+        "tool"
+      ],
+      "readme": "harness/plugins/tools/ask_user/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Ask users short structured questions and wait for their answers",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.tools.memory.plugin:MemoryToolsPlugin",
+      "family": "tools",
+      "loaded": true,
+      "name": "tool-memory",
+      "path": "harness/plugins/tools/memory",
+      "provides": [
+        "tool"
+      ],
+      "readme": "harness/plugins/tools/memory/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Memory tools for cross-session recall and explicit facts storage",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read",
+        "exec"
+      ],
+      "entry": "harness.plugins.tools.screenshot_macos.plugin:ScreenshotMacosPlugin",
+      "family": "tools",
+      "loaded": true,
+      "name": "tool-screenshot-macos",
+      "path": "harness/plugins/tools/screenshot_macos",
+      "provides": [
+        "tool"
+      ],
+      "readme": "harness/plugins/tools/screenshot_macos/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "macOS desktop screen capture tool returning ImageBlock",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [],
+      "entry": "harness.plugins.tools.skills.plugin:SkillsToolPlugin",
+      "family": "tools",
+      "loaded": true,
+      "name": "tool-skills",
+      "path": "harness/plugins/tools/skills",
+      "provides": [
+        "tool"
+      ],
+      "readme": "harness/plugins/tools/skills/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Tool to inspect progressive skill playbooks on demand",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "fs:read"
+      ],
+      "entry": "harness.plugins.tools.deliverables.plugin:DeliverablesPlugin",
+      "family": "tools",
+      "loaded": true,
+      "name": "tools-deliverables",
+      "path": "harness/plugins/tools/deliverables",
+      "provides": [
+        "tool"
+      ],
+      "readme": "harness/plugins/tools/deliverables/README.md",
+      "readme_sections": [],
+      "requires": [],
+      "settings_schema": null,
+      "summary": "Mark workspace files and artifacts as durable user-facing deliverables",
+      "tier": "builtin",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "exec"
+      ],
+      "entry": "harness.plugins.tools.jobs.plugin:JobsPlugin",
+      "family": "tools",
+      "loaded": true,
+      "name": "tools-jobs",
+      "path": "harness/plugins/tools/jobs",
+      "provides": [
+        "tool",
+        "command"
+      ],
+      "readme": "harness/plugins/tools/jobs/README.md",
+      "readme_sections": [
+        "Summary",
+        "Configuration",
+        "Extension points",
+        "Model experience",
+        "Known limitations"
+      ],
+      "requires": [],
+      "settings_schema": "harness/plugins/tools/jobs/settings.schema.json",
+      "summary": "Durable session-scoped background jobs with bounded output and recovery",
+      "tier": "builtin",
+      "version": "0.3.0"
+    }
+  ],
+  "provenance": {
+    "commands": "BUILTIN_COMMANDS + runtime commands.commands_list()",
+    "events": "harness.sdk.events.EVENT_PAYLOADS; producers are a heuristic source scan",
+    "plugins": "registry.discovered of a booted kernel",
+    "record_kinds": "harness.sdk.types.RECORD_KINDS + harness.kernel.transcript.MESSAGE_KINDS + EventPayload.record_kind + tests/scenarios/*/golden/transcript.json",
+    "scenarios": "tests/scenarios/*/scenario.yaml + golden/events.json",
+    "settings": "registered JSON Schemas (kernel + plugin settings.schema.json)",
+    "tools": "registry.get_all_tool_specs()",
+    "ui": "static parse of the shipped client and the aiohttp route table"
+  },
+  "record_kinds": [
+    {
+      "durable_events": [],
+      "kind": "turn.started",
+      "model_visible": false,
+      "scenarios": []
+    },
+    {
+      "durable_events": [
+        "turn.completed"
+      ],
+      "kind": "turn.completed",
+      "model_visible": false,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "runaway_tool_loop_kernel",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "security_preset_badge_web_dom",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "settings_tab_from_plugin_schema",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ]
+    },
+    {
+      "durable_events": [
+        "turn.error"
+      ],
+      "kind": "turn.error",
+      "model_visible": false,
+      "scenarios": []
+    },
+    {
+      "durable_events": [
+        "turn.cancelled"
+      ],
+      "kind": "turn.cancelled",
+      "model_visible": false,
+      "scenarios": []
+    },
+    {
+      "durable_events": [
+        "turn.started"
+      ],
+      "kind": "user.message",
+      "model_visible": true,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "runaway_tool_loop_kernel",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "security_preset_badge_web_dom",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "settings_tab_from_plugin_schema",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ]
+    },
+    {
+      "durable_events": [
+        "model.completed"
+      ],
+      "kind": "assistant.message",
+      "model_visible": true,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "runaway_tool_loop_kernel",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "security_preset_badge_web_dom",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "settings_tab_from_plugin_schema",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ]
+    },
+    {
+      "durable_events": [],
+      "kind": "tool.call",
+      "model_visible": false,
+      "scenarios": []
+    },
+    {
+      "durable_events": [
+        "tool.decision"
+      ],
+      "kind": "tool.decision",
+      "model_visible": false,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "runaway_tool_loop_kernel",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ]
+    },
+    {
+      "durable_events": [
+        "approval.required"
+      ],
+      "kind": "approval.requested",
+      "model_visible": false,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "reload_equals_live_web_dom",
+        "restore_turn"
+      ]
+    },
+    {
+      "durable_events": [
+        "approval.resolved"
+      ],
+      "kind": "approval.resolved",
+      "model_visible": false,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "reload_equals_live_web_dom",
+        "restore_turn"
+      ]
+    },
+    {
+      "durable_events": [
+        "question.asked"
+      ],
+      "kind": "question.asked",
+      "model_visible": false,
+      "scenarios": [
+        "ask_user_answered"
+      ]
+    },
+    {
+      "durable_events": [
+        "question.answered"
+      ],
+      "kind": "question.answered",
+      "model_visible": false,
+      "scenarios": [
+        "ask_user_answered"
+      ]
+    },
+    {
+      "durable_events": [
+        "tool.result"
+      ],
+      "kind": "tool.result",
+      "model_visible": true,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "runaway_tool_loop_kernel",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ]
+    },
+    {
+      "durable_events": [
+        "ui.card"
+      ],
+      "kind": "ui.card",
+      "model_visible": false,
+      "scenarios": [
+        "edit_without_read_blocked",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "present_artifact",
+        "present_workspace_file",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "restore_turn",
+        "skills_view_kernel"
+      ]
+    },
+    {
+      "durable_events": [
+        "compaction.completed"
+      ],
+      "kind": "compaction.summary",
+      "model_visible": true,
+      "scenarios": []
+    },
+    {
+      "durable_events": [
+        "mcp.tools.changed",
+        "system.notice"
+      ],
+      "kind": "system.notice",
+      "model_visible": false,
+      "scenarios": [
+        "job_finishes_between_turns"
+      ]
+    },
+    {
+      "durable_events": [],
+      "kind": "settings.changed",
+      "model_visible": false,
+      "scenarios": []
+    },
+    {
+      "durable_events": [
+        "checkpoint.created"
+      ],
+      "kind": "checkpoint.created",
+      "model_visible": false,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "runaway_tool_loop_kernel",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "security_preset_badge_web_dom",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "settings_tab_from_plugin_schema",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ]
+    },
+    {
+      "durable_events": [
+        "checkpoint.restored"
+      ],
+      "kind": "checkpoint.restored",
+      "model_visible": false,
+      "scenarios": [
+        "restore_turn"
+      ]
+    },
+    {
+      "durable_events": [
+        "workspace.changes"
+      ],
+      "kind": "workspace.changes",
+      "model_visible": false,
+      "scenarios": [
+        "approval_allow_kernel",
+        "approval_allow_web_dom",
+        "approval_deny_no_approver_kernel",
+        "ask_user_answered",
+        "ask_user_headless",
+        "daemon_restart_web_dom",
+        "edit_without_read_blocked",
+        "huge_tool_output_pruned_and_spilled",
+        "jail_blocks_traversal_kernel",
+        "job_finishes_between_turns",
+        "mcp_echo_kernel",
+        "memory_remember_search_kernel",
+        "memory_remember_web_dom",
+        "plain_answer_kernel",
+        "plain_answer_web",
+        "plugin_panel_appears_when_enabled",
+        "present_artifact",
+        "present_workspace_file",
+        "preset_locked_denies_exec",
+        "read_then_edit_kernel",
+        "read_then_edit_web_dom",
+        "reload_equals_live_web_dom",
+        "repeat_call_reminder",
+        "restore_turn",
+        "runaway_tool_loop_kernel",
+        "sandbox_unavailable_required_denies",
+        "secret_redacted_from_model_kernel",
+        "security_preset_badge_web_dom",
+        "session_reload_web_dom",
+        "session_resume_web",
+        "settings_tab_from_plugin_schema",
+        "shell_exec_denied_without_approver_kernel",
+        "skills_view_kernel",
+        "thinking_then_answer_web",
+        "tirith_blocks_ssrf_kernel",
+        "tirith_blocks_ssrf_web_dom",
+        "turn_changes_summary"
+      ]
+    },
+    {
+      "durable_events": [
+        "deliverable.presented"
+      ],
+      "kind": "deliverable.presented",
+      "model_visible": false,
+      "scenarios": [
+        "present_artifact",
+        "present_workspace_file"
+      ]
+    },
+    {
+      "durable_events": [
+        "job.started"
+      ],
+      "kind": "job.started",
+      "model_visible": false,
+      "scenarios": [
+        "job_finishes_between_turns"
+      ]
+    },
+    {
+      "durable_events": [
+        "job.output"
+      ],
+      "kind": "job.output",
+      "model_visible": false,
+      "scenarios": [
+        "job_finishes_between_turns"
+      ]
+    },
+    {
+      "durable_events": [
+        "job.exited"
+      ],
+      "kind": "job.exited",
+      "model_visible": false,
+      "scenarios": [
+        "job_finishes_between_turns"
+      ]
+    }
+  ],
+  "scenarios": [
+    {
+      "kind": "kernel",
+      "name": "approval_allow_kernel",
+      "summary": "A WRITE tool in `ask` mode; a scripted human approves via Commands.resolve_approval; the write happens.",
+      "tools_called": [
+        "write_to_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "approval_allow_web_dom",
+      "summary": "Approval flow through the real UI \u2014 the jsdom client receives approval.required, clicks the approve button, the write lands, the turn completes.",
+      "tools_called": [
+        "write_to_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "approval_deny_no_approver_kernel",
+      "summary": "Same WRITE in `ask` mode with no interactive subscriber on the bus \u2014 must be denied immediately (fail closed) and the model told.",
+      "tools_called": [
+        "write_to_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "ask_user_answered",
+      "summary": "The browser renders a structured question, submits an answer, and reloads both durable facts.",
+      "tools_called": [
+        "ask_user"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "ask_user_headless",
+      "summary": "Headless ask_user fails promptly with a model-visible error so the turn can continue.",
+      "tools_called": [
+        "ask_user"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "daemon_restart_web_dom",
+      "summary": "Two turns through the real client, then the daemon is stopped and started again on the same workspace \u2014 the client must land on the same conversation without any click, and no empty session may be created by the restart or the page load.",
+      "tools_called": [],
+      "turns": 2
+    },
+    {
+      "kind": "kernel",
+      "name": "edit_without_read_blocked",
+      "summary": ">-.",
+      "tools_called": [
+        "edit_file",
+        "view_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "huge_tool_output_pruned_and_spilled",
+      "summary": ">-.",
+      "tools_called": [
+        "run_command"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "jail_blocks_traversal_kernel",
+      "summary": "Workspace jail \u2014 a read and a write outside the workspace are denied by policy even in allow mode; nothing is read or written; the model is told why.",
+      "tools_called": [
+        "view_file",
+        "write_to_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "job_finishes_between_turns",
+      "summary": "A background job emits durable lifecycle records and its completion is announced to the next turn.",
+      "tools_called": [
+        "job_start"
+      ],
+      "turns": 3
+    },
+    {
+      "kind": "kernel",
+      "name": "mcp_echo_kernel",
+      "summary": "An MCP tool (stdio echo fixture) executes through the gate; regression for review Addendum A.2 as a scenario.",
+      "tools_called": [
+        "mcp__echo__echo"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "memory_remember_search_kernel",
+      "summary": "remember \u2192 (same session) search_memory finds the fact; regression for review Addendum A.1 as a scenario.",
+      "tools_called": [
+        "remember",
+        "search_memory"
+      ],
+      "turns": 2
+    },
+    {
+      "kind": "web",
+      "name": "memory_remember_web_dom",
+      "summary": "Memory through the real client \u2014 remember in turn one, search_memory in turn two; both tool cards render and the found fact is shown.",
+      "tools_called": [
+        "remember",
+        "search_memory"
+      ],
+      "turns": 2
+    },
+    {
+      "kind": "kernel",
+      "name": "plain_answer_kernel",
+      "summary": "A streamed text answer through Commands.submit_turn; transcript persisted and identical after a restart.",
+      "tools_called": [],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "plain_answer_web",
+      "summary": "The shipped browser client (jsdom) sends a prompt, receives the kernel's named SSE events and renders the answer.",
+      "tools_called": [],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "plugin_panel_appears_when_enabled",
+      "summary": ">-.",
+      "tools_called": [],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "present_artifact",
+      "summary": "An artifact created in the workspace is explicitly marked as the deliverable and its durable event reaches the real web client.",
+      "tools_called": [
+        "create_artifact",
+        "present"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "present_workspace_file",
+      "summary": "A workspace file is explicitly marked as the deliverable and opens in the sandboxed file viewer.",
+      "tools_called": [
+        "present"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "preset_locked_denies_exec",
+      "summary": "The `locked` preset resolves to plan mode, so the model's shell call is denied before the executor is reached.",
+      "tools_called": [
+        "run_command"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "read_then_edit_kernel",
+      "summary": "view_file then edit_file (SEARCH/REPLACE); the file changes on disk, the model sees the tool results, a diff card is emitted.",
+      "tools_called": [
+        "edit_file",
+        "view_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "read_then_edit_web_dom",
+      "summary": "Edit through the real client \u2014 view_file then edit_file; the diff card renders in the timeline, the file changes on disk, and the conversation survives a page refresh.",
+      "tools_called": [
+        "edit_file",
+        "view_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "reload_equals_live_web_dom",
+      "summary": ">-.",
+      "tools_called": [
+        "view_skill",
+        "write_to_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "repeat_call_reminder",
+      "summary": ">-.",
+      "tools_called": [
+        "run_command"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "restore_turn",
+      "summary": "The model writes a file, the user explicitly approves a turn-start restore, and the workspace returns to its original state.",
+      "tools_called": [
+        "checkpoint_restore",
+        "write_to_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "runaway_tool_loop_kernel",
+      "summary": "The model keeps calling the same tool; the kernel's iteration guard must end the turn and say so \u2014 and the replay must not be silently padded.",
+      "tools_called": [],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "sandbox_bwrap_full_badge",
+      "summary": "On a Linux host whose bubblewrap probe succeeds, the Studio labels the resolved standard preset with the verified backend enforcement.",
+      "tools_called": [],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "sandbox_unavailable_required_denies",
+      "summary": "Even explicit permission bypass cannot make required mode run an executor unconfined when the selected backend is unavailable.",
+      "tools_called": [
+        "run_command"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "secret_redacted_from_model_kernel",
+      "summary": "Secrets guardrail \u2014 a value from the Secrets store and a well-known API-key pattern inside a file are redacted from the tool output before the model (and the transcript) sees it.",
+      "tools_called": [
+        "view_file"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "security_preset_badge_web_dom",
+      "summary": "The Studio status chip shows the resolved preset and backend probe result from the kernel, not a browser-side default.",
+      "tools_called": [],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "session_reload_web_dom",
+      "summary": "Two turns through the real client, then a page refresh \u2014 the conversation must be visible again without any further click.",
+      "tools_called": [],
+      "turns": 2
+    },
+    {
+      "kind": "web",
+      "name": "session_resume_web",
+      "summary": "Two turns over HTTP with the browser's payload shape, then sessions.get \u2014 the history a page refresh would render must contain both turns.",
+      "tools_called": [],
+      "turns": 2
+    },
+    {
+      "kind": "web",
+      "name": "settings_tab_from_plugin_schema",
+      "summary": ">-.",
+      "tools_called": [],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "shell_exec_denied_without_approver_kernel",
+      "summary": "run_command (EXEC) in ask mode with no approver listening \u2014 fails closed, the command never runs, the model is told.",
+      "tools_called": [
+        "run_command"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "skills_view_kernel",
+      "summary": "Progressive skills \u2014 the skills catalog is injected into the prompt and view_skill returns the full SKILL.md to the model (and a card to the UI).",
+      "tools_called": [
+        "view_skill"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "thinking_then_answer_web",
+      "summary": "Thinking deltas reach the client as model.thinking.delta; the final text is rendered; thinking is not fed back to the model as assistant text.",
+      "tools_called": [],
+      "turns": 1
+    },
+    {
+      "kind": "kernel",
+      "name": "tirith_blocks_ssrf_kernel",
+      "summary": "Tirith guardrail \u2014 a shell command targeting the cloud metadata endpoint is denied by policy even in allow mode; the model is told.",
+      "tools_called": [
+        "run_command"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "tirith_blocks_ssrf_web_dom",
+      "summary": "A policy denial seen through the real client \u2014 the tool card must show DENIED with the reason, and the turn completes with the model's explanation.",
+      "tools_called": [
+        "run_command"
+      ],
+      "turns": 1
+    },
+    {
+      "kind": "web",
+      "name": "turn_changes_summary",
+      "summary": "A real browser turn edits two files, persists one bounded workspace summary, and advertises the Diffs panel.",
+      "tools_called": [
+        "view_file",
+        "write_to_file"
+      ],
+      "turns": 1
+    }
+  ],
+  "settings": [
+    {
+      "alias": true,
+      "default": "{}",
+      "group": "Plugins & Integrations",
+      "in_ui": false,
+      "key": "extensions.mcp_servers",
+      "namespace": "extensions",
+      "owner": "bridge-mcp-client",
+      "title": "MCP Servers",
+      "type": "object",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "600",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.background.wait_s",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "60000",
+      "group": "Execution & Strategies",
+      "in_ui": true,
+      "key": "kernel.context.budget_tokens",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Context Budget (tokens)",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "5.0",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.limits.tool_grace_s",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "number",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "65536",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.limits.tool_result_bytes",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "26214400",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.limits.upload_bytes",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "20",
+      "group": "Execution & Strategies",
+      "in_ui": true,
+      "key": "kernel.max_tool_iterations",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Max Tool Iterations",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "false",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.migrated_from_legacy_config",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "boolean",
+      "widget": "boolean"
+    },
+    {
+      "alias": false,
+      "default": "\"\"",
+      "group": "Models & Providers",
+      "in_ui": true,
+      "key": "kernel.model",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Default Model",
+      "type": "string",
+      "widget": "text"
+    },
+    {
+      "alias": false,
+      "default": "false",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.plugins.allow_inprocess_third_party",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "boolean",
+      "widget": "boolean"
+    },
+    {
+      "alias": false,
+      "default": "{}",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.plugins.capabilities",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "object",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "[]",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.plugins.disabled",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "[]",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.plugins.enabled",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "false",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.plugins.trusted_workspace_plugins",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "boolean",
+      "widget": "boolean"
+    },
+    {
+      "alias": false,
+      "default": "\"\"",
+      "group": "Models & Providers",
+      "in_ui": true,
+      "key": "kernel.provider",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Default Provider",
+      "type": "string",
+      "widget": "select"
+    },
+    {
+      "alias": false,
+      "default": "60.0",
+      "group": "Execution & Strategies",
+      "in_ui": true,
+      "key": "kernel.request_timeout_s",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Provider Request Timeout (s)",
+      "type": "number",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "\"auto\"",
+      "group": "Security & Sandboxing",
+      "in_ui": true,
+      "key": "kernel.sandbox.backend",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Sandbox backend",
+      "type": "string",
+      "widget": "select"
+    },
+    {
+      "alias": false,
+      "default": "[]",
+      "group": "Security & Sandboxing",
+      "in_ui": true,
+      "key": "kernel.sandbox.extra_readable",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Extra readable paths",
+      "type": "array",
+      "widget": "path-list"
+    },
+    {
+      "alias": false,
+      "default": "\"preferred\"",
+      "group": "Security & Sandboxing",
+      "in_ui": true,
+      "key": "kernel.sandbox.mode",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Process sandbox mode",
+      "type": "string",
+      "widget": "select"
+    },
+    {
+      "alias": false,
+      "default": "false",
+      "group": "Security & Sandboxing",
+      "in_ui": true,
+      "key": "kernel.sandbox.network",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Allow network from confined processes",
+      "type": "boolean",
+      "widget": "boolean"
+    },
+    {
+      "alias": false,
+      "default": "false",
+      "group": "Execution & Strategies",
+      "in_ui": false,
+      "key": "kernel.secrets.env_precedence",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution & Strategies",
+      "type": "boolean",
+      "widget": "boolean"
+    },
+    {
+      "alias": false,
+      "default": "300",
+      "group": "Security & Sandboxing",
+      "in_ui": true,
+      "key": "kernel.security.approval_timeout_s",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Approval Timeout (s)",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "true",
+      "group": "Security & Sandboxing",
+      "in_ui": true,
+      "key": "kernel.security.destructive_blocking",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Block Destructive Commands",
+      "type": "boolean",
+      "widget": "boolean"
+    },
+    {
+      "alias": false,
+      "default": "\"ask\"",
+      "group": "Security & Sandboxing",
+      "in_ui": true,
+      "key": "kernel.security.exec_in_sandbox",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Execution in an available sandbox",
+      "type": "string",
+      "widget": "select"
+    },
+    {
+      "alias": false,
+      "default": "\"ask\"",
+      "group": "Security & Sandboxing",
+      "in_ui": true,
+      "key": "kernel.security.permission_mode",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Permission Mode",
+      "type": "string",
+      "widget": "select"
+    },
+    {
+      "alias": false,
+      "default": "\"careful\"",
+      "group": "Security & Sandboxing",
+      "in_ui": true,
+      "key": "kernel.security.preset",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Security Preset",
+      "type": "string",
+      "widget": "select"
+    },
+    {
+      "alias": false,
+      "default": "5.0",
+      "group": "Economics & Spend",
+      "in_ui": true,
+      "key": "kernel.security.spend_cap_usd",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Spend Cap (USD)",
+      "type": "number",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "\"single_loop\"",
+      "group": "Execution & Strategies",
+      "in_ui": true,
+      "key": "kernel.strategy",
+      "namespace": "kernel",
+      "owner": "kernel",
+      "title": "Turn Strategy",
+      "type": "string",
+      "widget": "select"
+    },
+    {
+      "alias": false,
+      "default": "60",
+      "group": "Bridges & Integrations",
+      "in_ui": true,
+      "key": "plugins.bridge-mcp-client.call_timeout_s",
+      "namespace": "plugins.bridge-mcp-client",
+      "owner": "bridge-mcp-client",
+      "title": "Tool call timeout (seconds)",
+      "type": "number",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "15",
+      "group": "Bridges & Integrations",
+      "in_ui": true,
+      "key": "plugins.bridge-mcp-client.connect_timeout_s",
+      "namespace": "plugins.bridge-mcp-client",
+      "owner": "bridge-mcp-client",
+      "title": "Connection timeout (seconds)",
+      "type": "number",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "10",
+      "group": "Bridges & Integrations",
+      "in_ui": true,
+      "key": "plugins.bridge-mcp-client.reconnect.max_attempts",
+      "namespace": "plugins.bridge-mcp-client",
+      "owner": "bridge-mcp-client",
+      "title": "Bridges & Integrations",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "60",
+      "group": "Bridges & Integrations",
+      "in_ui": true,
+      "key": "plugins.bridge-mcp-client.reconnect.max_backoff_s",
+      "namespace": "plugins.bridge-mcp-client",
+      "owner": "bridge-mcp-client",
+      "title": "Bridges & Integrations",
+      "type": "number",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "{}",
+      "group": "Bridges & Integrations",
+      "in_ui": true,
+      "key": "plugins.bridge-mcp-client.servers",
+      "namespace": "plugins.bridge-mcp-client",
+      "owner": "bridge-mcp-client",
+      "title": "MCP Servers",
+      "type": "object",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "[]",
+      "group": "Bridges & Integrations",
+      "in_ui": true,
+      "key": "plugins.bridge-mcp-server.expose",
+      "namespace": "plugins.bridge-mcp-server",
+      "owner": "bridge-mcp-server",
+      "title": "Tools Exposed Over MCP",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "{}",
+      "group": "Bridges & Integrations",
+      "in_ui": true,
+      "key": "plugins.bridge-shell-hooks.hooks",
+      "namespace": "plugins.bridge-shell-hooks",
+      "owner": "bridge-shell-hooks",
+      "title": "Shell Hooks",
+      "type": "object",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "false",
+      "group": "Context",
+      "in_ui": true,
+      "key": "plugins.context-repo-map.context.repo_map.force",
+      "namespace": "plugins.context-repo-map",
+      "owner": "context-repo-map",
+      "title": "Always Rebuild Repo Map",
+      "type": "boolean",
+      "widget": "boolean"
+    },
+    {
+      "alias": false,
+      "default": "1024",
+      "group": "Context",
+      "in_ui": true,
+      "key": "plugins.context-repo-map.context.repo_map.max_tokens",
+      "namespace": "plugins.context-repo-map",
+      "owner": "context-repo-map",
+      "title": "Repo Map Budget (tokens)",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "262144",
+      "group": "Checkpoints",
+      "in_ui": true,
+      "key": "plugins.hook-checkpoints.max_diff_bytes",
+      "namespace": "plugins.hook-checkpoints",
+      "owner": "hook-checkpoints",
+      "title": "Maximum bytes returned for one on-demand file diff.",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "200",
+      "group": "Checkpoints",
+      "in_ui": true,
+      "key": "plugins.hook-checkpoints.max_files",
+      "namespace": "plugins.hook-checkpoints",
+      "owner": "hook-checkpoints",
+      "title": "Maximum changed-file rows shown in one turn summary.",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "67108864",
+      "group": "Checkpoints",
+      "in_ui": true,
+      "key": "plugins.hook-checkpoints.max_workspace_bytes",
+      "namespace": "plugins.hook-checkpoints",
+      "owner": "hook-checkpoints",
+      "title": "Skip checkpoint snapshots when Git-visible workspace files exceed this size; a system notice is recorded.",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "[]",
+      "group": "Hooks",
+      "in_ui": true,
+      "key": "plugins.hook-read-before-edit.exempt_globs",
+      "namespace": "plugins.hook-read-before-edit",
+      "owner": "hook-read-before-edit",
+      "title": "Glob patterns (workspace-relative) the guard ignores.",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "[\"edit_file\", \"write_to_file\"]",
+      "group": "Hooks",
+      "in_ui": true,
+      "key": "plugins.hook-read-before-edit.guarded_tools",
+      "namespace": "plugins.hook-read-before-edit",
+      "owner": "hook-read-before-edit",
+      "title": "Tools that must not blind-edit.",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "\"block\"",
+      "group": "Hooks",
+      "in_ui": true,
+      "key": "plugins.hook-read-before-edit.mode",
+      "namespace": "plugins.hook-read-before-edit",
+      "owner": "hook-read-before-edit",
+      "title": "'block' refuses the call, 'warn' appends a note, 'off' keeps the guard loaded but idle.",
+      "type": "string",
+      "widget": "text"
+    },
+    {
+      "alias": false,
+      "default": "[\"view_file\"]",
+      "group": "Hooks",
+      "in_ui": true,
+      "key": "plugins.hook-read-before-edit.read_tools",
+      "namespace": "plugins.hook-read-before-edit",
+      "owner": "hook-read-before-edit",
+      "title": "Tools whose use counts as having read the file.",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "0",
+      "group": "Hooks",
+      "in_ui": true,
+      "key": "plugins.hook-repeat-call-reminder.block_after",
+      "namespace": "plugins.hook-repeat-call-reminder",
+      "owner": "hook-repeat-call-reminder",
+      "title": "Block the call from this many identical calls; 0 never blocks.",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "true",
+      "group": "Hooks",
+      "in_ui": true,
+      "key": "plugins.hook-repeat-call-reminder.enabled",
+      "namespace": "plugins.hook-repeat-call-reminder",
+      "owner": "hook-repeat-call-reminder",
+      "title": "Count identical tool calls within a turn.",
+      "type": "boolean",
+      "widget": "boolean"
+    },
+    {
+      "alias": false,
+      "default": "[\"manage_task\", \"view_file\"]",
+      "group": "Hooks",
+      "in_ui": true,
+      "key": "plugins.hook-repeat-call-reminder.exempt_tools",
+      "namespace": "plugins.hook-repeat-call-reminder",
+      "owner": "hook-repeat-call-reminder",
+      "title": "Tools that are expected to be polled or paged.",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "3",
+      "group": "Hooks",
+      "in_ui": true,
+      "key": "plugins.hook-repeat-call-reminder.repeat_after",
+      "namespace": "plugins.hook-repeat-call-reminder",
+      "owner": "hook-repeat-call-reminder",
+      "title": "Nag from this many identical calls in one turn.",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "true",
+      "group": "Hooks",
+      "in_ui": true,
+      "key": "plugins.hook-tool-result-pruner.enabled",
+      "namespace": "plugins.hook-tool-result-pruner",
+      "owner": "hook-tool-result-pruner",
+      "title": "Prune oversized tool results when the final result is built.",
+      "type": "boolean",
+      "widget": "boolean"
+    },
+    {
+      "alias": false,
+      "default": "[\"view_file\"]",
+      "group": "Hooks",
+      "in_ui": true,
+      "key": "plugins.hook-tool-result-pruner.exempt_tools",
+      "namespace": "plugins.hook-tool-result-pruner",
+      "owner": "hook-tool-result-pruner",
+      "title": "Tools whose output is already an explicit, ranged read.",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "4096",
+      "group": "Hooks",
+      "in_ui": true,
+      "key": "plugins.hook-tool-result-pruner.head_chars",
+      "namespace": "plugins.hook-tool-result-pruner",
+      "owner": "hook-tool-result-pruner",
+      "title": "Characters kept from the start, snapped to a line boundary.",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "1024",
+      "group": "Hooks",
+      "in_ui": true,
+      "key": "plugins.hook-tool-result-pruner.tail_chars",
+      "namespace": "plugins.hook-tool-result-pruner",
+      "owner": "hook-tool-result-pruner",
+      "title": "Characters kept from the end, where test failures and stack traces are.",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "8192",
+      "group": "Hooks",
+      "in_ui": true,
+      "key": "plugins.hook-tool-result-pruner.threshold_chars",
+      "namespace": "plugins.hook-tool-result-pruner",
+      "owner": "hook-tool-result-pruner",
+      "title": "Results up to this length pass through untouched.",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "true",
+      "group": "Hooks",
+      "in_ui": true,
+      "key": "plugins.hook-tool-result-spill.enabled",
+      "namespace": "plugins.hook-tool-result-spill",
+      "owner": "hook-tool-result-spill",
+      "title": "Copy oversized tool results into the session directory.",
+      "type": "boolean",
+      "widget": "boolean"
+    },
+    {
+      "alias": false,
+      "default": "[\"view_file\"]",
+      "group": "Hooks",
+      "in_ui": true,
+      "key": "plugins.hook-tool-result-spill.exempt_tools",
+      "namespace": "plugins.hook-tool-result-spill",
+      "owner": "hook-tool-result-spill",
+      "title": "Tools whose results are never spilled (they are already paginated).",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "200",
+      "group": "Hooks",
+      "in_ui": true,
+      "key": "plugins.hook-tool-result-spill.max_files_per_session",
+      "namespace": "plugins.hook-tool-result-spill",
+      "owner": "hook-tool-result-spill",
+      "title": "Cap on spool files kept per session; older ones are deleted.",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "8192",
+      "group": "Hooks",
+      "in_ui": true,
+      "key": "plugins.hook-tool-result-spill.threshold_chars",
+      "namespace": "plugins.hook-tool-result-spill",
+      "owner": "hook-tool-result-spill",
+      "title": "Only results longer than this many characters are spilled.",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": true,
+      "default": "{}",
+      "group": "Plugins & Integrations",
+      "in_ui": false,
+      "key": "plugins.mcp-client.servers",
+      "namespace": "plugins.mcp-client",
+      "owner": "bridge-mcp-client",
+      "title": "MCP Servers",
+      "type": "object",
+      "widget": "json"
+    },
+    {
+      "alias": true,
+      "default": "[]",
+      "group": "Plugins & Integrations",
+      "in_ui": false,
+      "key": "plugins.mcp-server.expose",
+      "namespace": "plugins.mcp-server",
+      "owner": "bridge-mcp-server",
+      "title": "Tools Exposed Over MCP",
+      "type": "array",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "\"https://api.openai.com/v1\"",
+      "group": "Models & Providers",
+      "in_ui": true,
+      "key": "plugins.openai-compat.base_url",
+      "namespace": "plugins.openai-compat",
+      "owner": "openai-compat",
+      "title": "OpenAI Base URL",
+      "type": "string",
+      "widget": "text"
+    },
+    {
+      "alias": false,
+      "default": "60.0",
+      "group": "Models & Providers",
+      "in_ui": true,
+      "key": "plugins.openai-compat.timeout_s",
+      "namespace": "plugins.openai-compat",
+      "owner": "openai-compat",
+      "title": "OpenAI-compatible Request Timeout (s)",
+      "type": "number",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "\"https://api.anthropic.com/v1\"",
+      "group": "Models & Providers",
+      "in_ui": true,
+      "key": "plugins.provider-anthropic.base_url",
+      "namespace": "plugins.provider-anthropic",
+      "owner": "provider-anthropic",
+      "title": "Anthropic Base URL",
+      "type": "string",
+      "widget": "text"
+    },
+    {
+      "alias": false,
+      "default": "\"https://generativelanguage.googleapis.com/v1beta\"",
+      "group": "Models & Providers",
+      "in_ui": true,
+      "key": "plugins.provider-gemini.base_url",
+      "namespace": "plugins.provider-gemini",
+      "owner": "provider-gemini",
+      "title": "Gemini Base URL",
+      "type": "string",
+      "widget": "text"
+    },
+    {
+      "alias": false,
+      "default": "\"\"",
+      "group": "Models & Providers",
+      "in_ui": true,
+      "key": "plugins.provider-mock.script_file",
+      "namespace": "plugins.provider-mock",
+      "owner": "provider-mock",
+      "title": "Mock Script File",
+      "type": "string",
+      "widget": "text"
+    },
+    {
+      "alias": false,
+      "default": "\"http://localhost:11434\"",
+      "group": "Models & Providers",
+      "in_ui": true,
+      "key": "plugins.provider-ollama.base_url",
+      "namespace": "plugins.provider-ollama",
+      "owner": "provider-ollama",
+      "title": "Ollama Base URL",
+      "type": "string",
+      "widget": "text"
+    },
+    {
+      "alias": true,
+      "default": "{}",
+      "group": "Plugins & Integrations",
+      "in_ui": false,
+      "key": "plugins.shell-hooks.hooks",
+      "namespace": "plugins.shell-hooks",
+      "owner": "bridge-shell-hooks",
+      "title": "Shell Hooks",
+      "type": "object",
+      "widget": "json"
+    },
+    {
+      "alias": false,
+      "default": "20",
+      "group": "Jobs",
+      "in_ui": true,
+      "key": "plugins.tools-jobs.max_jobs",
+      "namespace": "plugins.tools-jobs",
+      "owner": "tools-jobs",
+      "title": "Maximum retained jobs per session; oldest exited jobs are pruned before a new job starts.",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "65536",
+      "group": "Jobs",
+      "in_ui": true,
+      "key": "plugins.tools-jobs.ring_bytes",
+      "namespace": "plugins.tools-jobs",
+      "owner": "tools-jobs",
+      "title": "In-memory output tail retained per job before reading the session spill file.",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "52428800",
+      "group": "Jobs",
+      "in_ui": true,
+      "key": "plugins.tools-jobs.spill_max_bytes",
+      "namespace": "plugins.tools-jobs",
+      "owner": "tools-jobs",
+      "title": "Maximum bytes retained in each session-scoped job output spill file.",
+      "type": "integer",
+      "widget": "number"
+    },
+    {
+      "alias": false,
+      "default": "null",
+      "group": "Secrets",
+      "in_ui": true,
+      "key": "secrets.ANTHROPIC_API_KEY",
+      "namespace": "secrets",
+      "owner": "kernel",
+      "title": "Anthropic API Key",
+      "type": "string",
+      "widget": "secret"
+    },
+    {
+      "alias": false,
+      "default": "null",
+      "group": "Secrets",
+      "in_ui": true,
+      "key": "secrets.DEEPSEEK_API_KEY",
+      "namespace": "secrets",
+      "owner": "kernel",
+      "title": "DeepSeek API Key",
+      "type": "string",
+      "widget": "secret"
+    },
+    {
+      "alias": false,
+      "default": "null",
+      "group": "Secrets",
+      "in_ui": true,
+      "key": "secrets.GEMINI_API_KEY",
+      "namespace": "secrets",
+      "owner": "kernel",
+      "title": "Gemini API Key",
+      "type": "string",
+      "widget": "secret"
+    },
+    {
+      "alias": false,
+      "default": "null",
+      "group": "Secrets",
+      "in_ui": true,
+      "key": "secrets.GOOGLE_API_KEY",
+      "namespace": "secrets",
+      "owner": "kernel",
+      "title": "Google API Key (alias of GEMINI_API_KEY)",
+      "type": "string",
+      "widget": "secret"
+    },
+    {
+      "alias": false,
+      "default": "null",
+      "group": "Secrets",
+      "in_ui": true,
+      "key": "secrets.MCP_API_KEY",
+      "namespace": "secrets",
+      "owner": "kernel",
+      "title": "MCP API Key",
+      "type": "string",
+      "widget": "secret"
+    },
+    {
+      "alias": false,
+      "default": "null",
+      "group": "Secrets",
+      "in_ui": true,
+      "key": "secrets.OPENAI_API_KEY",
+      "namespace": "secrets",
+      "owner": "kernel",
+      "title": "OpenAI API Key",
+      "type": "string",
+      "widget": "secret"
+    },
+    {
+      "alias": false,
+      "default": "null",
+      "group": "Secrets",
+      "in_ui": true,
+      "key": "secrets.OPENROUTER_API_KEY",
+      "namespace": "secrets",
+      "owner": "kernel",
+      "title": "OpenRouter API Key",
+      "type": "string",
+      "widget": "secret"
+    }
+  ],
+  "tools": [
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Ask the user up to 4 short multiple-choice questions when a decision materially changes what you will build. Prefer sensible defaults over asking; never ask what you can find out from the workspace.",
+      "input_properties": [
+        "questions"
+      ],
+      "name": "ask_user",
+      "plugin": "tool-ask-user",
+      "required": [
+        "questions"
+      ],
+      "risk_class": "read",
+      "streams_output": false,
+      "timeout_s": 1800.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Restores the workspace to a previous shadow checkpoint. This is destructive and requires user approval. Use checkpoint_id 'turn-start' to restore to the beginning of the current turn.",
+      "input_properties": [
+        "checkpoint_id"
+      ],
+      "name": "checkpoint_restore",
+      "plugin": "hook-checkpoints",
+      "required": [
+        "checkpoint_id"
+      ],
+      "risk_class": "destructive",
+      "streams_output": false,
+      "timeout_s": 600.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Creates a rich document or generative UI artifact with user-facing metadata.",
+      "input_properties": [
+        "content",
+        "media_type",
+        "name",
+        "request_feedback",
+        "summary",
+        "user_facing"
+      ],
+      "name": "create_artifact",
+      "plugin": "tool-artifacts",
+      "required": [
+        "content",
+        "name"
+      ],
+      "risk_class": "write",
+      "streams_output": false,
+      "timeout_s": 600.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Applies surgical SEARCH/REPLACE diff blocks to an existing file in the workspace.",
+      "input_properties": [
+        "diff",
+        "file_path"
+      ],
+      "name": "edit_file",
+      "plugin": "fs-tools",
+      "required": [
+        "diff",
+        "file_path"
+      ],
+      "risk_class": "write",
+      "streams_output": false,
+      "timeout_s": 600.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Stops a running background job. This is an execution action and follows normal approval policy.",
+      "input_properties": [
+        "job_id"
+      ],
+      "name": "job_kill",
+      "plugin": "tools-jobs",
+      "required": [
+        "job_id"
+      ],
+      "risk_class": "exec",
+      "streams_output": false,
+      "timeout_s": 30.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Lists jobs belonging to the current session, including running and recently exited jobs.",
+      "input_properties": [],
+      "name": "job_list",
+      "plugin": "tools-jobs",
+      "required": [],
+      "risk_class": "read",
+      "streams_output": false,
+      "timeout_s": 15.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Reads a job's recent output or output bytes after a durable offset.",
+      "input_properties": [
+        "job_id",
+        "since_offset",
+        "tail_lines"
+      ],
+      "name": "job_output",
+      "plugin": "tools-jobs",
+      "required": [
+        "job_id"
+      ],
+      "risk_class": "read",
+      "streams_output": false,
+      "timeout_s": 30.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Starts a background process as a durable session job. Its output is spooled and survives the turn.",
+      "input_properties": [
+        "command",
+        "cwd",
+        "label"
+      ],
+      "name": "job_start",
+      "plugin": "tools-jobs",
+      "required": [
+        "command"
+      ],
+      "risk_class": "exec",
+      "streams_output": false,
+      "timeout_s": 60.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Deprecated compatibility alias for the durable job tools (retained for one minor version): query, wait, kill, or send stdin input.",
+      "input_properties": [
+        "Action",
+        "Input",
+        "TaskId",
+        "TimeoutMs",
+        "action",
+        "input",
+        "task_id",
+        "timeout_ms"
+      ],
+      "name": "manage_task",
+      "plugin": "shell-tools",
+      "required": [],
+      "risk_class": "exec",
+      "streams_output": false,
+      "timeout_s": 300.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Mark an existing workspace file or artifact as a deliverable for the user and open it in the viewer. Use this when you finish producing the document, image, or result the user asked for.",
+      "input_properties": [
+        "caption",
+        "path"
+      ],
+      "name": "present",
+      "plugin": "tools-deliverables",
+      "required": [
+        "path"
+      ],
+      "risk_class": "read",
+      "streams_output": false,
+      "timeout_s": 600.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Reads content from an external Model Context Protocol resource URI.",
+      "input_properties": [
+        "server",
+        "uri"
+      ],
+      "name": "read_resource",
+      "plugin": "bridge-mcp-client",
+      "required": [
+        "uri"
+      ],
+      "risk_class": "read",
+      "streams_output": false,
+      "timeout_s": 600.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Stores a persistent fact, preference, or architectural decision across sessions.",
+      "input_properties": [
+        "key",
+        "text"
+      ],
+      "name": "remember",
+      "plugin": "tool-memory",
+      "required": [
+        "text"
+      ],
+      "risk_class": "read",
+      "streams_output": false,
+      "timeout_s": 600.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Runs a shell command in the workspace via the executor with real-time output streaming and background transition.",
+      "input_properties": [
+        "CommandLine",
+        "Cwd",
+        "WaitMsBeforeAsync",
+        "command",
+        "cwd",
+        "wait_ms_before_async"
+      ],
+      "name": "run_command",
+      "plugin": "shell-tools",
+      "required": [],
+      "risk_class": "exec",
+      "streams_output": false,
+      "timeout_s": 600.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Searches files across the workspace using regex pattern matching with ripgrep or Python fallback.",
+      "input_properties": [
+        "Query",
+        "case_sensitive",
+        "glob_filter",
+        "max_results",
+        "offset",
+        "path",
+        "query"
+      ],
+      "name": "search_codebase",
+      "plugin": "search-tools",
+      "required": [],
+      "risk_class": "read",
+      "streams_output": false,
+      "timeout_s": 60.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Searches remembered facts and previous session turns/transcripts using full-text search.",
+      "input_properties": [
+        "limit",
+        "query",
+        "scope"
+      ],
+      "name": "search_memory",
+      "plugin": "tool-memory",
+      "required": [
+        "query"
+      ],
+      "risk_class": "read",
+      "streams_output": false,
+      "timeout_s": 600.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Reads and displays the contents of a file in the workspace with optional line ranges.",
+      "input_properties": [
+        "end_line",
+        "file_path",
+        "start_line"
+      ],
+      "name": "view_file",
+      "plugin": "fs-tools",
+      "required": [
+        "file_path"
+      ],
+      "risk_class": "read",
+      "streams_output": false,
+      "timeout_s": 600.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Loads and displays the complete playbook instructions and methodology for a specialized skill.",
+      "input_properties": [
+        "skill_name"
+      ],
+      "name": "view_skill",
+      "plugin": "tool-skills",
+      "required": [
+        "skill_name"
+      ],
+      "risk_class": "read",
+      "streams_output": false,
+      "timeout_s": 600.0
+    },
+    {
+      "annotations": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false,
+        "title": null
+      },
+      "description": "Creates a new file or completely overwrites an existing file in the workspace.",
+      "input_properties": [
+        "content",
+        "file_path"
+      ],
+      "name": "write_to_file",
+      "plugin": "fs-tools",
+      "required": [
+        "content",
+        "file_path"
+      ],
+      "risk_class": "write",
+      "streams_output": false,
+      "timeout_s": 600.0
+    }
+  ],
+  "ui": {
+    "client_commands": [
+      "cancel_turn",
+      "economics",
+      "form.submit",
+      "models.list",
+      "plugins.hook-checkpoints.changes",
+      "plugins.hook-checkpoints.diff",
+      "plugins.hook-checkpoints.restore",
+      "plugins.list",
+      "plugins.tools-jobs.kill",
+      "plugins.tools-jobs.list",
+      "plugins.tools-jobs.output",
+      "question.answer",
+      "resolve_approval",
+      "security.status",
+      "sessions.create",
+      "sessions.get",
+      "sessions.list",
+      "sessions.switch",
+      "settings.get",
+      "settings.schema",
+      "settings.set",
+      "submit_turn",
+      "ui.contributions"
+    ],
+    "client_modules": [
+      {
+        "path": "static/ui.js",
+        "plugin": "hook-checkpoints",
+        "url": "/static/plugins/hook-checkpoints/ui.js"
+      },
+      {
+        "path": "static/ui.js",
+        "plugin": "tools-deliverables",
+        "url": "/static/plugins/tools-deliverables/ui.js"
+      },
+      {
+        "path": "static/panel.js",
+        "plugin": "tools-jobs",
+        "url": "/static/plugins/tools-jobs/panel.js"
+      }
+    ],
+    "data_attributes": {
+      "action": [
+        "cards.js:approve-approval",
+        "cards.js:deny-approval",
+        "index.html:new-session",
+        "index.html:send",
+        "index.html:stop",
+        "settings.js:save-secret"
+      ],
+      "command": [
+        "panels/plugins.js:plugins.disable",
+        "panels/plugins.js:plugins.enable"
+      ]
+    },
+    "data_command_bindings": [
+      {
+        "command": "plugins.disable",
+        "registered": true
+      },
+      {
+        "command": "plugins.enable",
+        "registered": true
+      }
+    ],
+    "durable_kinds": [
+      "approval.requested",
+      "approval.resolved",
+      "assistant.message",
+      "checkpoint.created",
+      "checkpoint.restored",
+      "compaction.summary",
+      "deliverable.presented",
+      "job.exited",
+      "job.output",
+      "job.started",
+      "question.answered",
+      "question.asked",
+      "system.notice",
+      "tool.decision",
+      "tool.result",
+      "turn.cancelled",
+      "turn.completed",
+      "turn.error",
+      "ui.card",
+      "user.message",
+      "workspace.changes"
+    ],
+    "events_without_renderer": [
+      "checkpoint.created",
+      "hook.fired",
+      "job.exited",
+      "job.output",
+      "job.started",
+      "mcp.server.status",
+      "mcp.tools.changed",
+      "model.completed",
+      "model.notice",
+      "model.started",
+      "model.tool_call",
+      "plugin.error",
+      "plugin.loaded",
+      "tool.repeat_detected",
+      "tool.result.pruned"
+    ],
+    "kinds_without_renderer": [
+      "checkpoint.created",
+      "job.exited",
+      "job.output",
+      "job.started",
+      "turn.completed"
+    ],
+    "panels": [
+      {
+        "accepts": [
+          "session_id"
+        ],
+        "command": "sessions.get",
+        "id": "artifact",
+        "in_client_markup": true,
+        "plugin": "web",
+        "renderer": "markdown",
+        "title": "Artifacts"
+      },
+      {
+        "accepts": [
+          "session_id"
+        ],
+        "command": "plugins.hook-checkpoints.changes",
+        "id": "diffs",
+        "in_client_markup": false,
+        "plugin": "hook-checkpoints",
+        "renderer": "list",
+        "title": "Diffs"
+      },
+      {
+        "accepts": [
+          "session_id"
+        ],
+        "command": "economics",
+        "id": "economics",
+        "in_client_markup": true,
+        "plugin": "web",
+        "renderer": "table",
+        "title": "Spend"
+      },
+      {
+        "accepts": [
+          "session_id"
+        ],
+        "command": "plugins.tools-jobs.list",
+        "id": "jobs",
+        "in_client_markup": false,
+        "plugin": "tools-jobs",
+        "renderer": "list",
+        "title": "Jobs"
+      },
+      {
+        "accepts": [],
+        "command": "plugins.list",
+        "id": "plugins",
+        "in_client_markup": false,
+        "plugin": "web",
+        "renderer": "list",
+        "title": "Plugins"
+      },
+      {
+        "accepts": [],
+        "command": "sessions.list",
+        "id": "sessions",
+        "in_client_markup": true,
+        "plugin": "web",
+        "renderer": "list",
+        "title": "Sessions"
+      }
+    ],
+    "plugin_record_renderers": [
+      {
+        "kind": "checkpoint.restored",
+        "plugin": "hook-checkpoints"
+      },
+      {
+        "kind": "workspace.changes",
+        "plugin": "hook-checkpoints"
+      },
+      {
+        "kind": "deliverable.presented",
+        "plugin": "tools-deliverables"
+      }
+    ],
+    "renderer_modules": [
+      "approval.requested",
+      "approval.resolved",
+      "assistant.message",
+      "checkpoint_restored",
+      "compaction.summary",
+      "deliverable",
+      "question.answered",
+      "question.asked",
+      "system.notice",
+      "tool.decision",
+      "tool.result",
+      "turn.cancelled",
+      "turn.error",
+      "ui.card",
+      "user.message",
+      "workspace_changes"
+    ],
+    "routes": [
+      "/",
+      "/artifacts/{filename}",
+      "/auth/ticket",
+      "/commands/{name}",
+      "/events",
+      "/health",
+      "/preview",
+      "/ui",
+      "/workspace-files/{path:.+}"
+    ],
+    "settings_groups": [
+      "Security & Sandboxing",
+      "Checkpoints",
+      "Jobs",
+      "Models & Providers",
+      "Execution & Strategies",
+      "Economics & Spend",
+      "Secrets",
+      "Bridges & Integrations",
+      "Context",
+      "Hooks"
+    ],
+    "unbacked_panels": [],
+    "undocumented_tabs": [],
+    "unknown_client_commands": []
+  },
+  "version": "0.2.1"
+}

@@ -55,6 +55,32 @@ async def test_provider_kit_passes_valid_provider():
 
 
 @pytest.mark.asyncio
+async def test_provider_kit_checks_readiness_contract():
+    """ProviderKit.test_readiness passes a conforming provider and rejects non-bool / raising probes."""
+    kit = ProviderKit()
+    await kit.test_readiness(ScriptedProvider())
+
+    class NotABool(ScriptedProvider):
+        def is_configured(self):  # type: ignore[override]
+            return "yes"
+
+    with pytest.raises(AssertionError, match="must return bool"):
+        await kit.test_readiness(NotABool())
+
+    class Raises(ScriptedProvider):
+        async def is_reachable(self):  # type: ignore[override]
+            raise RuntimeError("probe must never raise")
+
+    with pytest.raises(RuntimeError):
+        await kit.test_readiness(Raises())
+
+    unconfigured_but_raising = ScriptedProvider(models=[])
+    unconfigured_but_raising.configured = False
+    with pytest.raises(AssertionError, match="returned empty model list"):
+        await kit.test_list_models(unconfigured_but_raising)
+
+
+@pytest.mark.asyncio
 async def test_provider_kit_fails_empty_models():
     """ProviderKit catches provider returning empty model list."""
     kit = ProviderKit()

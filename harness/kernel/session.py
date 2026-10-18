@@ -17,10 +17,11 @@ from typing import Any
 from harness.kernel.bus import EventBus
 from harness.kernel.registry import PluginRegistry
 from harness.kernel.settings import SettingsStore
+from harness.kernel.transcript import MESSAGE_KINDS, TranscriptLog, upgrade_record_v1
 from harness.kernel.validators import validate_session_id
 from harness.sdk.errors import TurnInProgress
-from harness.sdk.events import Event
-from harness.sdk.types import HookEvent, SessionInfo
+from harness.sdk.events import Event, SessionStarted, SessionSwitched
+from harness.sdk.types import HookEvent, SessionInfo, SessionRow
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,41 @@ class _NullTranscriptStore:
         return _NullTranscriptStore(session_dir)
 
 
+def _summarize_transcript(path: Path, title_chars: int = 60) -> dict[str, Any]:
+    """Cheap scan of a transcript.jsonl: record count, number of user prompts, and the first prompt as title."""
+    out: dict[str, Any] = {"records": 0, "messages": 0, "turns": 0, "title": ""}
+    if not path.exists():
+        return out
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                out["records"] += 1
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                # `message_count` answers "how much conversation", not "how many lines": turn markers and
+                # decision records would inflate it every turn. Upgraded per line so the answer is the
+                # same for a v1 file as for a v2 one.
+                try:
+                    if upgrade_record_v1(rec).get("kind") in MESSAGE_KINDS:
+                        out["messages"] += 1
+                except Exception:
+                    pass
+                if rec.get("role") != "user" or not rec.get("content"):
+                    continue  # tool-result records are user-role with empty content
+                out["turns"] += 1
+                if not out["title"]:
+                    text = " ".join(str(rec["content"]).split())
+                    out["title"] = text[:title_chars] + ("…" if len(text) > title_chars else "")
+    except OSError:
+        pass
+    return out
+
+
 class Session:
     """
     Session instance representing an isolated conversation context within a workspace.
@@ -106,6 +142,13 @@ class Session:
             else:
                 transcript_store = reg_store
         self.transcript = transcript_store or _NullTranscriptStore(self.session_dir)
+        # WS-04: the log is the session's single record stream, built here rather than lazily so that
+        # whoever touches it first — the runner, `sessions.get`, a test — gets *this* store instance.
+        # Two stores over one JSONL file each keep their own step counter, which is how the runner and
+        # the session came to disagree about what had been written.
+        self._log = TranscriptLog.for_session(
+            self.session_dir, session_id=self.session_id, store=self.transcript
+        )
 
         # Concurrency control: one turn per session
         self._lock = asyncio.Lock()
@@ -154,9 +197,18 @@ class Session:
             if self._lock.locked():
                 self._lock.release()
 
+    @property
+    def log(self) -> TranscriptLog:
+        """`TranscriptLog` over this session's store (WS-04)."""
+        return self._log
+
     async def get_history(self, since_step: int = 0) -> list[dict[str, Any]]:
-        """Returns transcript records for this session."""
-        return await self.transcript.read(since_step=since_step, compact=False)
+        """Returns transcript records for this session, upgraded to the current record version.
+
+        Reads through the log rather than the store so a v1 file and a freshly written v2 record are
+        indistinguishable to callers (`sessions.get`, the reload-equals-live test, the web client).
+        """
+        return await self.log.read(since_step=since_step, compact=False)
 
     def ensure_git_exclude(self) -> None:
         """Writes /.harness/ to .git/info/exclude if applicable (§5.1)."""
@@ -204,13 +256,13 @@ class Session:
                 Event(
                     type="session.started",
                     session_id=self.session_id,
-                    data={
-                        "session_id": self.session_id,
-                        "workspace": str(self.workspace),
-                        "strategy": strat,
-                        "provider": provider,
-                        "model": model,
-                    },
+                    data=SessionStarted(
+                        session_id=self.session_id,
+                        workspace=str(self.workspace),
+                        strategy=strat,
+                        provider=provider,
+                        model=model,
+                    ),
                 )
             )
 
@@ -288,12 +340,16 @@ class SessionManager:
         return None
 
     def list_sessions(self) -> list[dict[str, Any]]:
-        """Lists all historical and active sessions in workspace."""
+        """Lists every session in the workspace, most recently updated first.
+
+        Rows are ``harness.sdk.types.SessionRow.to_dict()``: ``session_id, workspace, created_at,
+        updated_at, title, turns, message_count, active, busy``.
+        """
         results = []
         if not self.sessions_dir.exists():
             return results
 
-        for child in sorted(self.sessions_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+        for child in self.sessions_dir.iterdir():
             if not child.is_dir():
                 continue
             sess_id = child.name
@@ -310,24 +366,53 @@ class SessionManager:
                 except Exception:
                     pass
 
-            created_at = meta_data.get("created_at", child.stat().st_ctime)
+            created_at = float(meta_data.get("created_at", child.stat().st_mtime))
             t_file = child / "transcript.jsonl"
-            msg_count = 0
-            if t_file.exists():
-                try:
-                    with open(t_file, encoding="utf-8", errors="replace") as f:
-                        msg_count = sum(1 for line in f if line.strip())
-                except Exception:
-                    pass
+            summary = _summarize_transcript(t_file)
+            updated_at = t_file.stat().st_mtime if t_file.exists() else created_at
+            live = self._sessions.get(sess_id)
 
-            results.append({
-                "session_id": sess_id,
-                "workspace": str(self.workspace),
-                "created_at": created_at,
-                "message_count": msg_count,
-                "active": self.active_session.session_id == sess_id if self.active_session else False,
-            })
+            results.append(
+                SessionRow(
+                    session_id=sess_id,
+                    workspace=str(self.workspace),
+                    created_at=created_at,
+                    updated_at=updated_at,
+                    title=summary["title"],
+                    turns=summary["turns"],
+                    message_count=summary["messages"],
+                    active=self.active_session.session_id == sess_id if self.active_session else False,
+                    busy=bool(live and live.is_busy),
+                ).to_dict()
+            )
+        results.sort(key=lambda r: r["updated_at"], reverse=True)
         return results
+
+    async def resume_last(self) -> Session | None:
+        """Makes the most recently updated session that has at least one recorded turn the active one.
+
+        Called at daemon start so a browser refresh — or a daemon restart — lands on the conversation the
+        user was in, instead of a fresh empty session per start. Empty sessions are skipped. A resume is
+        not a start: SESSION_START hooks and ``session.started`` are not fired (they ran when the session
+        was created); ``session.switched`` is published so connected frontends can follow.
+        """
+        for row in self.list_sessions():
+            if row["turns"] <= 0:
+                continue
+            session = self.get_session(row["session_id"])
+            if session is None:
+                continue
+            self.active_session = session
+            if self.bus:
+                self.bus.publish(
+                    Event(
+                        type="session.switched",
+                        session_id=session.session_id,
+                        data=SessionSwitched(session_id=session.session_id, workspace=str(self.workspace)),
+                    )
+                )
+            return session
+        return None
 
     async def switch_session(self, session_id: str) -> Session:
         """Switches the active session, emitting session.switched."""
@@ -341,10 +426,10 @@ class SessionManager:
                 Event(
                     type="session.switched",
                     session_id=session_id,
-                    data={
-                        "session_id": session_id,
-                        "workspace": str(self.workspace),
-                    },
+                    data=SessionSwitched(
+                        session_id=session_id,
+                        workspace=str(self.workspace),
+                    ),
                 )
             )
         return session

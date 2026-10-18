@@ -16,8 +16,9 @@ from harness.kernel.bus import EventBus
 from harness.kernel.compaction import estimate_request_tokens, estimate_tokens
 from harness.kernel.registry import PluginRegistry
 from harness.kernel.settings import SettingsStore
+from harness.kernel.transcript import upgrade_record_v1
 from harness.sdk.contracts import ContextSource
-from harness.sdk.events import Event
+from harness.sdk.events import ContextAssembled, Event, EventPayload
 from harness.sdk.types import (
     Capability,
     ContentBlock,
@@ -36,9 +37,43 @@ from harness.sdk.types import (
     ToolSpec,
     ToolUseBlock,
     TranscriptRecord,
+    infer_record_kind,
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def append_and_publish_record(
+    *,
+    log: Any,
+    bus: EventBus | None,
+    session_id: str | None,
+    turn_id: str | None,
+    payload: EventPayload,
+    content: str,
+    metadata: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Append one durable record before publishing the typed event that mirrors it."""
+    event_type = getattr(type(payload), "EVENT_TYPE", None)
+    kind = getattr(type(payload), "record_kind", None)
+    if not event_type or not kind:
+        raise ValueError(f"{type(payload).__name__} is not a durable event payload")
+    record = None
+    if log is not None:
+        await log.append(TranscriptRecord(kind=kind, role="system", content=content, metadata=dict(metadata)))
+        record = log.records[-1]
+    if bus is not None:
+        bus.publish(
+            Event(
+                type=event_type,
+                data=payload,
+                session_id=session_id,
+                turn_id=turn_id,
+                record=record,
+            )
+        )
+    return record
+
 
 STABILITY_ORDER = {
     Stability.STATIC: 1,
@@ -52,6 +87,37 @@ class HookContextImpl:
     """Concrete implementation satisfying the HookContext protocol."""
     session_id: str
     workspace: Path
+    turn_id: str | None = None
+    turn_state: dict[str, Any] = field(default_factory=dict)
+    bus: Any = None
+    log: Any = None
+    settings: Any = None
+
+    def emit(self, event_type: str, data: Any) -> None:
+        """Publishes a live event for the UI without making it a transcript fact."""
+        if self.bus is None:
+            return
+        self.bus.publish(
+            Event(type=event_type, session_id=self.session_id, turn_id=self.turn_id, data=data)
+        )
+
+    async def emit_record(
+        self,
+        payload: EventPayload,
+        *,
+        content: str,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Write a durable fact to the session log before publishing its event."""
+        return await append_and_publish_record(
+            log=self.log,
+            bus=self.bus,
+            session_id=self.session_id,
+            turn_id=self.turn_id,
+            payload=payload,
+            content=content,
+            metadata=metadata,
+        )
 
 
 @dataclass
@@ -87,40 +153,128 @@ class TurnContextImpl:
 
 
 
-def records_to_messages(records: list[dict[str, Any] | TranscriptRecord]) -> list[Message]:
+#: Which record kinds the model is allowed to see. Everything else in the log (decisions, approvals,
+#: cards, turn markers) is a user-visible fact about how the turn was decided, not conversation
+#: content — sending it would spend context on the machinery and change what the model reads.
+MODEL_VISIBLE_KINDS = frozenset(
+    {"user.message", "assistant.message", "tool.result", "compaction.summary"}
+)
+
+
+def slice_at_last_compaction(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drops everything before the newest compaction summary (the summary replaces that history)."""
+    last = -1
+    for idx, rec in enumerate(records):
+        if rec.get("kind") == "compaction.summary" or rec.get("metadata", {}).get("compaction_summary"):
+            last = idx
+    return records[last:] if last >= 0 else records
+
+
+def repair_dangling_tool_calls(messages: list[Message]) -> list[Message]:
+    """Give every logged tool call a result, so a crash between the two cannot wedge the session.
+
+    A provider that receives a `tool_use` with no matching `tool_result` rejects the whole request
+    (Anthropic answers 400), which before this made a crashed turn permanent: every later turn in the
+    session replayed the same dangling call. The synthetic result says what happened instead of
+    pretending the tool succeeded, and it is marked `synthetic` so the UI can distinguish it.
     """
-    Converts transcript records to SDK Message dataclasses.
-    Preserves ToolUseBlock and ToolResultBlock structures.
-    Standardizes tool results into USER role messages with ToolResultBlocks.
-    Slices history starting from the latest COMPACTION_SUMMARY boundary.
+    out: list[Message] = []
+    i = -1
+    while i + 1 < len(messages):
+        i += 1
+        msg = messages[i]
+        uses = [b for b in msg.content if isinstance(b, ToolUseBlock)] if msg.role == Role.ASSISTANT else []
+        if not uses:
+            out.append(msg)
+            continue
+        nxt = messages[i + 1] if i + 1 < len(messages) else None
+        nxt_is_results = nxt is not None and nxt.role == Role.USER and any(
+            isinstance(b, ToolResultBlock) for b in nxt.content
+        )
+        covered = (
+            {b.tool_use_id for b in nxt.content if isinstance(b, ToolResultBlock)} if nxt_is_results else set()
+        )
+        missing = [u for u in uses if u.id not in covered]
+        out.append(msg)
+        if not missing:
+            continue
+        blocks = [
+            ToolResultBlock(
+                tool_use_id=u.id,
+                content=[
+                    TextBlock(
+                        text=(
+                            f"No result was recorded for '{u.name}': the turn ended before the tool "
+                            "finished. The tool may or may not have run."
+                        )
+                    )
+                ],
+                is_error=True,
+            )
+            for u in missing
+        ]
+        if nxt_is_results and nxt is not None:
+            # Same message, synthetic results first: a provider requires *all* results for a turn's
+            # calls, and splitting them across two user messages is what some providers reject.
+            out.append(
+                Message(
+                    role=Role.USER,
+                    content=[*blocks, *nxt.content],
+                    metadata={**nxt.metadata, "repaired_tool_results": len(blocks)},
+                )
+            )
+            i += 1
+        else:
+            out.append(
+                Message(
+                    role=Role.USER,
+                    content=blocks,
+                    metadata={"synthetic": True, "repaired_tool_results": len(blocks)},
+                )
+            )
+    return out
+
+
+def derive_messages(records: list[dict[str, Any] | TranscriptRecord]) -> list[Message]:
+    """The only producer of a model request's message list (WS-04 §1.2).
+
+    Pure: records in, messages out — no settings, no I/O, no clock. That is what lets the golden tests
+    and `tests/kernel/test_log_is_source.py` rebuild a request from the log and compare it byte for
+    byte with what the live turn sent. `records_to_messages` is kept as an alias for one minor version.
     """
     if not records:
         return []
 
-    # Find latest compaction boundary
-    last_compaction_idx = -1
-    for idx, r in enumerate(records):
-        r_dict = r.to_dict() if hasattr(r, "to_dict") else r
-        rec_type = str(r_dict.get("type", "")).upper()
-        if rec_type == "COMPACTION_SUMMARY" or r_dict.get("metadata", {}).get("compaction_summary"):
-            last_compaction_idx = idx
-
-    if last_compaction_idx >= 0:
-        sliced_records = records[last_compaction_idx:]
-    else:
-        sliced_records = records
-
+    # Upgrade first: a v1 store line has no `kind`, and the compaction slice and the model-visible
+    # dispatch below both key off it. Legacy `type`/`source` shapes are mapped by the same function the
+    # reload path uses, so derive and `sessions.get` cannot disagree about what a record is.
+    dicts = [upgrade_record_v1(r) if isinstance(r, dict) else r.to_dict() for r in records]
     messages: list[Message] = []
-    for r in sliced_records:
-        rec = r if isinstance(r, TranscriptRecord) else TranscriptRecord.from_dict(r)
+    for rec_dict in slice_at_last_compaction(dicts):
+        rec = TranscriptRecord.from_dict(rec_dict)
+        kind = rec.kind or infer_record_kind(
+            role=rec.role, tool_calls=rec.tool_calls, tool_results=rec.tool_results, metadata=rec.metadata
+        )
 
-        if rec.metadata.get("compaction_summary"):
-            msg = Message(
-                role=Role.USER,
-                content=[TextBlock(text=f"## Previous Conversation Summary\n\n{rec.content}")],
-                metadata={"compaction_summary": True},
+        if kind == "compaction.summary":
+            messages.append(
+                Message(
+                    role=Role.USER,
+                    content=[TextBlock(text=f"## Previous Conversation Summary\n\n{rec.content}")],
+                    metadata={"compaction_summary": True},
+                )
             )
-            messages.append(msg)
+            continue
+
+        if kind == "system.notice":
+            # Opt-in model visibility: a notice the kernel wants the model to read (e.g. a policy
+            # change mid-session) is marked, everything else stays UI-only.
+            if not rec.metadata.get("model_visible") or not rec.content:
+                continue
+            messages.append(Message(role=Role.USER, content=[TextBlock(text=rec.content)], metadata=rec.metadata))
+            continue
+
+        if kind not in MODEL_VISIBLE_KINDS:
             continue
 
         if rec.role == "assistant":
@@ -129,63 +283,65 @@ def records_to_messages(records: list[dict[str, Any] | TranscriptRecord]) -> lis
                 blocks.append(ThinkingBlock(text=rec.thinking))
             if rec.content:
                 blocks.append(TextBlock(text=rec.content))
-            if rec.tool_calls:
-                for tc in rec.tool_calls:
-                    tc_id = tc.get("id") or tc.get("call_id", "")
-                    tc_name = tc.get("name", "")
-                    tc_args = tc.get("arguments") or tc.get("input", {})
-                    blocks.append(ToolUseBlock(id=tc_id, name=tc_name, input=tc_args))
-            messages.append(Message(role=Role.ASSISTANT, content=blocks, metadata=rec.metadata))
-            continue
-
-        if rec.role in ("user", "tool"):
-            blocks: list[ContentBlock] = []
-            # Tool results standardized as USER role blocks per §4.1 #4
-            if rec.tool_results:
-                for tr in rec.tool_results:
-                    use_id = tr.get("tool_use_id") or tr.get("call_id") or tr.get("id", "")
-                    tr_content = tr.get("content", [])
-                    parsed_content: list[TextBlock | ImageBlock] = []
-                    if isinstance(tr_content, str):
-                        parsed_content.append(TextBlock(text=tr_content))
-                    elif isinstance(tr_content, list):
-                        for c in tr_content:
-                            if isinstance(c, dict):
-                                if c.get("type") == "image":
-                                    parsed_content.append(ImageBlock.from_dict(c))
-                                else:
-                                    parsed_content.append(TextBlock.from_dict(c))
-                            elif isinstance(c, str):
-                                parsed_content.append(TextBlock(text=c))
-                    blocks.append(
-                        ToolResultBlock(
-                            tool_use_id=use_id,
-                            content=parsed_content,
-                            is_error=bool(tr.get("is_error", False)),
-                        )
-                    )
-
-            if rec.content:
-                blocks.append(TextBlock(text=rec.content))
-
-            if rec.media:
-                for m in rec.media:
-                    if isinstance(m, dict):
-                        blocks.append(
-                            ImageBlock(
-                                media_type=m.get("media_type", "image/png"),
-                                data_b64=m.get("data_b64"),
-                                url=m.get("url"),
-                            )
-                        )
-                    elif isinstance(m, ImageBlock):
-                        blocks.append(m)
-
+            for tc in rec.tool_calls:
+                tc_id = tc.get("id") or tc.get("call_id", "")
+                tc_name = tc.get("name", "")
+                tc_args = tc.get("arguments") or tc.get("input", {})
+                blocks.append(ToolUseBlock(id=tc_id, name=tc_name, input=tc_args))
             if blocks:
-                messages.append(Message(role=Role.USER, content=blocks, metadata=rec.metadata))
+                messages.append(Message(role=Role.ASSISTANT, content=blocks, metadata=rec.metadata))
             continue
 
-    return messages
+        # role user, kind user.message or tool.result — tool results are carried by USER-role records
+        blocks = []
+        if kind == "tool.result":
+            for tr in rec.tool_results:
+                use_id = tr.get("tool_use_id") or tr.get("call_id") or tr.get("id", "")
+                tr_content = tr.get("content", [])
+                parsed_content: list[TextBlock | ImageBlock] = []
+                if isinstance(tr_content, str):
+                    parsed_content.append(TextBlock(text=tr_content))
+                elif isinstance(tr_content, list):
+                    for c in tr_content:
+                        if isinstance(c, dict):
+                            if c.get("type") == "image":
+                                parsed_content.append(ImageBlock.from_dict(c))
+                            else:
+                                parsed_content.append(TextBlock.from_dict(c))
+                        elif isinstance(c, str):
+                            parsed_content.append(TextBlock(text=c))
+                blocks.append(
+                    ToolResultBlock(
+                        tool_use_id=use_id,
+                        content=parsed_content,
+                        is_error=bool(tr.get("is_error", False)),
+                    )
+                )
+
+        if rec.content:
+            blocks.append(TextBlock(text=rec.content))
+
+        for m in rec.media:
+            if isinstance(m, dict):
+                blocks.append(
+                    ImageBlock(
+                        media_type=m.get("media_type", "image/png"),
+                        data_b64=m.get("data_b64"),
+                        url=m.get("url"),
+                    )
+                )
+            elif isinstance(m, ImageBlock):
+                blocks.append(m)
+
+        if blocks:
+            messages.append(Message(role=Role.USER, content=blocks, metadata=rec.metadata))
+
+    return repair_dangling_tool_calls(messages)
+
+
+#: Deprecated alias: `derive_messages` is the name of the contract (the log is derived *into* a
+#: request), and this keeps pre-WS-04 imports working for one minor version.
+records_to_messages = derive_messages
 
 
 class ContextAssembler:
@@ -342,8 +498,8 @@ class ContextAssembler:
                 Event(
                     type="context.assembled",
                     session_id=session_id,
-                    data={
-                        "blocks": [
+                    data=ContextAssembled(
+                        blocks=[
                             {
                                 "id": b.id,
                                 "stability": b.stability.value,
@@ -352,9 +508,9 @@ class ContextAssembler:
                             }
                             for b in collected_blocks
                         ],
-                        "total_tokens": total_tokens,
-                        "history_messages": len(history_messages),
-                    },
+                        total_tokens=total_tokens,
+                        history_messages=len(history_messages),
+                    ),
                 )
             )
 

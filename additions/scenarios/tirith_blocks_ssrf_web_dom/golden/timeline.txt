@@ -1,1 +1,0 @@
-Fetch the instance metadata. ⚡ run_command c1 DENIED Arguments{ "command": "curl -s http://169.254.169.254/latest/meta-data/" } Output:Action denied: Command attempts SSRF access to blocked target: 169\.254\.\d+\.\d+ That request was blocked by the security policy.

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Probe Vault settings",
+  "x-namespace": "plugins.probe-vault",
+  "properties": {
+    "row_limit": {
+      "type": "integer",
+      "default": 25,
+      "minimum": 1,
+      "description": "How many vault rows the panel lists before it asks to scroll.",
+      "x-ui": { "group": "Probe Vault", "widget": "number", "order": 1 }
+    }
+  }
+}

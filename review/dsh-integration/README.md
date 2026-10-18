@@ -58,19 +58,19 @@ Recommended sequence: **WS-01 → WS-02 → WS-03 → WS-04 → WS-05 → WS-07 
 
 | WS | Status | PR |
 |---|---|---|
-| WS-01 | specified | — |
-| WS-02 | specified | — |
-| WS-03 | specified | — |
-| WS-04 | specified | — |
-| WS-05 | specified | — |
-| WS-06 | specified | — |
+| WS-01 | **executed** (P11b; replay/record framework and three scenario lanes) | PR #5 |
+| WS-02 | **executed** (P7) — generated catalogs and freshness gates; README/scenario coverage remain advisory warnings, scaffold kinds deferred | PR #5 |
+| WS-03 | **executed** (P8) — finalize hooks, cooperative timeout, read ledger, four hook plugins and regression scenarios | PR #5 |
+| WS-04 | **executed** (P9–P11) — transcript records as source of truth, policy facts, repair, client rendering and reindexing; documented omissions remain | PR #5 |
+| WS-05 | **executed** (P12a/P12b/P13a/P13b/P14) — feature-owned UI, grouped settings, Plugins pane, installed plugin loading and module serving | PR #5 |
+| WS-06 | **executed locally** (P15) — presets + sandbox seam/status/UI; 655 passed, 4 bwrap-dependent skips; this worktree is not committed/pushed, and real local confinement is unverified | PR #5 (working tree) |
 | WS-07 | specified | — |
 | WS-08 | specified | — |
-| WS-09 | specified | — |
-| WS-10 | specified | — |
+| WS-09 | **executed locally** — stdio/HTTP, reconnect/cancel/status/settings; focused tests 28 passed, flow scenarios 54 passed/1 skipped, non-scenario suite 664 passed/3 skipped; changes uncommitted | existing PR (local worktree) |
+| WS-10 | **in progress** — WS-10a Jobs executed locally (uncommitted); WS-10b Goals remains specified/not started. Full suite: 716 passed, 4 skipped; see `WS-10_jobs_and_goals.md` for focused and scenario evidence. | existing branch/PR (local changes not pushed) |
 | WS-11 | specified | — |
 
-Update this table (and `plan.yaml` `status:`) in the PR that lands each WS.
+Update this table (and `plan.yaml` `status:`) as each WS is implemented; distinguish local test evidence from committed/CI evidence.
 
 ## How this pack was produced
 

@@ -1,0 +1,13 @@
+name: ask_user_headless
+kind: kernel
+summary: Headless ask_user fails promptly with a model-visible error so the turn can continue.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: allow
+turns:
+  - prompt: Ask me to choose a format, but continue with your best assumption if there is no user.
+expect:
+  tools_called: [ask_user]
+  event_types_exclude: [question.asked, question.answered]
+  model_saw: ["ask_user unavailable: no interactive client connected"]
+  no_errors: true

@@ -6,3 +6,6 @@ summary = "Model Context Protocol stdio server bridge exposing Harness tools to 
 provides = ["bridge"]
 capabilities = ["exec"]
 entry = "harness.plugins.bridges.mcp_server.plugin:MCPServerBridgePlugin"
+
+[settings]
+schema = "settings.schema.json"

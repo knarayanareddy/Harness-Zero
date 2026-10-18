@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Tool result spill settings",
+  "x-namespace": "plugins.hook-tool-result-spill",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Copy oversized tool results into the session directory."
+    },
+    "threshold_chars": {
+      "type": "integer",
+      "default": 8192,
+      "minimum": 256,
+      "description": "Only results longer than this many characters are spilled."
+    },
+    "max_files_per_session": {
+      "type": "integer",
+      "default": 200,
+      "minimum": 0,
+      "description": "Cap on spool files kept per session; older ones are deleted."
+    },
+    "exempt_tools": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [
+        "view_file"
+      ],
+      "description": "Tools whose results are never spilled (they are already paginated)."
+    }
+  },
+  "additionalProperties": false
+}

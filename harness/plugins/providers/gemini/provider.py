@@ -103,20 +103,24 @@ class GeminiProvider:
         if not self._external_client and not self._client.is_closed:
             await self._client.aclose()
 
+    def is_configured(self) -> bool:
+        """An API key is required (an injected client counts as configured for tests)."""
+        return bool(self.api_key) or self._external_client
+
+    async def is_reachable(self) -> bool | None:
+        """Hosted API: not probed."""
+        return None
+
     async def list_models(self) -> list[ModelInfo]:
-        """Returns supported Gemini models."""
+        """Live ``/models`` when configured, else the built-in catalogue — never a network call without a key."""
         now = time.time()
         if self._cached_models and (now - self._cached_models_ts) < 86400:
             return self._cached_models
 
-        if not self.api_key and not self._external_client:
-            raise ProviderError(
-                provider=self.name,
-                model="gemini-2.0-flash",
-                kind="auth",
-                message="GEMINI_API_KEY is not configured",
-                retryable=False,
-            )
+        if not self.is_configured():
+            self._cached_models = DEFAULT_GEMINI_MODELS
+            self._cached_models_ts = now
+            return DEFAULT_GEMINI_MODELS
 
         try:
             headers = {"x-goog-api-key": self.api_key, **self.extra_headers}

@@ -1,0 +1,281 @@
+[
+  {
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "Start the background job."
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "replay-v1",
+    "system_chars": 1468,
+    "system_head": "You are Harness-Zero, an advanced agentic software engineering system. You operate with absolute precision, rigorous test-driven verification, and minimal disruption. Always inspect files thoroughly before editing, write clean production-grade code, and verify all changes with automated tests.\n\nTool Execution Rules:\n1. Read before writing: inspect files using view_file before editing.\n2. Precise e",
+    "system_sections": [
+      "# Available Skills (Progressive Disclosure)"
+    ],
+    "tools": [
+      "ask_user",
+      "checkpoint_restore",
+      "create_artifact",
+      "edit_file",
+      "job_kill",
+      "job_list",
+      "job_output",
+      "job_start",
+      "manage_task",
+      "present",
+      "read_resource",
+      "remember",
+      "run_command",
+      "search_codebase",
+      "search_memory",
+      "view_file",
+      "view_skill",
+      "write_to_file"
+    ]
+  },
+  {
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "Start the background job."
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "input": {
+              "command": "printf 'job finished between turns\\n'",
+              "label": "short-job"
+            },
+            "tool_use": "job_start"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "is_error": false,
+            "tool_result": "Started background job job#1 (short-job). Use job_output or job_list to inspect it."
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "replay-v1",
+    "system_chars": 1468,
+    "system_head": "You are Harness-Zero, an advanced agentic software engineering system. You operate with absolute precision, rigorous test-driven verification, and minimal disruption. Always inspect files thoroughly before editing, write clean production-grade code, and verify all changes with automated tests.\n\nTool Execution Rules:\n1. Read before writing: inspect files using view_file before editing.\n2. Precise e",
+    "system_sections": [
+      "# Available Skills (Progressive Disclosure)"
+    ],
+    "tools": [
+      "ask_user",
+      "checkpoint_restore",
+      "create_artifact",
+      "edit_file",
+      "job_kill",
+      "job_list",
+      "job_output",
+      "job_start",
+      "manage_task",
+      "present",
+      "read_resource",
+      "remember",
+      "run_command",
+      "search_codebase",
+      "search_memory",
+      "view_file",
+      "view_skill",
+      "write_to_file"
+    ]
+  },
+  {
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "Start the background job."
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "input": {
+              "command": "printf 'job finished between turns\\n'",
+              "label": "short-job"
+            },
+            "tool_use": "job_start"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "is_error": false,
+            "tool_result": "Started background job job#1 (short-job). Use job_output or job_list to inspect it."
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "The short job has been started."
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "Jobs finished since your last turn: #job#1 \"short-job\" exited 0 after 0s (tail: job finished between turns). Use job_output for more."
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "Check on the background job."
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "replay-v1",
+    "system_chars": 1468,
+    "system_head": "You are Harness-Zero, an advanced agentic software engineering system. You operate with absolute precision, rigorous test-driven verification, and minimal disruption. Always inspect files thoroughly before editing, write clean production-grade code, and verify all changes with automated tests.\n\nTool Execution Rules:\n1. Read before writing: inspect files using view_file before editing.\n2. Precise e",
+    "system_sections": [
+      "# Available Skills (Progressive Disclosure)"
+    ],
+    "tools": [
+      "ask_user",
+      "checkpoint_restore",
+      "create_artifact",
+      "edit_file",
+      "job_kill",
+      "job_list",
+      "job_output",
+      "job_start",
+      "manage_task",
+      "present",
+      "read_resource",
+      "remember",
+      "run_command",
+      "search_codebase",
+      "search_memory",
+      "view_file",
+      "view_skill",
+      "write_to_file"
+    ]
+  },
+  {
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "Start the background job."
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "input": {
+              "command": "printf 'job finished between turns\\n'",
+              "label": "short-job"
+            },
+            "tool_use": "job_start"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "is_error": false,
+            "tool_result": "Started background job job#1 (short-job). Use job_output or job_list to inspect it."
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "The short job has been started."
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "Jobs finished since your last turn: #job#1 \"short-job\" exited 0 after 0s (tail: job finished between turns). Use job_output for more."
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "Check on the background job."
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "The background job is still running."
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "What happened with the background job?"
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "replay-v1",
+    "system_chars": 1468,
+    "system_head": "You are Harness-Zero, an advanced agentic software engineering system. You operate with absolute precision, rigorous test-driven verification, and minimal disruption. Always inspect files thoroughly before editing, write clean production-grade code, and verify all changes with automated tests.\n\nTool Execution Rules:\n1. Read before writing: inspect files using view_file before editing.\n2. Precise e",
+    "system_sections": [
+      "# Available Skills (Progressive Disclosure)"
+    ],
+    "tools": [
+      "ask_user",
+      "checkpoint_restore",
+      "create_artifact",
+      "edit_file",
+      "job_kill",
+      "job_list",
+      "job_output",
+      "job_start",
+      "manage_task",
+      "present",
+      "read_resource",
+      "remember",
+      "run_command",
+      "search_codebase",
+      "search_memory",
+      "view_file",
+      "view_skill",
+      "write_to_file"
+    ]
+  }
+]

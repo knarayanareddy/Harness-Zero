@@ -1,0 +1,8 @@
+{"arguments": {"content": "written while you watched\n", "file_path": "notes.txt"}, "id": "c1", "name": "write_to_file", "t": "ToolCallEnd"}
+{"arguments": {"skill_name": "code-architect"}, "id": "c2", "name": "view_skill", "t": "ToolCallEnd"}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "tool_use", "t": "Done"}
+
+{"t": "TextDelta", "text": "Notes written and the playbook loaded — the card and the approval are both in your history now."}
+{"t": "UsageEvent", "usage": {"cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": null, "input_tokens": 20, "output_tokens": 8, "reasoning_tokens": 0}}
+{"stop_reason": "end_turn", "t": "Done"}

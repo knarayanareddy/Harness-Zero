@@ -260,6 +260,8 @@ async def test_s13_claude_code_hook_acceptance_and_events(tmp_path: Path):
         events_2.append(sub.get_nowait())
 
     # Verify notice card event emitted (S13 expected outcome)
-    notice_cards = [e for e in events_2 if e.type == "ui.card" and e.data.get("kind") == "notice"]
+    # ui.card payload is {card: Card.to_dict()} — the SDK card shape {kind, id, title, data}.
+    notice_cards = [e for e in events_2 if e.type == "ui.card" and e.data["card"]["kind"] == "notice"]
     assert len(notice_cards) >= 1
-    assert "Security Violation" in notice_cards[-1].data["payload"]["message"]
+    assert notice_cards[-1].data["card"]["data"]["level"] == "error"
+    assert "Security Violation" in notice_cards[-1].data["card"]["data"]["body"]

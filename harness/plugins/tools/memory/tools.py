@@ -221,9 +221,5 @@ class RememberHandler:
 
         key_str = f" [{key}]" if key else ""
         output_msg = f"Permanently remembered fact #{fact_id}{key_str}: {text}"
-        card = Card.notice(output_msg, level="info")
-
-        return ToolResult(
-            content=[TextBlock(text=output_msg)],
-            cards=[card],
-        )
+        # The tool result preview already shows this text; a notice card would render it twice.
+        return ToolResult(content=[TextBlock(text=output_msg)])

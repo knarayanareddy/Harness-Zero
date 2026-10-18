@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Repo-map context settings",
+  "x-namespace": "plugins.context-repo-map",
+  "properties": {
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repo_map": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_tokens": {
+              "type": "integer",
+              "default": 1024,
+              "minimum": 64,
+              "title": "Repo Map Budget (tokens)",
+              "x-ui": {
+                "widget": "number"
+              }
+            },
+            "force": {
+              "type": "boolean",
+              "default": false,
+              "title": "Always Rebuild Repo Map",
+              "x-ui": {
+                "widget": "boolean"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

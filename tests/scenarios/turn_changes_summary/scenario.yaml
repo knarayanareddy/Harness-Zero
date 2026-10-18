@@ -1,0 +1,28 @@
+name: turn_changes_summary
+kind: web
+summary: A real browser turn edits two files, persists one bounded workspace summary, and advertises the Diffs panel.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: allow
+  kernel.security.destructive_blocking: false
+workspace_files:
+  app.py: "old value\n"
+turns:
+  - prompt: "Update app.py and add notes.txt."
+expect:
+  tools_called: [view_file, write_to_file, write_to_file]
+  files:
+    app.py: {contains: "new value"}
+    notes.txt: {contains: "line two"}
+  event_types_include: [checkpoint.created, workspace.changes, turn.completed]
+  dom_turns_completed: true
+  dom_tabs_include: [diffs]
+  dom_panel_text:
+    diffs: "2 files changed"
+  dom_diff_preview_contains: ["-old value", "+new value"]
+  dom_plugin_modules_served: true
+  dom_reload: true
+  timeline_contains: ["2 files changed · +3 −1", "Review in Diffs"]
+  reload_timeline_contains: ["Update app.py and add notes.txt.", "2 files changed · +3 −1"]
+  event_types_exclude: [turn.error, turn.cancelled]
+  no_console_errors: true

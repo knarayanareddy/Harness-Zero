@@ -117,10 +117,25 @@ class Process(Protocol):
 @runtime_checkable
 class Executor(Protocol):
     name: str
-    isolation: Literal["none", "worktree", "container", "vm"]
+    isolation: Literal["none", "worktree", "container", "vm", "os-sandbox"]
 
     async def start(self, req: ExecRequest) -> Process: ...
+
+@runtime_checkable
+class SandboxBackend(Protocol):
+    name: str
+
+    def available(self) -> SandboxAvailability: ...
+    def wrap(self, req: ExecRequest, policy: SandboxPolicy) -> ExecRequest: ...
 ```
+
+`SandboxAvailability` (`backend`, `available`, `reason`, `enforcement`) is a probed host fact, not a configuration
+claim. `SandboxPolicy` supplies the workspace, its writable paths, explicit read-only host paths, network permission,
+and an environment allowlist. The registry owns the live sandbox backend slot; every `ctx.executor` is wrapped at
+the gate, so a worktree or third-party executor cannot bypass it. `required` + unavailable denies before the
+executor starts; `preferred` + unavailable asks before an unconfined fallback; the process result reports the
+actual enforcement in `ExecResult.metadata.sandbox`. Only the SDK-owned OS backend implementation probes the host
+with `subprocess`; plugins and tools still route their commands through `Executor`.
 
 ### `ContextSource`
 Prompt assembly component:
@@ -142,8 +157,8 @@ class TranscriptStore(Protocol):
     async def append(self, record: dict[str, Any]) -> int: ...
     async def read(self, since_step: int = 0, compact: bool = True) -> list[dict[str, Any]]: ...
     async def last_compaction(self) -> dict[str, Any] | None: ...
-    async def list_sessions(self) -> list[dict[str, Any]]: ...
 ```
+A store holds one session; `SessionManager.list_sessions()` (kernel) enumerates sessions.
 
 ### `Strategy`
 Autonomous orchestration loop strategy:

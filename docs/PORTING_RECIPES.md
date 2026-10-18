@@ -18,6 +18,86 @@ Harness-Zero enforces strict modular isolation:
 
 Tools allow agents to perform actions in the workspace (filesystem operations, searches, code execution).
 
+### Optional: `[ui]` — a feature that owns its own surface (WS-05)
+
+```toml
+[ui]
+# A side panel, mounted by any frontend that asks `ui.contributions`. `command` must be dispatchable:
+# a tab with no command behind it is how a "coming soon" placeholder is born.
+panels = [
+  { id = "vault", title = "Vault", command = "obsidian.search", renderer = "table" },
+]
+# Record kinds this plugin's *client module* paints, so the timeline can show them after a reload too.
+record_renderers = ["ui.card"]
+# Optional, and only for a built-in or config-dir plugin (workspace plugins may not run code in the browser).
+client_module = "static/plugins/obsidian.js"   # served at /static/plugins/obsidian/plugins/obsidian.js
+```
+
+The URL is the kernel's business, not yours: `harness/sdk/plugin_static.py:client_module_url` maps
+`static/<path>` to `/static/plugins/<plugin name>/<path>`, and `harness catalog` prints the result under
+`ui.client_modules[].url` (`harness catalog show --section ui`) so you never have to guess it. The plugin name is
+in the address so two features may each ship a file called `static/panel.js`; the prefix route is registered ahead
+of the client's own `/static/` tree. Refusals are uniform 404s — a file you did not declare, a path leaving your
+`static/` directory, a suffix outside `.js .mjs .css`, a plugin the running daemon did not load, a plugin from a
+*workspace* (which may not run code in a browser at all). Discovery enforces the same trust rule before it
+advertises anything: an untrusted tier's `client_module` is dropped with a `[warn]` in the boot log and the panel
+keeps its generic renderer, so a stale declaration degrades a surface instead of failing to boot the kernel.
+
+The client module exports two maps, and `app.js` reads them by name after importing the URL the kernel reported:
+
+```js
+// static/plugins/obsidian.js — the shape `HarnessStudioApp.loadPluginModules()` expects
+export const panels = {
+  vault: {
+    host: 'panel-vault',                     // optional: defaults to the host the shell creates for the id
+    async render({ api, host, escape, select, app }) {
+      const rows = (await api.command('obsidian.search', { query: '' })).rows || [];
+      host.innerHTML = rows.map((r) => `<div class="panel-item">${escape(r.title)}</div>`).join('');
+    },
+  },
+};
+export const renderers = {
+  // kind -> (app, record) => void; `app` owns the shared painters (appendNotice, appendCard, appendToolCall, …)
+  'obsidian.note': (app, rec) => app.appendNotice(rec.content || '', 'info'),
+};
+```
+
+Three authoring rules inside a panel module, all learned the hard way:
+
+* **Write a `data-command` value literally.** `harness catalog gen` reads bindings out of the source text, so
+  `data-command="${enabled ? 'plugins.disable' : 'plugins.enable'}"` is invisible to `--check` while
+  `data-command="plugins.disable"` on one branch and `data-command="plugins.enable"` on the other are both
+  gated. Prefer two branches with literal attributes over one interpolated name.
+* **Escape what goes in an attribute.** `escape` (textContent-based) defuses text nodes only; a `"` in
+  `data-args` ends the attribute. `ctx.escapeAttr` exists for values written into markup — pass
+  `JSON.stringify(args)` through it.
+* **Take the arguments your command declares.** A panel with no module is refreshed by `registry.js:mountGeneric`,
+  which has exactly one piece of context to offer — the current `session_id` — and used to offer it unconditionally.
+  `Commands.dispatch` passes arguments as keyword arguments, so a panel command that does not name `session_id`
+  raised `TypeError` and painted nothing: the three built-in panels worked only because all three happen to accept
+  it. Now `ui.contributions` publishes each panel's `accepts` (the argument names of its command, taken from the
+  same rows `commands.list` reports) and the client passes `session_id` only when its list contains that name — so
+  `obsidian.search(query)` paints, and a built-in that wants the session must name it in its signature.
+  `tests/frontends/test_ui_contract.py:test_every_declared_panel_can_be_refreshed_with_the_args_the_client_sends`
+  holds every declaration to that rule, and the catalogue carries `accepts` so the check needs no live kernel.
+
+A panel key with no declaration, or a renderer for a kind the kernel does not write, is a test failure, not a
+feature: the ids must match (`test_the_panel_modules_are_the_declared_panels`), and an excuse in `NO_RENDERER`
+may not coexist with a renderer. `render` may be async and may throw — the registry logs it per panel, so one
+broken pane never takes the page down.
+
+The parser (`harness/sdk/manifest.py`) refuses an unknown `renderer` (the built-ins are
+`table | tree | markdown | list`), a malformed or duplicate panel id, an empty `command`, an unknown `[ui]` key,
+and a `client_module` outside `static/`. Settings tabs need no declaration at all: name a group in your
+`settings.schema.json` (`x-ui.group`, optionally `x-ui.order`) and it becomes a tab. Saying nothing is also
+fine — your properties land on the tab for your plugin's family directory (`hooks` → `Hooks`,
+`bridges` → `Bridges & Integrations`, `providers` → `Models & Providers`, …; see
+`harness/kernel/settings_schema.py:FAMILY_TABS`), and each property is rendered under a heading naming *your*
+plugin (`x-ui.owner`/`owner_title`/`owner_summary` are filled in for you). An unknown family falls back to
+`Plugins & Integrations`, which is deliberately kept nearly empty — see `tests/kernel/test_settings_groups.py`.
+See
+`docs/testing/SCENARIOS.md` for the tests, `docs/catalog/UI_CONTRACT.md` for what the client mounts.
+
 ### `harness_plugin.toml`
 ```toml
 [plugin]
@@ -130,7 +210,21 @@ class CustomProvider(Provider):
         thinking=False,
     )
 
+    def __init__(self, api_key: str = "") -> None:
+        self.api_key = api_key
+
+    def is_configured(self) -> bool:
+        # The provider is the only authority on its readiness: the kernel lists your models as
+        # "needs key" when this is False instead of guessing from secret names.
+        return bool(self.api_key)
+
+    async def is_reachable(self) -> bool | None:
+        # Hosted API → None (not probed). A local server should GET a cheap endpoint with a
+        # ~300 ms timeout, cache the verdict ~30 s and never raise (see the Ollama provider).
+        return None
+
     async def list_models(self) -> list[ModelInfo]:
+        # The catalogue you *know* — returned with or without a key, no network call when unconfigured.
         return [
             ModelInfo(
                 id="custom-model-v1",
@@ -156,7 +250,7 @@ class CustomProviderPlugin:
         self.manifest = manifest
 
     async def setup(self, ctx: PluginContext) -> None:
-        ctx.register_provider(CustomProvider())
+        ctx.register_provider(CustomProvider(api_key=ctx.secrets.get("CUSTOM_API_KEY", "") or ""))
 
     async def teardown(self) -> None:
         pass
@@ -171,7 +265,8 @@ from plugin import CustomProvider
 @pytest.mark.asyncio
 async def test_provider_conformance():
     kit = ProviderKit()
-    provider = CustomProvider()
+    provider = CustomProvider(api_key="test-key")
+    await kit.test_readiness(provider)
     await kit.test_list_models(provider)
     await kit.test_plain_prompt(provider)
     await kit.test_streaming_multiple_deltas(provider)
@@ -307,6 +402,50 @@ class AuditHookPlugin:
 
 ---
 
+## Recipe 6: Permission presets and process confinement (WS-06)
+
+`kernel.security.preset` is a resolution layer, not a macro that writes the other settings. The order is explicit
+user value → preset expansion → schema default; `settings.get()` returns that effective value to the policy,
+command and Studio. Choose one through the UI or:
+
+```bash
+harness security show
+harness security set-preset careful     # locked | careful | standard | open
+harness security show --json
+```
+
+A pinned key keeps its value when the preset changes; `security.status` reports both `customised` (values that
+differ from the preset) and `pinned` (values explicitly written). `bypass` is not a preset. It remains an explicit
+`kernel.security.permission_mode` for tests/automation, and it cannot make a `required` but unavailable OS
+sandbox run unconfined.
+
+Every tool that requests `ctx.executor` crosses the gate's executor adapter. On Linux, the built-in
+`sandbox-bwrap` plugin probes bubblewrap's user, PID, and network namespaces before it reports `available`;
+on macOS, `sandbox-seatbelt` probes `sandbox-exec` and reports its narrower `partial` enforcement honestly. The
+workspace is the only writable host tree; the default runtime paths are read-only, `/tmp` is private, the user's
+home is not mounted, and networking is off by default. Absolute `kernel.sandbox.extra_readable` paths are an
+explicit read-only grant and change the badge to `partial` — do not add credential directories unless the model is
+meant to read them. `.venv`, SDKs or language managers outside the workspace may need a deliberate extra path.
+
+The three modes are intentionally different:
+
+* `required`: if the backend probe or path policy fails, executor calls are denied before the host executor starts.
+* `preferred`: use the OS backend when available; if not, ask a connected approver before an unconfined fallback.
+  With no interactive subscriber the broker denies immediately.
+* `off`: run without OS confinement (the `open` preset is the explicit choice that also allows networking).
+
+`standard` permits EXEC only while an actual backend probe succeeds; missing confinement changes that decision to
+ASK. `careful` still asks before mutating actions, and the result records whether the command was confined or
+explicitly approved unconfined. The `/health` security block, `security.status`, `harness security show`, and the
+Studio badge all consume the same kernel answer; the badge says `careful · bwrap full`, `careful · bwrap partial`,
+or `careful · sandbox unavailable` rather than displaying a browser-side guess.
+
+The built-in backend implementations live in `harness.sdk.sandbox_bwrap` and
+`harness.sdk.sandbox_seatbelt`; their plugin wrappers register them with `ctx.register_sandbox_backend`. Ordinary
+tool/policy plugins must still route process execution through `ctx.executor` and must not import `subprocess`.
+`SandboxBackend.available()` is a reported host fact, `wrap()` returns a new `ExecRequest`, and any exception from
+wrapping is a hard failure — never a cue to retry the original host command.
+
 ## 2. Testing and Conformance Tooling
 
 ### Scaffolding a New Plugin
@@ -326,6 +465,24 @@ harness plugin test --all
 # Run live model tests (opt-in)
 harness plugin test ./my_provider --live
 ```
+
+### Replaying and Recording Model Streams
+A provider plugin's own tests should not need a key, and a golden test should not need a live model either.
+Both are in the SDK (`harness.sdk.testing`), which is where the scenario suite's fixtures live now:
+
+```python
+from harness.sdk.testing import RecordingProvider, ReplayProvider, ScriptedProvider, load_streams
+
+provider = ReplayProvider.from_file(scenario_dir / "provider.jsonl")   # strict: a 6th request is a failure
+lenient = ScriptedProvider([[TextDelta(text="hi"), Done(stop_reason="end_turn")]])   # polite by default
+strict = ScriptedProvider([...], strict_exhaustion=True)               # same strictness, hand-written script
+
+# To make a fixture: wrap the real provider, run the flow, flush.
+tee = RecordingProvider(real_provider, out_dir)      # refuses to write a stream containing $*_API_KEY
+```
+
+`provider.jsonl` is one JSON object per `ModelEvent` (tagged `"t"`), a blank line between requests — readable
+in a diff and appendable by hand. See [`testing/SCENARIOS.md`](testing/SCENARIOS.md) for the end-to-end loop.
 
 ### Running Doctor Diagnostics
 ```bash

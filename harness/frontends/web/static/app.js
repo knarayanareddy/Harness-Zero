@@ -6,7 +6,53 @@
 import { api } from './api.js';
 import { HarnessEventStream } from './events.js';
 import { cardRenderer, escapeHtml } from './cards.js';
+
+/** Quotes a value for use inside a CSS attribute selector ([data-x=...]); works without CSS.escape (jsdom). */
+const cssString = (value) => JSON.stringify(String(value ?? ''));
 import { SettingsPanel } from './settings.js';
+import { RendererRegistry, PanelRegistry, CommandBinder } from './registry.js';
+import renderUserMessage from './renderers/user.message.js';
+import renderAssistantMessage from './renderers/assistant.message.js';
+import renderToolResult from './renderers/tool.result.js';
+import renderToolDecision from './renderers/tool.decision.js';
+import renderUiCard from './renderers/ui.card.js';
+import renderApprovalRequested from './renderers/approval.requested.js';
+import renderApprovalResolved from './renderers/approval.resolved.js';
+import renderQuestionAsked from './renderers/question.asked.js';
+import renderQuestionAnswered from './renderers/question.answered.js';
+import renderCompactionSummary from './renderers/compaction.summary.js';
+import renderTurnError from './renderers/turn.error.js';
+import renderTurnCancelled from './renderers/turn.cancelled.js';
+import renderSystemNotice from './renderers/system.notice.js';
+import artifactPanel from './panels/artifact.js';
+import sessionsPanel from './panels/sessions.js';
+import economicsPanel from './panels/economics.js';
+import pluginsPanel from './panels/plugins.js';
+
+/**
+ * The transcript painters, keyed by record kind (docs/catalog/RECORD_KINDS.md is the catalogue of kinds; a
+ * plugin adds `[ui].record_renderers` and ships the module it names).
+ *
+ * This map — not a `switch` inside the transcript loop — is the client half of the record contract: `renderRecord`
+ * is a dispatch, the kernel declares which kinds exist, and the gap between the two is checked at boot and by
+ * `harness catalog --check --section ui` offline.
+ */
+const RECORD_RENDERERS = {
+  'user.message': renderUserMessage,
+  'assistant.message': renderAssistantMessage,
+  'tool.result': renderToolResult,
+  'tool.decision': renderToolDecision,
+  'ui.card': renderUiCard,
+  'approval.requested': renderApprovalRequested,
+  'approval.resolved': renderApprovalResolved,
+  'question.asked': renderQuestionAsked,
+  'question.answered': renderQuestionAnswered,
+  'compaction.summary': renderCompactionSummary,
+  'turn.error': renderTurnError,
+  'turn.cancelled': renderTurnCancelled,
+  'system.notice': renderSystemNotice,
+};
+
 
 export class HarnessStudioApp {
   constructor() {
@@ -17,24 +63,35 @@ export class HarnessStudioApp {
     this.settingsPanel = null;
     this.sandboxOrigin = '';
 
+    // The UI registries are built in `setupRegistries()`, once `/api/commands` has answered: which kinds have a
+    // painter, which panels exist, and how `[data-command]` is answered all come from the kernel's declarations.
+    this.renderers = null;
+    this.panels = null;
+    this.commands = null;
+    this.ui = null;
+
     // Active streaming elements
     this.currentAssistantBlock = null;
     this.currentTextElement = null;
     this.currentThinkingBlock = null;
     this.currentThinkingElement = null;
+    this.pendingQuestions = new Map();
   }
 
   async init() {
     // 1. Initial health and environment check
     try {
       const health = await this.api.health();
-      this.sandboxOrigin = health.sandbox_origin || '';
-      cardRenderer.sandboxOrigin = this.sandboxOrigin;
+      // Presented files and artifacts use same-origin, authenticated viewer routes. The responses carry a
+      // restrictive CSP sandbox, so no browser-facing asset needs to call a localhost sandbox port.
+      this.sandboxOrigin = '';
+      cardRenderer.sandboxOrigin = '';
 
       if (health.active_session) {
         this.activeSessionId = health.active_session.session_id;
       }
       this.updateEconomics(health.spend);
+      this.updateDaemonInfo(health);
     } catch (err) {
       console.warn('[HarnessStudio] Initial health check failed:', err);
     }
@@ -45,26 +102,32 @@ export class HarnessStudioApp {
       this.settingsPanel = new SettingsPanel(this.api, settingsContainer);
     }
 
-    // 3. Setup Models & Strategy Pickers
+    // 3. The UI registry: record painters, panels, and the `[data-command]` binder. Gaps (a kind nothing
+    //    paints, a panel with no tab) are reported here rather than being silently invisible.
+    await this.setupRegistries();
+
+    // 4. Setup Models & Strategy Pickers
     await this.populateModels();
     await this.populateStrategies();
 
-    // 4. Load Sessions (or auto-create initial session if daemon is fresh)
-    await this.loadSessions();
-    if (!this.activeSessionId) {
-      await this.createNewSession();
-    } else {
-      await this.reloadTranscript();
-    }
-
-    // 5. Connect SSE Event Stream
+    // 4. Connect the event stream *before* rendering history, so nothing that happens while the
+    //    transcript is being fetched is lost.
     this.setupEventHandlers();
     this.events.connect();
+
+    // 5. Sessions belong to the kernel: it resumes the last conversation on start and creates a session
+    //    lazily on the first prompt (`submit_turn` without session_id). The client never creates one at boot.
+    await this.loadSessions();
+    if (this.activeSessionId) {
+      await this.reloadTranscript();
+    } else {
+      this.showEmptyTimelineHint();
+    }
 
     // 6. Bind DOM UI listeners
     this.bindControls();
 
-    // 7. Check provider onboarding
+    // 7. Provider onboarding + permission mode badge (both are settings)
     try {
       const provider = await this.api.getSettings('kernel.provider', '');
       if (!provider) {
@@ -73,6 +136,105 @@ export class HarnessStudioApp {
     } catch (e) {
       console.warn('Failed to check provider onboarding:', e);
     }
+    await this.updatePermissionBadge();
+  }
+
+  /** `/health` → workspace pill and version display (the only sources those two values have). */
+  updateDaemonInfo(health) {
+    const ws = document.getElementById('workspace-pill');
+    if (ws && health.workspace) {
+      const name = String(health.workspace).replace(/[\\/]+$/, '').split(/[\\/]/).pop() || health.workspace;
+      ws.textContent = `📁 ${name}`;
+      ws.title = health.workspace;
+    }
+    const version = document.getElementById('version-display');
+    if (version && health.version) version.textContent = `v${health.version}`;
+    this.renderSecurityStatus(health.security || {});
+  }
+
+  /**
+   * Render the same resolved posture returned by `security.status` and `/health`.
+   *
+   * The label says the preset and the *reported enforcement fact* (`careful · bwrap full`, or
+   * `careful · sandbox unavailable`), not a green/red judgement detached from what the kernel will run. The
+   * tooltip carries the effective policy keys and the reason from the OS probe. If there is no sandbox payload
+   * yet (a compatibility response from an older daemon), we say the effective permission mode instead of
+   * implying confinement.
+   */
+  renderSecurityStatus(info) {
+    const badge = document.getElementById('permission-mode-badge');
+    if (!badge) return;
+    if (!info || !info.preset) {
+      badge.textContent = 'security: ?';
+      badge.dataset.state = 'unknown';
+      badge.title = 'Security posture was not reported by this daemon.';
+      return;
+    }
+
+    const settings = info.settings || {};
+    const mode = settings['kernel.security.permission_mode'] || 'unknown';
+    const sandbox = info.sandbox || null;
+    const customised = Array.isArray(info.customised) ? info.customised : [];
+    const presetLabel = customised.length ? `${info.preset} (customised)` : info.preset;
+    let suffix = mode;
+    let state = 'unknown';
+    if (sandbox && sandbox.mode === 'off') {
+      suffix = 'sandbox off';
+      state = 'off';
+    } else if (sandbox && sandbox.available === false) {
+      suffix = 'sandbox unavailable';
+      state = 'unavailable';
+    } else if (sandbox && sandbox.enforcement === 'full') {
+      suffix = `${sandbox.backend} full`;
+      state = 'full';
+    } else if (sandbox && sandbox.enforcement === 'partial') {
+      suffix = `${sandbox.backend} partial`;
+      state = 'partial';
+    }
+    badge.textContent = `${presetLabel} · ${suffix}`;
+    badge.dataset.state = state;
+    const lines = [
+      `Security preset: ${info.preset}`,
+      `Effective permission mode: ${mode}`,
+      `Execution inside an available sandbox: ${settings['kernel.security.exec_in_sandbox'] || 'ask'}`,
+      `Destructive blocking: ${settings['kernel.security.destructive_blocking'] === false ? 'off' : 'on'}`,
+      ...(sandbox ? [
+        `Sandbox mode: ${sandbox.mode || 'unknown'}`,
+        `Backend: ${sandbox.backend || 'none'}`,
+        `Available: ${sandbox.available === true ? 'yes' : 'no'}`,
+        `Enforcement: ${sandbox.enforcement || 'none'}`,
+        `Network: ${sandbox.network === true ? 'on' : 'off'}`,
+        ...(sandbox.reason ? [`Reason: ${sandbox.reason}`] : []),
+      ] : []),
+      ...(customised.length ? [`Preset differs at: ${customised.join(', ')}`] : []),
+    ];
+    badge.title = lines.join('\n');
+  }
+
+  /** The badge consumes the kernel's resolved posture; it never re-derives a preset from schema defaults. */
+  async updatePermissionBadge() {
+    const badge = document.getElementById('permission-mode-badge');
+    if (!badge) return;
+    try {
+      const info = await this.api.command('security.status');
+      this.renderSecurityStatus(info);
+    } catch (_err) {
+      badge.textContent = 'security: ?';
+      badge.dataset.state = 'unknown';
+    }
+  }
+
+  /** Status bar: which session the next prompt goes to (title from SessionRow when known). */
+  updateSessionDisplay(rows) {
+    const el = document.getElementById('active-session-display');
+    if (!el) return;
+    if (!this.activeSessionId) {
+      el.textContent = 'No session — your first message starts one';
+      return;
+    }
+    const row = (rows || this._sessionRows || []).find((r) => r.session_id === this.activeSessionId);
+    el.textContent = row && row.title ? `Session: ${row.title}` : `Session: ${this.activeSessionId}`;
+    el.title = this.activeSessionId;
   }
 
   setupEventHandlers() {
@@ -100,17 +262,48 @@ export class HarnessStudioApp {
       this.finalizeStreamingBlock();
     });
 
-    this.events.on('turn.cancelled', () => {
+    this.events.on('turn.cancelled', (data) => {
       this.setBusy(false);
       this.finalizeStreamingBlock();
-      this.appendNotice('Turn cancelled by user.', 'warning');
+      this.appendNotice(data.reason || 'Turn cancelled.', 'warn');
     });
 
     this.events.on('turn.error', (data) => {
       this.setBusy(false);
       this.finalizeStreamingBlock();
-      const msg = data.message || data.error || 'Turn execution error';
-      this.appendNotice(msg, 'error');
+      this.appendNotice(data.message, 'error');
+    });
+
+    // Durable plugin facts carry their transcript record in the named SSE envelope. These listeners are
+    // registered before `connect()`, and events.js also subscribes to the SDK's complete event vocabulary.
+    this.events.on('system.notice', (data, envelope) => {
+      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.record) this.renderRecord(envelope.record);
+      else this.appendNotice(data?.message || 'The workspace operation needs attention.', data?.level || 'info');
+    });
+
+    for (const type of ['job.started', 'job.output', 'job.exited']) {
+      this.events.on(type, (_data, envelope) => {
+        if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+        this.panels?.refresh('jobs');
+      });
+    }
+
+    this.events.on('workspace.changes', (_data, envelope) => {
+      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.record) this.renderRecord(envelope.record);
+      this.panels?.refresh('diffs');
+    });
+
+    this.events.on('deliverable.presented', (_data, envelope) => {
+      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.record) this.renderRecord(envelope.record);
+    });
+
+    this.events.on('checkpoint.restored', (_data, envelope) => {
+      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.record) this.renderRecord(envelope.record);
+      this.panels?.refresh('diffs');
     });
 
     // Streaming Deltas
@@ -133,8 +326,19 @@ export class HarnessStudioApp {
     });
 
     this.events.on('tool.output.delta', (data) => {
+      // {call_id, stream, text}: streamed into the tool card it belongs to (there is no separate terminal).
       if (data.text) {
-        this.appendTerminalOutput(data.text);
+        this.appendToolOutput(data.call_id, data.text, data.stream);
+      }
+    });
+
+    this.events.on('settings.changed', (data) => {
+      const paths = Array.isArray(data.paths) ? data.paths : [];
+      if (paths.some((p) => String(p).startsWith('kernel.security') || String(p).startsWith('kernel.sandbox'))) {
+        this.updatePermissionBadge();
+      }
+      if (paths.includes('kernel.provider')) {
+        document.getElementById('onboarding-banner')?.classList.add('hidden');
       }
     });
 
@@ -171,12 +375,11 @@ export class HarnessStudioApp {
     });
 
     this.events.on('compaction.completed', (data) => {
-      this.appendCard({ kind: 'compaction', payload: data });
+      this.appendCard({ kind: 'compaction', data });
     });
 
     this.events.on('ui.card', (data) => {
-      const card = data.card || data;
-      this.appendCard(card);
+      this.appendCard(data.card);
     });
 
     // Approvals
@@ -186,6 +389,20 @@ export class HarnessStudioApp {
 
     this.events.on('approval.resolved', (data) => {
       this.resolveApprovalUI(data);
+    });
+
+    // A pending question and its answer are transcript records; paint the stored record so live and reload
+    // share the same renderer and never invent a second client-side copy of the payload.
+    this.events.on('question.asked', (data, envelope) => {
+      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.record) this.renderRecord(envelope.record);
+      else this.showQuestion(data);
+    });
+
+    this.events.on('question.answered', (data, envelope) => {
+      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.record) this.renderRecord(envelope.record);
+      else this.resolveQuestionUI(data);
     });
 
     // Economics
@@ -198,11 +415,29 @@ export class HarnessStudioApp {
       this.updateContextInspector(data);
     });
 
-    // Session Switch
+    // Session lifecycle is kernel-owned: a session created lazily for our first prompt announces itself.
+    this.events.on('session.started', (data) => {
+      if (!this.activeSessionId) {
+        this.activeSessionId = data.session_id;
+        this.clearEmptyTimelineHint();
+      }
+      this.loadSessions();
+      this.updateSessionDisplay();
+    });
+
     this.events.on('session.switched', (data) => {
+      if (data.session_id === this.activeSessionId) return;
       this.activeSessionId = data.session_id;
       this.loadSessions();
       this.reloadTranscript();
+    });
+
+    // Settings changed elsewhere (CLI, another tab): refresh what depends on them.
+    this.events.on('settings.changed', (data) => {
+      const paths = data.paths || [];
+      if (paths.some((p) => p.startsWith('providers.') || p.startsWith('secrets.') || p.startsWith('kernel.'))) {
+        this.populateModels();
+      }
     });
   }
 
@@ -218,17 +453,12 @@ export class HarnessStudioApp {
         const text = input.value.trim();
         if (!text || this.isBusy) return;
         input.value = '';
-        input.style.height = 'auto';
 
         // Add user block to timeline immediately
         this.appendUserTurn(text);
 
-        // Submit to API
+        // Submit to API (no session yet → the kernel creates one and announces it via session.started)
         try {
-          if (!this.activeSessionId) {
-            await this.createNewSession();
-          }
-
           const modelSelect = document.getElementById('model-select');
           const selectedOption = modelSelect?.selectedOptions?.[0];
           const model = selectedOption?.value || undefined;
@@ -239,7 +469,7 @@ export class HarnessStudioApp {
           if (provider) options.provider = provider;
 
           const res = await this.api.submitTurn(text, {
-            session_id: this.activeSessionId,
+            session_id: this.activeSessionId || undefined,
             options,
           });
 
@@ -299,15 +529,6 @@ export class HarnessStudioApp {
       newSessionBtn.addEventListener('click', () => this.createNewSession());
     }
 
-    // Terminal clear button
-    const clearTerminalBtn = document.getElementById('btn-terminal-clear');
-    if (clearTerminalBtn) {
-      clearTerminalBtn.addEventListener('click', () => {
-        const term = document.getElementById('terminal-body');
-        if (term) term.textContent = '';
-      });
-    }
-
     // Approval banner buttons
     const bannerDenyBtn = document.getElementById('btn-approval-deny');
     if (bannerDenyBtn) {
@@ -354,6 +575,12 @@ export class HarnessStudioApp {
       });
 
       timeline.addEventListener('submit', (e) => {
+        const questionForm = e.target.closest('form[data-question-form]');
+        if (questionForm) {
+          e.preventDefault();
+          this.submitQuestionForm(questionForm);
+          return;
+        }
         const formElem = e.target.closest('form[data-form-id]');
         if (!formElem) return;
         e.preventDefault();
@@ -401,34 +628,7 @@ export class HarnessStudioApp {
         this.switchActivity(actName);
         return;
       }
-
-      const slashItem = e.target.closest('[data-slash]');
-      if (slashItem) {
-        const cmd = slashItem.getAttribute('data-slash');
-        const input = document.getElementById('composer-input');
-        if (input) {
-          input.value = cmd + ' ';
-          input.focus();
-        }
-        const slashMenu = document.getElementById('slash-menu');
-        if (slashMenu) slashMenu.style.display = 'none';
-        return;
-      }
     });
-
-    // Slash menu trigger on composer input
-    if (input) {
-      input.addEventListener('input', () => {
-        const slashMenu = document.getElementById('slash-menu');
-        if (slashMenu) {
-          if (input.value.startsWith('/')) {
-            slashMenu.style.display = 'block';
-          } else {
-            slashMenu.style.display = 'none';
-          }
-        }
-      });
-    }
 
     // Settings search filtering for real schema-driven settings
     const searchInput = document.getElementById('settings-search-input');
@@ -437,84 +637,106 @@ export class HarnessStudioApp {
         const q = e.target.value.toLowerCase().trim();
         document.querySelectorAll('.setting-item').forEach((item) => {
           const label = item.querySelector('label')?.textContent.toLowerCase() || '';
-          item.style.display = label.includes(q) ? '' : 'none';
+          item.classList.toggle('hidden', !label.includes(q));
         });
       });
     }
   }
 
-  async switchStudioTab(tabName) {
-    document.querySelectorAll('.studio-tab').forEach((t) => t.classList.remove('active'));
-    const activeTab = document.querySelector(`.studio-tab[data-tab="${tabName}"]`);
-    if (activeTab) activeTab.classList.add('active');
-
-    const artifactView = document.getElementById('studio-content-area');
-    const sessionList = document.getElementById('session-list');
-    const economicsView = document.getElementById('economics-view');
-
-    if (tabName === 'sessions') {
-      if (sessionList) sessionList.classList.remove('hidden');
-      if (artifactView) artifactView.classList.add('hidden');
-      if (economicsView) economicsView.classList.add('hidden');
-      await this.loadSessions();
-    } else if (tabName === 'economics') {
-      if (economicsView) {
-        economicsView.classList.remove('hidden');
-        await this.renderEconomicsTab();
-      }
-      if (artifactView) artifactView.classList.add('hidden');
-      if (sessionList) sessionList.classList.add('hidden');
-    } else {
-      if (artifactView) artifactView.classList.remove('hidden');
-      if (sessionList) sessionList.classList.add('hidden');
-      if (economicsView) economicsView.classList.add('hidden');
+  /**
+   * Wire the client to the kernel's UI declarations (WS-05).
+   *
+   * `ui.contributions` is the source of truth for which panels exist and which record kinds the kernel can
+   * produce; `RECORD_RENDERERS` and `static/panels/*` are this client's contributions. Two gaps are reported:
+   * a kind with no painter (its records would vanish on reload) and a contributed renderer path (which a
+   * strict CSP would not let us fetch).
+   */
+  async setupRegistries() {
+    this.renderers = new RendererRegistry();
+    for (const [kind, render] of Object.entries(RECORD_RENDERERS)) {
+      this.renderers.register(kind, render);
     }
-  }
-
-  async renderEconomicsTab() {
-    const container = document.getElementById('economics-view');
-    if (!container) return;
+    this.commands = new CommandBinder({ api: this.api, app: this });
     try {
-      const data = await this.api.command('economics');
-      const sessionUsd = (data.session_usd || 0).toFixed(4);
-      const capUsd = (data.cap_usd || 5.00).toFixed(2);
-      const inputTok = data.token_usage?.input || 0;
-      const outputTok = data.token_usage?.output || 0;
-      const totalTok = data.token_usage?.total || 0;
-      const totalSpend = (data.totals?.total_cost_usd || data.session_usd || 0).toFixed(4);
-
-      container.innerHTML = `
-        <div class="economics-card" style="background:#18181b; border:1px solid #27272a; border-radius:8px; padding:16px;">
-          <h3 style="font-size:14px; font-weight:600; color:#38bdf8; margin:0 0 12px 0;">Spend & Token Economics</h3>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
-            <div style="background:#09090b; padding:10px; border-radius:6px; border:1px solid #27272a;">
-              <div style="font-size:11px; color:#a1a1aa;">Session Spend / Cap</div>
-              <div style="font-size:18px; font-weight:700; color:#34d399; margin-top:4px;">$${escapeHtml(sessionUsd)} / $${escapeHtml(capUsd)}</div>
-            </div>
-            <div style="background:#09090b; padding:10px; border-radius:6px; border:1px solid #27272a;">
-              <div style="font-size:11px; color:#a1a1aa;">Lifetime Total Cost</div>
-              <div style="font-size:18px; font-weight:700; color:#f4f4f5; margin-top:4px;">$${escapeHtml(totalSpend)}</div>
-            </div>
-          </div>
-          <div style="font-size:12px; color:#a1a1aa; margin-bottom:8px;">Session Token Consumption:</div>
-          <div style="display:flex; justify-content:space-between; font-size:12px; padding:6px 0; border-bottom:1px solid #27272a;">
-            <span>Prompt (Input) Tokens:</span>
-            <span style="font-family:var(--font-mono); color:#f4f4f5;">${escapeHtml(String(inputTok))}</span>
-          </div>
-          <div style="display:flex; justify-content:space-between; font-size:12px; padding:6px 0; border-bottom:1px solid #27272a;">
-            <span>Completion (Output) Tokens:</span>
-            <span style="font-family:var(--font-mono); color:#f4f4f5;">${escapeHtml(String(outputTok))}</span>
-          </div>
-          <div style="display:flex; justify-content:space-between; font-size:12px; padding:6px 0;">
-            <span style="font-weight:600;">Total Tokens:</span>
-            <span style="font-family:var(--font-mono); font-weight:600; color:#38bdf8;">${escapeHtml(String(totalTok))}</span>
-          </div>
-        </div>
-      `;
+      this.ui = await this.api.command('ui.contributions');
     } catch (err) {
-      container.innerHTML = `<div class="text-xs text-red-400 p-4">Failed to load economics: ${escapeHtml(err.message)}</div>`;
+      console.warn('[ui] `ui.contributions` unavailable; using this client\'s map alone:', err);
+      this.ui = { panels: [], record_renderers: {}, record_kinds: [], client_modules: [] };
+    }
+    for (const [kind, path] of Object.entries(this.ui.record_renderers || {})) {
+      if (!this.renderers.has(kind)) console.warn(`[ui] ${kind} is rendered by ${path} (a plugin module)`);
+    }
+    this.panels = new PanelRegistry({ app: this, panels: this.ui.panels || [] });
+    this.panels.register('artifact', artifactPanel);
+    this.panels.register('sessions', sessionsPanel);
+    this.panels.register('economics', economicsPanel);
+    this.panels.register('plugins', pluginsPanel);
+    await this.loadPluginModules();
+    this.panels.mount();
+    const gaps = this.renderers.gaps(this.ui.record_kinds || []);
+    if (gaps.length) console.warn(`[ui] record kinds with no renderer: ${gaps.join(', ')}`);
+    this.bindCommands();
+  }
+
+  /** `[data-command]` → `api.command(name, args)`, for controls that exist now and ones a panel creates later. */
+  bindCommands() {
+    this.commands.bind(document);
+  }
+
+  /**
+   * A plugin's own panels, from the module the kernel listed (paths under the plugin's `static/`, served by
+   * the web front end and validated at load time — see `harness/sdk/manifest.py`).
+   *
+   * A failure is not fatal: the panel still gets its generic renderer from `[ui].panels[].renderer`, which is
+   * why the generic path exists at all.
+   */
+  async loadPluginModules() {
+    for (const entry of this.ui.client_modules || []) {
+      try {
+        // The shipped page uses browser-native ESM. The scenario DOM lane may provide a loader that fetches
+        // the same declared module and resolves its `/static/` imports to the local shipped client files,
+        // because Node's ESM loader cannot import an HTTP URL.
+        const testLoader = globalThis.__harnessPluginModuleLoader;
+        const mod = typeof testLoader === 'function' ? await testLoader(entry) : await import(entry.url);
+        const panels = mod.panels || mod.default?.panels || {};
+        for (const [id, panel] of Object.entries(panels)) this.panels.register(id, panel);
+        const renderers = mod.renderers || mod.default?.renderers || {};
+        for (const [kind, render] of Object.entries(renderers)) {
+          if (!this.renderers.has(kind)) this.renderers.register(kind, render);
+        }
+      } catch (err) {
+        console.warn(`[ui] ${entry.plugin}: client module ${entry.url} did not load; its panels use the generic renderer`, err);
+      }
     }
   }
+
+  /** A panel row was picked. The sessions pane switches the conversation; other panels decide for themselves. */
+  async handlePanelSelect(panelId, value) {
+    if (panelId === 'sessions' && value) {
+      await this.switchSession(value);
+    } else if (panelId === 'plugins' && value) {
+      // The Plugins pane's Configure button names a settings tab; opening the modal on it belongs to the app,
+      // not to a panel module that has no business knowing about the settings markup.
+      await this.openSettings(value);
+    }
+  }
+
+  /**
+   * Switch between Studio sub-tabs (Artifacts, Sessions, Economics).
+   *
+   * Which tabs exist, and what paints each one, comes from the panel registry — so a plugin panel gets its tab
+   * without an `index.html` edit, and the built-in three are just three entries in the same list.
+   */
+  async switchStudioTab(tabName) {
+    const ok = await this.panels.activate(tabName);
+    if (!ok) await this.panels.activate('artifact');
+  }
+
+  /** The Spend pane is painted by `static/panels/economics.js`; this is the app-side entry point. */
+  async renderEconomicsTab() {
+    await this.panels?.refresh('economics');
+  }
+
 
   switchActivity(actName) {
     document.querySelectorAll('.activity-item').forEach((a) => a.classList.remove('active'));
@@ -531,6 +753,7 @@ export class HarnessStudioApp {
   appendUserTurn(text) {
     const timeline = document.getElementById('timeline');
     if (!timeline) return;
+    this.clearEmptyTimelineHint();
 
     const block = document.createElement('div');
     block.className = 'turn-block turn-user';
@@ -546,7 +769,7 @@ export class HarnessStudioApp {
     if (!timeline) return;
 
     const block = document.createElement('div');
-    block.className = `turn-block turn-${role}`;
+    block.className = role === 'user' ? 'turn-block turn-user' : 'turn-block turn-assistant';
     block.innerHTML = `
       <div class="message-bubble">
         <div class="thinking-container"></div>
@@ -604,7 +827,7 @@ export class HarnessStudioApp {
     const timeline = document.getElementById('timeline');
     if (!timeline) return;
 
-    const cardHtml = cardRenderer.render({ kind: 'tool', payload: data });
+    const cardHtml = cardRenderer.render({ kind: 'tool', id: data.call_id, data });
     const wrapper = document.createElement('div');
     wrapper.innerHTML = cardHtml;
     timeline.appendChild(wrapper.firstElementChild);
@@ -614,22 +837,34 @@ export class HarnessStudioApp {
   updateToolDecision(data) {
     const callId = data.call_id;
     if (!callId) return;
-    const card = document.querySelector(`.harness-card-tool[data-call-id="${callId}"]`);
+    const card = document.querySelector(`.harness-card-tool[data-call-id=${cssString(callId)}]`);
     if (card) {
-      const badge = card.querySelector('.uppercase');
+      // The card subtitle (`plugin · risk`) belongs to the decision as much as to the call: the assistant
+      // record knows *what* was asked, the decision record knows *who may run it and at what risk*. A live
+      // session already painted it from `tool.call`, so only fill a subtitle that is missing — that is exactly
+      // the reload case, where there is no call event and the decision record is all the log kept.
+      const metaText = [data.plugin, data.risk].filter(Boolean).join(' · ');
+      const nameEl = card.querySelector('.tool-name');
+      if (metaText && nameEl && nameEl.parentElement && !card.querySelector('.card-meta')) {
+        const metaEl = document.createElement('span');
+        metaEl.className = 'card-meta text-xs';
+        metaEl.textContent = metaText;
+        nameEl.parentElement.insertBefore(metaEl, nameEl.nextSibling);
+      }
+      const badge = card.querySelector('.card-badge');
       if (badge) {
-        // Kernel payload: {action: allow|deny|ask, policy, reason, risk} (kernel/gate.py).
-        const action = String(data.action || data.decision || 'allow').toLowerCase();
-        if (action === 'deny' || action === 'denied') {
+        // `tool.decision` payload: {call_id, action: allow|deny|ask, policy, risk, reason}.
+        if (data.action === 'deny') {
           badge.textContent = 'DENIED';
-          badge.className = 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-red-900/60 text-red-300 border border-red-800';
-          if (data.reason) badge.title = data.reason;
-        } else if (action === 'ask' || action === 'approval_required') {
+          badge.dataset.status = 'denied';
+        } else if (data.action === 'ask') {
           badge.textContent = 'APPROVAL REQUIRED';
-          badge.className = 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-amber-900/60 text-amber-300 border border-amber-800';
+          badge.dataset.status = 'ask';
         } else {
           badge.textContent = 'ALLOWED';
+          badge.dataset.status = 'allowed';
         }
+        badge.title = `${data.policy}: ${data.reason}`;
       }
     }
   }
@@ -637,67 +872,101 @@ export class HarnessStudioApp {
   updateToolResult(data) {
     const callId = data.call_id;
     if (!callId) return;
-    const card = document.querySelector(`.harness-card-tool[data-call-id="${callId}"]`);
+    const card = document.querySelector(`.harness-card-tool[data-call-id=${cssString(callId)}]`);
     if (card) {
-      const badge = card.querySelector('.uppercase');
-      if (badge && badge.textContent !== 'DENIED') {
+      // `tool.result` payload: {call_id, name, is_error, duration_ms, preview, metadata}.
+      const badge = card.querySelector('.card-badge');
+      if (badge && badge.dataset.status !== 'denied') {
         badge.textContent = data.is_error ? 'ERROR' : 'COMPLETED';
-        badge.className = data.is_error
-          ? 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-red-900/60 text-red-300 border border-red-800'
-          : 'px-2 py-0.5 rounded text-xs font-mono uppercase bg-emerald-900/60 text-emerald-300 border border-emerald-800';
+        badge.dataset.status = data.is_error ? 'error' : 'completed';
       }
+      const streamed = card.querySelector('.tool-output');
+      if (streamed) {
+        // Output already streamed in via tool.output.delta: only the verdict changes.
+        streamed.dataset.error = data.is_error ? 'true' : 'false';
+        const label = streamed.querySelector('.tool-output-label');
+        if (label && data.is_error) label.textContent = 'Error:';
+      } else if (data.preview || data.is_error) {
+        card.querySelector('.card-body').insertAdjacentHTML('beforeend', cardRenderer.renderToolOutput(data.preview || '', data.is_error));
+      }
+    }
+  }
 
-      // Append result preview if not already present (kernel payload: {preview, is_error, metadata}).
-      if (!card.querySelector('.tool-output')) {
-        const value = data.result ?? data.preview ?? data.output ?? '';
-        const resultStr = escapeHtml(typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value));
-        const resDiv = document.createElement('div');
-        const textColor = data.is_error ? 'text-red-300' : 'text-emerald-300';
-        resDiv.className = 'mt-2 text-xs tool-output';
-        resDiv.innerHTML = `<div class="text-gray-400 font-mono font-medium mb-1">Output:</div><pre class="p-2 bg-gray-950/90 rounded border border-gray-800 ${textColor} font-mono overflow-x-auto max-h-48">${resultStr}</pre>`;
-        card.appendChild(resDiv);
-      }
+  /** `tool.output.delta` → the <pre> of the tool card's `.tool-output` (created on the first chunk). */
+  appendToolOutput(callId, text, stream) {
+    if (!callId) return;
+    const card = document.querySelector(`.harness-card-tool[data-call-id=${cssString(callId)}]`);
+    if (!card) return;
+    let out = card.querySelector('.tool-output');
+    if (!out) {
+      card.querySelector('.card-body').insertAdjacentHTML('beforeend', cardRenderer.renderToolOutput('', stream === 'stderr'));
+      out = card.querySelector('.tool-output');
+    }
+    const pre = out?.querySelector('pre');
+    if (pre) {
+      pre.textContent += text;
+      pre.scrollTop = pre.scrollHeight;
     }
   }
 
   appendTask(data) {
-    this.appendCard({ kind: 'task', payload: data });
+    // `task.started` payload: {task_id, label}
+    this.appendCard({ kind: 'task', id: data.task_id, data: { ...data, status: 'running' } });
   }
 
   completeTask(data) {
-    const taskId = data.task_id;
-    const card = document.querySelector(`.harness-card-task`);
+    // `task.completed` payload: {task_id, label, exit_code, tail} — replace the running card in place.
+    const card = document.querySelector(`.harness-card-task[data-task-id=${cssString(data.task_id)}]`);
+    const html = cardRenderer.render({ kind: 'task', id: data.task_id, data: { ...data, status: 'completed' } });
     if (card) {
-      card.className = 'harness-card harness-card-task border p-3 rounded my-2 text-emerald-400 border-emerald-800 bg-emerald-950/30';
-      const badge = card.querySelector('.uppercase');
-      if (badge) badge.textContent = 'COMPLETED';
+      card.outerHTML = html;
     } else {
-      this.appendCard({ kind: 'task', payload: { ...data, status: 'completed' } });
+      this.appendCardHtml(html);
     }
   }
 
+  /** Appends an SDK card ({kind, id, title, data}) to the timeline; artifacts also go to the studio. */
   appendCard(card) {
+    if (!card) return;
+    this.appendCardHtml(cardRenderer.render(card));
+
+    if (card.kind === 'artifact') {
+      this.showArtifact(card);
+      if (card.data?.request_feedback) this.showProceedBanner(card);
+    }
+  }
+
+  /** Renders an artifact card into the Artifacts tab (newest on top) and brings the tab forward. */
+  showArtifact(card) {
+    const view = document.getElementById('studio-content-area');
+    if (!view) return;
+    view.querySelector('.artifact-empty')?.remove();
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = cardRenderer.render(card);
+    view.prepend(wrapper.firstElementChild);
+    this.switchStudioTab('artifact');
+  }
+
+  appendCardHtml(cardHtml) {
     const timeline = document.getElementById('timeline');
     if (!timeline) return;
-
-    const cardHtml = cardRenderer.render(card);
     const wrapper = document.createElement('div');
     wrapper.innerHTML = cardHtml;
     timeline.appendChild(wrapper.firstElementChild);
     timeline.scrollTop = timeline.scrollHeight;
-
-    // Proceed banner only for artifact.request_feedback (§11, WEB-04)
-    if (card.kind === 'artifact' && (card.payload?.request_feedback || card.payload?.feedback_requested)) {
-      this.showProceedBanner(card.payload);
-    }
   }
 
-  showProceedBanner(payload) {
+  showProceedBanner(card) {
+    // `card.data` is the artifact: {name, media_type, url, request_feedback}; `card.title` is its summary.
     const banner = document.getElementById('proceed-banner');
-    if (banner) {
-      banner.classList.remove('hidden');
-      banner.setAttribute('data-artifact', payload.filename || payload.path || '');
-    }
+    if (!banner) return;
+    const artifact = card.data || {};
+    banner.classList.remove('hidden');
+    banner.setAttribute('data-artifact', artifact.name || '');
+    const title = document.getElementById('banner-artifact-title');
+    if (title) title.textContent = artifact.name || 'artifact';
+    const desc = document.getElementById('banner-artifact-desc');
+    if (desc) desc.textContent = card.title && card.title !== artifact.name ? card.title : `${artifact.media_type || ''} — review it in the Artifacts tab, then proceed or dismiss.`;
   }
 
   dismissProceedBanner() {
@@ -720,25 +989,21 @@ export class HarnessStudioApp {
   }
 
   appendNotice(msg, level = 'info') {
-    const card = { kind: 'notice', payload: { message: msg, level } };
-    this.appendCard(card);
-  }
-
-  appendTerminalOutput(text) {
-    const term = document.getElementById('terminal-body');
-    if (term) {
-      term.textContent += text;
-      term.scrollTop = term.scrollHeight;
-    }
+    // Same shape as Card.notice(): levels info | success | warn | error.
+    this.appendCard({ kind: 'notice', data: { level, body: String(msg ?? '') } });
   }
 
   showApproval(data) {
-    // The kernel's approval events carry `approval_id` (kernel/approvals.py);
-    // older payloads used `request_id`. Accept both so the buttons always work.
-    const reqId = data.approval_id || data.request_id || data.id || '';
-    // 1. Append approval card to timeline
-    const card = { kind: 'approval', payload: { ...data, request_id: reqId } };
-    this.appendCard(card);
+    // `approval.required` payload: {approval_id, call_id, kind, summary, details, timeout_s, options}
+    const reqId = data.approval_id;
+    // 1. Append approval card to timeline (SDK `approval` card shape; kind/timeout go in the title)
+    const timeout = data.timeout_s ? ` · ${Math.round(data.timeout_s)}s to respond` : '';
+    this.appendCard({
+      kind: 'approval',
+      id: reqId,
+      title: `${data.kind || 'action'}${timeout}`,
+      data: { approval_id: reqId, summary: data.summary, details: data.details || {}, options: data.options || ['approve', 'deny'] },
+    });
 
     // 2. Show top banner for high visibility
     const banner = document.getElementById('approval-banner');
@@ -749,7 +1014,8 @@ export class HarnessStudioApp {
   }
 
   resolveApprovalUI(data) {
-    const reqId = data.approval_id || data.request_id || data.id || '';
+    // `approval.resolved` payload: {approval_id, approved, by, reason}
+    const reqId = data.approval_id;
     // Hide top banner if matches
     const banner = document.getElementById('approval-banner');
     if (banner && banner.getAttribute('data-request-id') === reqId) {
@@ -757,15 +1023,144 @@ export class HarnessStudioApp {
     }
 
     // Update approval card status in timeline
-    const card = document.querySelector(`.harness-card-approval[data-request-id="${reqId}"]`);
+    const card = document.querySelector(`.harness-card-approval[data-request-id=${cssString(reqId)}]`);
     if (card) {
-      card.classList.remove('border-amber-500/70', 'bg-amber-950/30');
-      card.classList.add('border-gray-700', 'bg-gray-800/40', 'opacity-70');
-      const actions = card.querySelector('.flex.justify-end');
+      card.classList.add('approval-resolved');
+      card.dataset.resolved = data.approved ? 'approved' : 'denied';
+      const actions = card.querySelector('.card-actions');
       if (actions) {
-        const outcome = data.decision || (data.approved === true ? 'approved' : data.approved === false ? 'denied' : 'done');
-        actions.innerHTML = `<span class="text-xs font-semibold uppercase text-gray-400">Resolved: ${escapeHtml(outcome)}</span>`;
+        const outcome = data.approved ? 'approved' : 'denied';
+        const by = data.by ? ` by ${escapeHtml(data.by)}` : '';
+        actions.innerHTML = `<span class="text-xs font-semibold uppercase">Resolved: ${outcome}${by}</span>`;
       }
+    }
+  }
+
+  showQuestion(data) {
+    const interactionId = String(data.interaction_id || '');
+    if (!interactionId) return;
+    this.pendingQuestions.set(interactionId, Array.isArray(data.questions) ? data.questions : []);
+    const selector = `.harness-card-question[data-interaction-id=${cssString(interactionId)}]`;
+    if (!document.querySelector(selector)) {
+      const safeId = escapeHtml(interactionId);
+      const questions = Array.isArray(data.questions) ? data.questions : [];
+      const groups = questions.map((question, index) => {
+        const questionId = escapeHtml(question.id);
+        const name = `question_${index}`;
+        const options = (question.options || []).map((option) => `
+          <label class="question-option">
+            <input type="radio" name="${name}" value="${escapeHtml(option.id)}" data-question-id="${questionId}" />
+            <span class="question-option-copy"><span class="question-option-label">${escapeHtml(option.label)}</span>
+              ${option.description ? `<span class="question-option-description">${escapeHtml(option.description)}</span>` : ''}
+            </span>
+          </label>`).join('');
+        const custom = question.allow_custom === false ? '' : `
+          <label class="question-option question-custom-option">
+            <input type="radio" name="${name}" value="custom" data-question-id="${questionId}" />
+            <span class="question-option-label">Other</span>
+          </label>
+          <input type="text" class="form-input question-custom-input" data-question-custom-id="${questionId}" maxlength="1000" placeholder="Type a custom answer" />`;
+        return `<fieldset class="question-group"><legend>${escapeHtml(question.question)}</legend>${options}${custom}</fieldset>`;
+      }).join('');
+      const timeout = data.timeout_s ? `<div class="question-timeout">Please answer within ${Math.round(data.timeout_s)} seconds.</div>` : '';
+      const body = `
+        <form class="question-form" data-question-form data-form-id="${safeId}">
+          ${groups}
+          ${timeout}
+          <div class="card-actions question-actions">
+            <button type="submit" class="btn btn-primary px-3 py-1.5 rounded text-sm font-medium">Submit answer</button>
+          </div>
+        </form>`;
+      const html = cardRenderer.shell(
+        { id: interactionId, title: 'Your input is needed' },
+        'question',
+        body,
+        { icon: '❓', attrs: `data-interaction-id="${safeId}"` },
+      );
+      this.appendCardHtml(html);
+    }
+    this.setQuestionWaiting();
+  }
+
+  resolveQuestionUI(data) {
+    const interactionId = String(data.interaction_id || '');
+    const questions = this.pendingQuestions.get(interactionId) || [];
+    const card = document.querySelector(`.harness-card-question[data-interaction-id=${cssString(interactionId)}]`);
+    this.pendingQuestions.delete(interactionId);
+    this.setQuestionWaiting();
+    if (!card) return;
+
+    card.classList.add('question-resolved');
+    card.dataset.status = data.status || 'answered';
+    const title = card.querySelector('.card-title');
+    if (title) {
+      title.textContent = data.status === 'cancelled'
+        ? 'Question cancelled'
+        : data.status === 'timeout'
+          ? 'Question timed out'
+          : 'Question answered';
+    }
+    const body = card.querySelector('.card-body');
+    if (!body) return;
+    body.replaceChildren();
+    const status = document.createElement('div');
+    status.className = 'question-resolution-status';
+    if (data.status === 'cancelled') status.textContent = 'Question cancelled.';
+    else if (data.status === 'timeout') status.textContent = 'Question timed out.';
+    else status.textContent = 'You chose:';
+    body.appendChild(status);
+
+    if (data.status && data.status !== 'answered') return;
+    const answers = data.answers || {};
+    for (const question of questions) {
+      const answer = answers[question.id] || {};
+      const option = (question.options || []).find((item) => item.id === answer.option_id);
+      const value = answer.option_id === 'custom'
+        ? String(answer.custom_text || '')
+        : String(option?.label || answer.option_id || '');
+      const customText = answer.option_id !== 'custom' ? String(answer.custom_text || '').trim() : '';
+      const line = document.createElement('div');
+      line.className = 'question-answer-summary';
+      line.textContent = `${question.question} → ${value}${customText ? ` — ${customText}` : ''}`;
+      body.appendChild(line);
+    }
+  }
+
+  setQuestionWaiting(waiting = this.pendingQuestions.size > 0) {
+    document.getElementById('question-waiting')?.classList.toggle('hidden', !waiting);
+  }
+
+  async submitQuestionForm(formElem) {
+    const interactionId = formElem.getAttribute('data-form-id') || '';
+    const questions = this.pendingQuestions.get(interactionId) || [];
+    const radios = [...formElem.querySelectorAll('input[type="radio"][data-question-id]')];
+    const customInputs = [...formElem.querySelectorAll('input[data-question-custom-id]')];
+    const answers = {};
+    for (const question of questions) {
+      const selected = radios.find((radio) => radio.dataset.questionId === question.id && radio.checked);
+      const customInput = customInputs.find((input) => input.dataset.questionCustomId === question.id);
+      const customText = String(customInput?.value || '').trim();
+      if (!selected) {
+        this.appendNotice(`Choose an answer for: ${question.question}`, 'warn');
+        return;
+      }
+      if (selected.value === 'custom' && !customText) {
+        this.appendNotice(`Enter a custom answer for: ${question.question}`, 'warn');
+        return;
+      }
+      answers[question.id] = { option_id: selected.value, custom_text: customText };
+    }
+
+    const submit = formElem.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = true;
+    try {
+      const result = await this.api.answerQuestion(interactionId, answers);
+      if (result?.status !== 'answered') {
+        throw new Error('This question is no longer pending.');
+      }
+    } catch (err) {
+      if (submit) submit.disabled = false;
+      this.appendNotice(`Failed to submit answer: ${err.message}`, 'error');
     }
   }
 
@@ -799,6 +1194,7 @@ export class HarnessStudioApp {
     } else {
       sendBtn?.classList.remove('hidden');
       stopBtn?.classList.add('hidden');
+      this.setQuestionWaiting(false);
     }
   }
 
@@ -806,36 +1202,24 @@ export class HarnessStudioApp {
     const dot = document.getElementById('status-dot');
     const label = document.getElementById('status-text');
     if (label) label.textContent = text;
-    if (dot) {
-      dot.className = 'w-2 h-2 rounded-full ' + (
-        state === 'online' ? 'bg-emerald-400' :
-        state === 'reconnecting' ? 'bg-amber-400 animate-pulse' :
-        'bg-red-500'
-      );
-    }
+    if (dot) dot.dataset.state = state;
   }
 
-  updateEconomics(spendData) {
+  updateEconomics(snapshot) {
+    // EconomicsSnapshot — from `cost.updated`, `GET /health`.spend and the `economics` command alike.
     const elem = document.getElementById('economics-indicator');
-    if (!elem || !spendData) return;
-    const cap = spendData.cap_usd !== undefined ? `$${Number(spendData.cap_usd).toFixed(2)}` :
-                spendData.spend_cap_usd !== undefined ? `$${Number(spendData.spend_cap_usd).toFixed(2)}` : '$5.00';
-    let totalVal = 0.0;
-    if (spendData.session_usd !== undefined) {
-      totalVal = Number(spendData.session_usd);
-    } else if (spendData.totals?.total_cost_usd !== undefined) {
-      totalVal = Number(spendData.totals.total_cost_usd);
-    }
-    const total = `$${totalVal.toFixed(4)}`;
+    if (!elem || !snapshot) return;
+    const cap = snapshot.cap_usd != null ? `$${Number(snapshot.cap_usd).toFixed(2)}` : '—';
+    const total = `$${Number(snapshot.session_usd || 0).toFixed(4)}`;
 
-    if (spendData.unknown_pricing) {
+    if (snapshot.unknown_pricing) {
       elem.textContent = `${total} / ${cap} (unknown pricing)`;
-      elem.className = 'text-amber-400 font-semibold';
-      elem.title = 'Model pricing unknown - cost estimates unavailable for this provider';
+      elem.dataset.warn = 'true';
+      elem.title = 'Some calls used a model without known pricing — session spend is a lower bound';
     } else {
       elem.textContent = `${total} / ${cap}`;
-      elem.className = 'text-emerald-400';
-      elem.title = 'Session Spend / Cap';
+      elem.dataset.warn = 'false';
+      elem.title = 'Session spend / per-turn cap';
     }
   }
 
@@ -850,6 +1234,15 @@ export class HarnessStudioApp {
     if (badge) badge.textContent = `${totalTokens} tok`;
     if (totalTokElem) totalTokElem.textContent = `${totalTokens} tokens`;
     if (histElem) histElem.textContent = `History: ${contextData.history_messages || 0} msgs`;
+    const stabilityElem = document.getElementById('inspector-stability-summary');
+    if (stabilityElem) {
+      const counts = { static: 0, session: 0, turn: 0 };
+      for (const b of contextData.blocks || []) {
+        const k = String(b.stability || 'turn').toLowerCase();
+        counts[k] = (counts[k] || 0) + 1;
+      }
+      stabilityElem.textContent = `Blocks: ${counts.static} static · ${counts.session} session · ${counts.turn} turn`;
+    }
 
     if (!container) return;
     container.innerHTML = '';
@@ -868,7 +1261,7 @@ export class HarnessStudioApp {
       card.innerHTML = `
         <div class="flex items-center justify-between mb-1">
           <span class="font-medium text-xs text-white truncate max-w-[180px]" title="${escapeHtml(b.id || '')}">${escapeHtml(b.id || b.source || 'block')}</span>
-          <span class="stability-badge stability-${stab}">${escapeHtml(stab.toUpperCase())}</span>
+          <span class="stability-badge" data-stability="${escapeHtml(stab)}">${escapeHtml(stab.toUpperCase())}</span>
         </div>
         <div class="flex items-center justify-between text-xs text-gray-400">
           <span>Source: ${escapeHtml(b.source || 'kernel')}</span>
@@ -913,38 +1306,32 @@ export class HarnessStudioApp {
     const select = document.getElementById('model-select');
     if (!select) return;
     try {
+      // ModelRow (harness/sdk/types.py): {id, display_name, provider, context_tokens, input_usd_per_mtok,
+      // output_usd_per_mtok, configured, reachable, status: 'ready' | 'needs_key' | 'unreachable'}.
+      // The provider decided the status; the picker only groups by it.
       const models = await this.api.listModels();
-      if (models && models.length > 0) {
-        select.innerHTML = '<option value="">Default Model</option>';
-        const configuredGroup = document.createElement('optgroup');
-        configuredGroup.label = 'Configured Models';
-        const unconfiguredGroup = document.createElement('optgroup');
-        unconfiguredGroup.label = 'Unconfigured (Requires API Key)';
-
-        for (const m of models) {
-          const opt = document.createElement('option');
-          opt.value = m.id || m.model_name || m.name;
-          if (m.provider) {
-            opt.setAttribute('data-provider', m.provider);
-            opt.dataset.provider = m.provider;
-          }
-          const isConfigured = m.configured !== false;
-          if (isConfigured) {
-            opt.textContent = `${m.provider ? m.provider + ': ' : ''}${m.id || m.name}`;
-            configuredGroup.appendChild(opt);
-          } else {
-            opt.textContent = `${m.provider ? m.provider + ': ' : ''}${m.id || m.name} (unconfigured)`;
-            opt.disabled = true;
-            unconfiguredGroup.appendChild(opt);
-          }
+      select.innerHTML = '<option value="">Default Model</option>';
+      const groups = {
+        ready: { label: 'Ready', suffix: '', disabled: false },
+        needs_key: { label: 'Needs API key (Settings → Secrets)', suffix: ' (needs key)', disabled: true },
+        unreachable: { label: 'Not running', suffix: ' (unreachable)', disabled: true },
+      };
+      const optgroups = {};
+      for (const m of (models || [])) {
+        const g = groups[m.status] || groups.ready;
+        if (!optgroups[m.status]) {
+          optgroups[m.status] = document.createElement('optgroup');
+          optgroups[m.status].label = g.label;
         }
-
-        if (configuredGroup.children.length > 0) {
-          select.appendChild(configuredGroup);
-        }
-        if (unconfiguredGroup.children.length > 0) {
-          select.appendChild(unconfiguredGroup);
-        }
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.dataset.provider = m.provider;
+        opt.textContent = `${m.provider}: ${m.display_name || m.id}${g.suffix}`;
+        opt.disabled = g.disabled;
+        optgroups[m.status].appendChild(opt);
+      }
+      for (const key of Object.keys(groups)) {
+        if (optgroups[key]) select.appendChild(optgroups[key]);
       }
 
       // Restore saved selection
@@ -998,26 +1385,37 @@ export class HarnessStudioApp {
     }
   }
 
+  /**
+   * Refresh the Sessions pane. Its rows are painted by `static/panels/sessions.js`; what stays here is the
+   * part that is not about that pane — which session is active, and the header that reads it.
+   */
   async loadSessions() {
-    const list = document.getElementById('session-list');
-    if (!list) return;
-    try {
-      const sessions = await this.api.getSessions();
-      list.innerHTML = '';
-      for (const s of (sessions || [])) {
-        const item = document.createElement('div');
-        const isActive = s.session_id === this.activeSessionId;
-        item.className = `session-item ${isActive ? 'active' : ''}`;
-        item.innerHTML = `
-          <span class="truncate">${escapeHtml(s.session_id)}</span>
-          <span class="text-xs opacity-60">${s.busy ? '⏳' : ''}</span>
-        `;
-        item.addEventListener('click', () => this.switchSession(s.session_id));
-        list.appendChild(item);
-      }
-    } catch (err) {
-      console.warn('Failed to load sessions:', err);
+    await this.panels?.refresh('sessions');
+  }
+
+  /** Called by the sessions panel with the rows it is about to paint (SessionRow dicts, harness/sdk/types.py). */
+  noteSessionRows(rows) {
+    rows = rows || [];
+    this._sessionRows = rows;
+    // The kernel's active session, not the first row: that is what `active: true` means and what
+    // `switch_session` makes true. A session that disappeared falls back to the active row, else the newest.
+    if (!this.activeSessionId || !rows.some((row) => row.session_id === this.activeSessionId)) {
+      this.activeSessionId = (rows.find((row) => row.active) || rows[0])?.session_id || null;
     }
+    this.updateSessionDisplay(this._sessionRows);
+  }
+
+  showEmptyTimelineHint() {
+    const timeline = document.getElementById('timeline');
+    if (!timeline || timeline.querySelector('.timeline-empty')) return;
+    const hint = document.createElement('div');
+    hint.className = 'timeline-empty text-xs';
+    hint.textContent = 'No conversation yet. Type a message below to start a session.';
+    timeline.appendChild(hint);
+  }
+
+  clearEmptyTimelineHint() {
+    document.querySelector('#timeline .timeline-empty')?.remove();
   }
 
   async switchSession(sessionId) {
@@ -1050,45 +1448,53 @@ export class HarnessStudioApp {
     const timeline = document.getElementById('timeline');
     if (!timeline) return;
     timeline.innerHTML = '';
-    if (!this.activeSessionId) return;
+    if (!this.activeSessionId) {
+      this.showEmptyTimelineHint();
+      return;
+    }
 
     try {
       const sData = await this.api.command('sessions.get', { session_id: this.activeSessionId });
-      for (const rec of (sData.records || [])) {
-        const type = rec.type || rec.role;
-        if (type === 'USER_INPUT' || type === 'user') {
-          // Tool results are stored as user-role records with empty content: no empty bubble for them.
-          if (rec.content) this.appendUserTurn(rec.content);
-        } else if (type === 'PLANNER_RESPONSE' || type === 'MODEL' || type === 'assistant') {
-          if (rec.content) {
-            this.appendTurnBlock('assistant');
-            this.streamAssistantText(rec.content);
-            this.finalizeStreamingBlock();
-          }
-          for (const tc of (rec.tool_calls || [])) {
-            this.appendToolCall({ name: tc.name, call_id: tc.id || tc.call_id, arguments: tc.arguments || tc.input, decision: 'done' });
-          }
-        }
-      }
+      for (const rec of (sData.records || [])) this.renderRecord(rec);
+      if (!timeline.children.length) this.showEmptyTimelineHint();
     } catch (err) {
       console.warn('Failed to reload transcript:', err);
     }
   }
 
-  openSettings() {
+  // One renderer per fact (WS-04c). `sessions.get` returns the session log's records; each kind maps to
+  // the same painter the live event handler calls, so a reloaded session paints what the user already saw
+  // — the approval they answered, the decision the policy made, the card the tool produced — instead of a
+  // thinner summary of the conversation. Dispatching on `rec.kind` rather than `rec.role` is what makes
+  // that possible: a decision, a tool result and a system notice are all `system`/`user`-role records and
+  // roles cannot tell them apart (that is exactly why the old role-based loop dropped them).
+  /**
+   * Paint one transcript record.
+   *
+   * `kind` alone determines the element (WS-04), and the painter is looked up in the renderer registry, so a
+   * plugin's kind is painted by the module that shipped with it instead of by a branch added here. A kind with
+   * no painter and no written excuse is visible in the console, not silently absent.
+   */
+  renderRecord(rec) {
+    this.renderers.render(this, rec);
+  }
+
+  async openSettings(initialGroup = null) {
     const modal = document.getElementById('settings-modal');
-    if (modal) {
-      modal.classList.remove('hidden');
-      modal.style.display = 'flex';
-      this.settingsPanel?.load();
-    }
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    if (!this.settingsPanel) return;
+    await this.settingsPanel.load();
+    // The Plugins pane jumps here naming the tab a plugin's settings live on. The kernel chooses that tab
+    // (`x-ui.group`, derived from the plugin's capability family), and `setGroup` ignores a name no schema
+    // declares — so this stays a hint, never a claim about a tab that might not exist.
+    if (initialGroup) this.settingsPanel.setGroup(initialGroup);
   }
 
   closeSettings() {
     const modal = document.getElementById('settings-modal');
     if (modal) {
       modal.classList.add('hidden');
-      modal.style.display = 'none';
     }
   }
 }

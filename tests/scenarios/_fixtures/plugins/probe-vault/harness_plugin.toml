@@ -1,0 +1,18 @@
+# An *installed* plugin, as a scenario fixture: this directory is copied into `<config>/plugins/probe-vault`
+# (see `config_files` and the `@` form in `_lib/kernel_runner.py:seed_tree`), which is the shape
+# `harness plugin install` leaves behind and the only way to test what a user gets from a plugin that is not in
+# the repository. Tier `local` is what makes `[ui].client_module` legal here (harness/sdk/manifest.py).
+[plugin]
+name = "probe-vault"
+version = "1.0.0"
+api_version = "1"
+summary = "Vault rows as a Studio panel, contributed by an installed plugin"
+provides = ["tool"]
+entry = "plugin:ProbeVaultPlugin"
+
+[settings]
+schema = "settings.schema.json"
+
+[ui]
+panels = [{ id = "probe-vault", title = "Vault", command = "plugins.list", renderer = "table" }]
+client_module = "static/probe.js"

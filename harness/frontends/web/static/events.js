@@ -3,15 +3,24 @@
  * Handles auto-reconnect, Last-Event-ID tracking, and typed event dispatching (§11).
  */
 
+// Mirrors harness/sdk/events.py KNOWN_EVENT_TYPES (checked by tests/frontends/test_static_contract.py)
+// plus the server's `heartbeat` keep-alive frame.
 export const KNOWN_EVENT_TYPES = [
   'approval.required',
   'approval.resolved',
+  'checkpoint.created',
+  'checkpoint.restored',
   'compaction.completed',
   'compaction.started',
   'context.assembled',
   'cost.updated',
+  'deliverable.presented',
   'hook.fired',
-  'log',
+  'job.exited',
+  'job.output',
+  'job.started',
+  'mcp.server.status',
+  'mcp.tools.changed',
   'model.completed',
   'model.notice',
   'model.started',
@@ -20,20 +29,26 @@ export const KNOWN_EVENT_TYPES = [
   'model.tool_call',
   'plugin.error',
   'plugin.loaded',
+  'question.answered',
+  'question.asked',
   'session.started',
   'session.switched',
   'settings.changed',
+  'system.notice',
   'task.completed',
   'task.started',
   'tool.call',
   'tool.decision',
   'tool.output.delta',
+  'tool.repeat_detected',
   'tool.result',
+  'tool.result.pruned',
   'turn.cancelled',
   'turn.completed',
   'turn.error',
   'turn.started',
   'ui.card',
+  'workspace.changes',
   'heartbeat',
 ];
 

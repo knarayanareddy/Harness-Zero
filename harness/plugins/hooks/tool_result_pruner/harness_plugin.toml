@@ -1,0 +1,11 @@
+[plugin]
+name = "hook-tool-result-pruner"
+version = "1.0.0"
+api_version = "1"
+summary = "Keeps the head and the tail of oversized tool results instead of letting truncation drop the diagnosis"
+provides = ["hook"]
+capabilities = []
+entry = "harness.plugins.hooks.tool_result_pruner.plugin:ToolResultPrunerPlugin"
+
+[settings]
+schema = "settings.schema.json"

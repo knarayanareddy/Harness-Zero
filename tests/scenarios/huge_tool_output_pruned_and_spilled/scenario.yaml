@@ -1,0 +1,24 @@
+name: huge_tool_output_pruned_and_spilled
+kind: kernel
+summary: >-
+  A command whose output is far too big for the context. The spill guard writes the whole thing to the
+  session directory, the pruner keeps head + tail and says how much was dropped, so the failure line at
+  the end still reaches the model and no kernel truncation is needed.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: allow
+  # This scenario tests output lifecycle, not sandbox enforcement; keep it portable to hosts without bwrap.
+  kernel.sandbox.mode: "off"
+turns:
+  - prompt: "Run the noisy build"
+expect:
+  tools_called: [run_command]
+  model_saw:
+    - "chars omitted ("
+    - "full output: .harness/sessions/"
+    - "Build FAILED at the end"
+    - "Full output saved to .harness/sessions/"
+  model_never_saw:
+    - "TRUNCATED DUE TO SIZE LIMIT"
+  event_types_include: [tool.call, tool.result, tool.result.pruned]
+  reload_equals_live: true

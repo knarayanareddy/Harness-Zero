@@ -1,0 +1,389 @@
+"""Parametrised golden tests: one case per ``<scenario>/scenario.yaml``.
+
+Run from the repository root::
+
+    . .venv/bin/activate
+    pytest tests/scenarios -q                     # replay (default; plain `pytest -q` includes them)
+    HARNESS_REPLAY=update pytest tests/scenarios -q -k name       # accept new goldens
+    SCENARIO_DOM=0 pytest …                                    # skip the jsdom lane
+
+A scenario with ``xfail: <reason>`` documents a known bug: the test is expected
+to FAIL and turns red the day the bug is fixed (strict), so the golden can be
+re-recorded and the ``xfail`` removed in the same PR.
+"""
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from _lib.kernel_runner import run_kernel_scenario
+from _lib.scenario import Scenario, Turn, compare_golden, discover, kind_of, load_scenario
+from _lib.web_runner import run_web_scenario
+
+from harness.sdk.events import validate_event
+
+ROOT = Path(__file__).parent
+SCENARIOS = discover(ROOT)
+
+
+def _params(root: Path) -> list[pytest.ParameterSet]:
+    """One param per scenario, marked so `-m web` picks the browser lanes and `-m scenario` picks the suite.
+
+    Marking happens at collection, from the yaml's `kind` alone: `load_scenario` validates the whole file and
+    a broken scenario has to fail as a test, not as a collection error that hides the other 24.
+    """
+    out: list[pytest.ParameterSet] = []
+    for d in discover(root):
+        marks = [pytest.mark.scenario]
+        if kind_of(d) == "web":
+            marks.append(pytest.mark.web)
+        out.append(pytest.param(d, marks=marks))
+    return out
+
+
+def _subset(want, have) -> bool:
+    if isinstance(want, dict):
+        return isinstance(have, dict) and all(k in have and _subset(v, have[k]) for k, v in want.items())
+    if isinstance(want, list):
+        return isinstance(have, list) and all(any(_subset(w, h) for h in have) for w in want)
+    return want == have
+
+
+def _reload_report(result) -> dict:
+    """The refreshed page's DOM report, or a failure that names the lane instead of blaming the client.
+
+    An errored reload run (node crashed, a module 404s) used to read as an empty timeline: every
+    `reload_timeline_contains` assertion then pointed at the client, and `reload_timeline_not_contains` passed
+    vacuously. Both directions fail here, with the probe's stderr in the message.
+    """
+    rep = (result.dom or {}).get("reload") or {}
+    assert "error" not in rep, f"the reload DOM lane did not report: {rep.get('error')}\n{(rep.get('stderr') or '')[-1200:]}"
+    assert "timeline_text_on_load" in rep, f"the reload DOM lane ran without a reload report: keys={sorted(rep)}"
+    return rep
+
+
+def _check_expectations(sc, result) -> None:
+    exp = sc.expect
+    if "tools_called" in exp:
+        assert result.tools_called == exp["tools_called"], f"tools called: {result.tools_called} != {exp['tools_called']}"
+    if "tools_called_subset" in exp:
+        missing = [t for t in exp["tools_called_subset"] if t not in result.tools_called]
+        assert not missing, f"tools never called: {missing} (called: {result.tools_called})"
+    for rel, cond in (exp.get("files") or {}).items():
+        p = result.workspace / rel
+        if cond.get("exists", True):
+            assert p.exists(), f"{rel} missing"
+            if "contains" in cond:
+                assert cond["contains"] in p.read_text(), f"{rel} does not contain {cond['contains']!r}"
+            if "not_contains" in cond:
+                assert cond["not_contains"] not in p.read_text(), f"{rel} still contains {cond['not_contains']!r}"
+        else:
+            assert not p.exists(), f"{rel} should not exist"
+    if exp.get("no_errors", True):
+        assert not result.errors, f"errors during run: {result.errors}"
+    # Flow-of-information contract: every event that reached the observer (bus subscriber in the kernel
+    # lane, SSE frames in the web lane) must satisfy its payload dataclass in harness/sdk/events.py.
+    violations = []
+    for e in result.events:
+        if e.get("type") == "heartbeat":
+            continue
+        errs = validate_event({k: v for k, v in e.items() if not k.startswith("_")})
+        if errs:
+            violations.append(f"{e.get('type')}: {errs}")
+    assert not violations, "event payload contract violations:\n" + "\n".join(violations[:20])
+    if "event_types_include" in exp:
+        seen = {e.get("type") for e in result.events}
+        missing = [t for t in exp["event_types_include"] if t not in seen]
+        assert not missing, f"events never observed: {missing}; seen={sorted(seen)}"
+    if "event_types_exclude" in exp:
+        seen = {e.get("type") for e in result.events}
+        present = [t for t in exp["event_types_exclude"] if t in seen]
+        assert not present, f"events that must not occur: {present}"
+    if exp.get("replay_consumed", True):
+        assert result.extra.get("replay_remaining") == 0, f"{result.extra.get('replay_remaining')} recorded model responses were never requested"
+    interaction_inputs = result.extra.get("interaction_inputs") or {}
+    for expectation, input_name in (
+        ("approvals_consumed", "approvals"),
+        ("question_answers_consumed", "question_answers"),
+    ):
+        if exp.get(expectation, True):
+            status = interaction_inputs.get(input_name) or {}
+            provided = int(status.get("provided", 0))
+            consumed = int(status.get("consumed", 0))
+            remaining = int(status.get("remaining", max(0, provided - consumed)))
+            unanswered = int(status.get("unanswered", 0))
+            assert consumed == provided and remaining == 0 and unanswered == 0, (
+                f"scripted {input_name} were not consumed exactly once: "
+                f"provided={provided}, consumed={consumed}, remaining={remaining}, unanswered={unanswered}"
+            )
+    for needle in exp.get("model_saw") or []:
+        blob = "\n".join(str(r) for r in result.provider_requests)
+        assert needle in blob, f"model never saw {needle!r}"
+    for needle in exp.get("model_never_saw") or []:
+        blob = "\n".join(str(r) for r in result.provider_requests)
+        assert needle not in blob, f"model saw forbidden text {needle!r}"
+    if "events_match" in exp:
+        # Each entry is a JSON subset that at least one event must match, e.g. {type: tool.decision, data: {action: deny}}.
+        for want in exp["events_match"]:
+            assert any(_subset(want, e) for e in result.events), f"no event matches {want}; seen={[e.get('type') for e in result.events]}"
+    if sc.kind == "web" and exp.get("auth_required", True):
+        statuses = result.extra.get("unauthenticated") or {}
+        leaking = {k: v for k, v in statuses.items() if v not in (401, 403)}
+        assert statuses and not leaking, f"unauthenticated requests not rejected: {statuses}"
+    if "stop_reasons" in exp:
+        got = [tr.get("stop_reason") for tr in (getattr(result, "turn_results", None) or [])]
+        assert got == exp["stop_reasons"], f"stop reasons {got} != {exp['stop_reasons']}"
+    if exp.get("reload_equals_live", False):
+        assert result.extra.get("live_vs_reloaded_equal") is True, "sessions.get after restart differs from the live history"
+    if "timeline_contains" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        text = result.dom.get("timeline_text") or ""
+        for needle in exp["timeline_contains"]:
+            assert needle in text, f"timeline does not show {needle!r}; timeline={text[:400]!r}; console={result.dom.get('console_tail')}"
+    if "timeline_order" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        text = result.dom.get("timeline_text") or ""
+        positions = [(needle, text.find(needle)) for needle in exp["timeline_order"]]
+        missing = [n for n, i in positions if i < 0]
+        assert not missing, f"timeline lacks {missing}; timeline={text[:400]!r}"
+        idx = [i for _, i in positions]
+        assert idx == sorted(idx), f"timeline order is {[n for n, _ in sorted(positions, key=lambda x: x[1])]}, expected {exp['timeline_order']}"
+    if "dom_questions_answered" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        assert result.dom.get("questions_answered") == exp["dom_questions_answered"], (
+            f"DOM question answers={result.dom.get('questions_answered')!r}; console={result.dom.get('console_tail')}"
+        )
+    if "dom_question_waiting_seen" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        assert result.dom.get("question_waiting_seen") is exp["dom_question_waiting_seen"], (
+            f"question waiting indicator={result.dom.get('question_waiting_seen')!r}"
+        )
+    if "security_badge_contains" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        badge = result.dom.get("security_badge") or {}
+        text = badge.get("text") or ""
+        for needle in exp["security_badge_contains"]:
+            assert needle in text, f"security badge does not show {needle!r}; badge={badge}"
+    if "security_badge_state" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        badge = result.dom.get("security_badge") or {}
+        assert badge.get("state") == exp["security_badge_state"], f"security badge state={badge.get('state')!r}; badge={badge}"
+    if "security_settings_controls" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        controls = result.dom.get("security_settings_controls") or {}
+        assert _subset(exp["security_settings_controls"], controls), f"security settings controls mismatch: {controls}"
+    if "settings_groups_include" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        groups = result.dom.get("settings_groups") or []
+        missing = [g for g in exp["settings_groups_include"] if g not in groups]
+        assert not missing, f"settings panel lacks group tabs {missing}; has {groups}; console={result.dom.get('console_tail')}"
+        assert result.dom.get("settings_modal_hidden") is False, "settings modal did not open"
+    if "dom_tabs_include" in exp or "dom_tabs_exclude" in exp or "dom_panel_text" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        tabs = result.dom.get("tab_ids") or []
+        assert tabs, f"the tab strip reported no tabs; console={result.dom.get('console_tail')}"
+        missing = [t for t in exp.get("dom_tabs_include", []) if t not in tabs]
+        assert not missing, f"declared panels the shell did not mount: {missing}; tabs={tabs}"
+        present = [t for t in exp.get("dom_tabs_exclude", []) if t in tabs]
+        assert not present, f"panels still mounted after the feature was switched off: {present}; tabs={tabs}"
+        texts = result.dom.get("panel_texts") or {}
+        for pid, needle in (exp.get("dom_panel_text") or {}).items():
+            got = texts.get(pid)
+            assert got is not None, f"panel {pid!r} painted nothing (host missing?); painted={sorted(k for k, v in texts.items() if v)}"
+            assert needle in got, f"panel {pid!r} does not show {needle!r}; it shows {got[:200]!r}"
+    if "dom_diff_preview_contains" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        diff = result.dom.get("diff_preview") or ""
+        for needle in exp["dom_diff_preview_contains"]:
+            assert needle in diff, f"on-demand file diff does not show {needle!r}; diff={diff[:500]!r}"
+    if "dom_deliverable" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        got = result.dom.get("deliverable_viewer") or {}
+        assert _subset(exp["dom_deliverable"], got), f"deliverable viewer mismatch: {got}"
+    if "dom_artifact_tab_active" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        assert result.dom.get("artifact_tab_active") is exp["dom_artifact_tab_active"], (
+            f"artifact viewer did not open its tab: {result.dom.get('artifact_tab_active')}"
+        )
+    if "dom_restart_tabs_include" in exp or "dom_restart_tabs_exclude" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        rep = result.dom.get("restart") or {}
+        assert rep, f"the restart pass reported nothing: {result.errors}"
+        tabs = rep.get("tab_ids") or []
+        assert tabs, f"the restarted page reported no tabs; console={rep.get('console_tail')}"
+        missing = [t for t in exp.get("dom_restart_tabs_include", []) if t not in tabs]
+        assert not missing, f"panels missing after a restart: {missing}; tabs={tabs}"
+        present = [t for t in exp.get("dom_restart_tabs_exclude", []) if t in tabs]
+        assert not present, f"panels that came back after a restart: {present}; tabs={tabs}"
+    if exp.get("dom_disable_plugin"):
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        got = result.dom.get("plugin_disable") or {}
+        assert got.get("found"), f"the Plugins pane listed no card for {exp['dom_disable_plugin']!r}"
+        assert got.get("command") in ("plugins.disable", "plugins.enable"), got
+        assert got.get("after") and got["after"] != got.get("before"), (
+            f"the switch did not repaint after its write: {got}"
+        )
+    if exp.get("dom_plugin_modules_served"):
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        status = result.dom.get("plugin_module_status") or {}
+        assert status, "no plugin advertised a client module, so the check would prove nothing"
+        bad = {url: code for url, code in status.items() if code != 200}
+        assert not bad, f"client module URLs the browser could not fetch: {bad}"
+        told = result.dom.get("client_module_urls") or []
+        assert sorted(told) == sorted(status), f"the check fetched {sorted(status)}, the app was told {sorted(told)}"
+    if "settings_groups_exclude" in exp:
+        assert result.dom is not None, f"dom lane did not run: {result.errors}"
+        groups = result.dom.get("settings_groups") or []
+        leaked = [g for g in exp["settings_groups_exclude"] if g in groups]
+        assert not leaked, f"settings tabs a switched-off feature still owns: {leaked}; has {groups}"
+    if exp.get("no_console_errors", True) and result.dom is not None and "console_errors" in result.dom:
+        assert result.dom["console_errors"] == [], f"browser console errors: {result.dom['console_errors']}"
+    if "timeline_not_contains" in exp and result.dom is not None:
+        text = result.dom.get("timeline_text") or ""
+        for needle in exp["timeline_not_contains"]:
+            assert needle not in text, f"timeline shows {needle!r}"
+    if "reload_timeline_contains" in exp:
+        rep = _reload_report(result)
+        text = rep.get("timeline_text_on_load") or ""
+        for needle in exp["reload_timeline_contains"]:
+            assert needle in text, (
+                f"after a page refresh the timeline does not show {needle!r}; on_load={text[:300]!r}; "
+                f"after_click={rep.get('timeline_text_after_click', '')[:300]!r}; "
+                f"after_reloadTranscript={rep.get('timeline_text_after_reload_transcript', '')[:300]!r}; "
+                f"active_session_on_load={rep.get('active_session_on_load')}; console={rep.get('console_tail')}"
+            )
+        assert not rep.get("empty_user_bubbles"), f"page refresh rendered {rep.get('empty_user_bubbles')} empty user bubbles (tool-result records)"
+    if "reload_timeline_not_contains" in exp:
+        rep = _reload_report(result)
+        text = rep.get("timeline_text_on_load") or ""
+        for needle in exp["reload_timeline_not_contains"]:
+            assert needle not in text, f"after a page refresh the timeline shows {needle!r}"
+    if exp.get("dom_reload_contains_live_lines"):
+        # Live-only chrome is allowed to differ; facts are not.
+        live_only = ("streaming", "Assistant turn completed", "idle", "·", "plugin:")
+        missing = [line for line in ((result.dom or {}).get("reload_missing_lines") or []) if not any(t in line for t in live_only)]
+        assert not missing, "a page refresh lost what the live session painted:\n" + "\n".join(missing[:12])
+    if exp.get("dom_restart"):
+        rep = (result.dom or {}).get("restart") or {}
+        info = result.extra.get("restart") or {}
+        assert rep, f"restart lane did not run: {result.errors}"
+        text = rep.get("timeline_text_on_load") or ""
+        for needle in exp.get("restart_timeline_contains", []):
+            assert needle in text, (
+                f"after a daemon restart the timeline does not show {needle!r} without a click; on_load={text[:300]!r}; "
+                f"active_session_on_load={rep.get('active_session_on_load')}; health.active_session={info.get('active_session_after_restart')}; "
+                f"rows={info.get('session_rows')}; console={rep.get('console_tail')}"
+            )
+        if "sessions_after_restart" in exp:
+            assert info.get("sessions_after_restart") == exp["sessions_after_restart"], (
+                f"{info.get('sessions_after_restart')} sessions after restart, expected {exp['sessions_after_restart']}: {info.get('session_rows')}"
+            )
+        assert rep.get("active_session_on_load") == result.session_id, "the client did not land on the resumed session"
+        assert not rep.get("empty_user_bubbles")
+    if exp.get("dom_turns_completed") and result.dom is not None:
+        incomplete = [t for t in result.dom.get("turns", []) if not t.get("completed")]
+        assert not incomplete, f"client never saw the turn finish: {incomplete}; sse={result.dom.get('sse_events')[:20]}; submit={result.dom.get('submit_bodies')}; fetch={result.dom.get('fetch_log')[-6:]}"
+
+
+@pytest.mark.asyncio
+async def test_kernel_runner_reports_returned_turn_errors(tmp_path: Path, hermetic_env: Path) -> None:
+    """Commands returns fatal turn failures in ``TurnResult``; the runner must not treat them as success."""
+    scenario_dir = tmp_path / "empty-recording"
+    scenario_dir.mkdir()
+    (scenario_dir / "provider.jsonl").write_text("", encoding="utf-8")
+    scenario = Scenario(
+        name="empty-recording",
+        dir=scenario_dir,
+        kind="kernel",
+        turns=[Turn(prompt="Say hello.")],
+    )
+
+    result = await run_kernel_scenario(scenario, tmp_path / "run", env_conf=hermetic_env)
+
+    assert result.turn_results[0]["error"]
+    assert result.errors, "a TurnResult.error must participate in the default no_errors expectation"
+    with pytest.raises(AssertionError, match="errors during run"):
+        _check_expectations(scenario, result)
+
+
+@pytest.mark.asyncio
+async def test_kernel_runner_rejects_unconsumed_interaction_inputs(tmp_path: Path, hermetic_env: Path) -> None:
+    """Unused scripted approval/question data must not silently make an unrelated flow look covered."""
+    scenario_dir = tmp_path / "unconsumed-inputs"
+    scenario_dir.mkdir()
+    recording = ROOT / "plain_answer_kernel" / "provider.jsonl"
+    (scenario_dir / "provider.jsonl").write_text(recording.read_text(encoding="utf-8"), encoding="utf-8")
+    scenario = Scenario(
+        name="unconsumed-inputs",
+        dir=scenario_dir,
+        kind="kernel",
+        turns=[Turn(prompt="What is the capital of the Netherlands?")],
+        approvals=["approve"],
+        question_answers=[{"format": {"option_id": "markdown", "custom_text": ""}}],
+    )
+
+    result = await run_kernel_scenario(scenario, tmp_path / "run", env_conf=hermetic_env)
+
+    interactions = result.extra["interaction_inputs"]
+    assert interactions["approvals"] == {"provided": 1, "consumed": 0, "remaining": 1, "unanswered": 0}
+    assert interactions["question_answers"] == {"provided": 1, "consumed": 0, "remaining": 1, "unanswered": 0}
+    with pytest.raises(AssertionError, match="scripted approvals were not consumed exactly once"):
+        _check_expectations(scenario, result)
+
+    scenario.expect["approvals_consumed"] = False
+    with pytest.raises(AssertionError, match="scripted question_answers were not consumed exactly once"):
+        _check_expectations(scenario, result)
+
+
+@pytest.mark.parametrize("scenario_dir", _params(ROOT), ids=lambda p: p.name)
+async def test_scenario(scenario_dir: Path, tmp_path: Path, hermetic_env: Path, request: pytest.FixtureRequest):
+    sc = load_scenario(scenario_dir)
+    if sc.name == "sandbox_bwrap_full_badge":
+        # This one claims real confinement, not merely a setting. Skip with the probe's exact reason on macOS,
+        # Windows, or a Linux runner whose user namespaces are disabled; CI prints skip reasons with `-rs`.
+        from harness.plugins.executors.sandbox_bwrap.backend import BwrapBackend
+
+        availability = BwrapBackend().available()
+        if not availability.available:
+            pytest.skip(f"bwrap full-enforcement scenario unavailable: {availability.reason}")
+    if sc.xfail:
+        request.node.add_marker(pytest.mark.xfail(reason=sc.xfail, strict=True))
+
+    if sc.kind == "kernel":
+        result = await run_kernel_scenario(sc, tmp_path, env_conf=hermetic_env)
+    elif sc.kind == "web":
+        result = await run_web_scenario(sc, tmp_path, env_conf=hermetic_env, dom=bool(sc.expect.get("dom_lane", True)))
+    else:
+        pytest.fail(f"unknown scenario kind {sc.kind!r}")
+
+    norm = result.normalized()
+    (sc.dir / "_last_run").mkdir(exist_ok=True)
+    import json
+
+    (sc.dir / "_last_run" / "summary.json").write_text(
+        json.dumps({"errors": result.errors, "tools_called": result.tools_called, "extra": result.extra, "dom": result.dom}, indent=2, default=str)
+    )
+
+    _check_expectations(sc, result)
+
+    golden = sc.golden_dir
+    if sc.expect.get("transcript_golden", True):
+        compare_golden(golden / "transcript.json", norm["transcript"])
+    if sc.expect.get("events_golden", True):
+        # WS-04b: a durable event's record pointer is part of the observable contract, so the golden keeps
+        # `record` when the kernel attached one (it is the stored record: `kind`, `step_index`, content).
+        # Transient and kernel-only events omit it rather than carrying a null, so the golden says which
+        # is which without restating the schema.
+        rows = []
+        for e in norm["events"]:
+            row = {"type": e["type"], "data": e.get("data", {})}
+            if e.get("record") is not None:
+                row["record"] = e["record"]
+            rows.append(row)
+        compare_golden(golden / "events.json", rows)
+    if sc.expect.get("requests_golden", True):
+        compare_golden(golden / "requests.json", norm["requests"])
+    if sc.kind == "web" and sc.expect.get("http_golden", True):
+        compare_golden(golden / "http.json", norm["http"])
+    if sc.kind == "web" and result.dom is not None and sc.expect.get("timeline_golden", True):
+        compare_golden(golden / "timeline.txt", norm.get("timeline", ""))

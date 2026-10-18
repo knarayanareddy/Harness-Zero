@@ -1,0 +1,99 @@
+[
+  {
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "Create notes.txt"
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "replay-v1",
+    "system_chars": 1468,
+    "system_head": "You are Harness-Zero, an advanced agentic software engineering system. You operate with absolute precision, rigorous test-driven verification, and minimal disruption. Always inspect files thoroughly before editing, write clean production-grade code, and verify all changes with automated tests.\n\nTool Execution Rules:\n1. Read before writing: inspect files using view_file before editing.\n2. Precise e",
+    "system_sections": [
+      "# Available Skills (Progressive Disclosure)"
+    ],
+    "tools": [
+      "ask_user",
+      "checkpoint_restore",
+      "create_artifact",
+      "edit_file",
+      "job_kill",
+      "job_list",
+      "job_output",
+      "job_start",
+      "manage_task",
+      "present",
+      "read_resource",
+      "remember",
+      "run_command",
+      "search_codebase",
+      "search_memory",
+      "view_file",
+      "view_skill",
+      "write_to_file"
+    ]
+  },
+  {
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "Create notes.txt"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "input": {
+              "content": "approved write\n",
+              "file_path": "notes.txt"
+            },
+            "tool_use": "write_to_file"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "is_error": false,
+            "tool_result": "Successfully wrote 15 characters to <ws>/notes.txt"
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "replay-v1",
+    "system_chars": 1468,
+    "system_head": "You are Harness-Zero, an advanced agentic software engineering system. You operate with absolute precision, rigorous test-driven verification, and minimal disruption. Always inspect files thoroughly before editing, write clean production-grade code, and verify all changes with automated tests.\n\nTool Execution Rules:\n1. Read before writing: inspect files using view_file before editing.\n2. Precise e",
+    "system_sections": [
+      "# Available Skills (Progressive Disclosure)"
+    ],
+    "tools": [
+      "ask_user",
+      "checkpoint_restore",
+      "create_artifact",
+      "edit_file",
+      "job_kill",
+      "job_list",
+      "job_output",
+      "job_start",
+      "manage_task",
+      "present",
+      "read_resource",
+      "remember",
+      "run_command",
+      "search_codebase",
+      "search_memory",
+      "view_file",
+      "view_skill",
+      "write_to_file"
+    ]
+  }
+]

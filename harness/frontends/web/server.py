@@ -21,10 +21,12 @@ from typing import Any
 
 from aiohttp import web
 
+from harness import __version__
 from harness.kernel.bus import EventBus, Subscriber
 from harness.kernel.commands import Commands
 from harness.sdk.errors import HarnessError
 from harness.sdk.events import Event
+from harness.sdk.plugin_static import CLIENT_MODULE_ROOT, client_module_file, client_module_trusted
 
 logger = logging.getLogger("harness.frontends.web.server")
 
@@ -150,7 +152,10 @@ class HarnessWebServer:
             or path.startswith("/static/")
             or path.startswith("/assets/")
             or path.startswith("/vendor/")
-            or any(path.endswith(ext) for ext in (".js", ".css", ".png", ".jpg", ".svg", ".ico", ".woff2"))
+            or (
+                not path.startswith(("/artifacts/", "/workspace-files/"))
+                and any(path.endswith(ext) for ext in (".js", ".css", ".png", ".jpg", ".svg", ".ico", ".woff2"))
+            )
         )
 
         if not is_public:
@@ -268,7 +273,17 @@ class HarnessWebServer:
         self.app.router.add_get("/health", self._handle_health)
         self.app.router.add_post("/auth/ticket", self._handle_auth_ticket)
         self.app.router.add_get("/events", self._handle_events)
+        self.app.router.add_get("/artifacts/{filename}", self._handle_api_artifact)
+        self.app.router.add_get("/workspace-files/{path:.+}", self._handle_workspace_file)
         self.app.router.add_post("/commands/{name}", self._handle_command)
+
+        # A plugin's own client module (`[ui].client_module`), served out of that plugin's `static/` directory.
+        # This MUST be registered before `/static/` below: `add_static` claims a prefix, and aiohttp matches
+        # resources in registration order, so a later `/static/plugins/...` route would never be reached and
+        # every plugin module would 404 out of the client's own tree.
+        self.app.router.add_get(
+            f"{CLIENT_MODULE_ROOT}/{{name}}/{{tail:.+}}", self._handle_plugin_static, name="plugin_static"
+        )
 
         # Static assets
         assets_dir = self.static_dir / "assets"
@@ -276,6 +291,36 @@ class HarnessWebServer:
             self.app.router.add_static("/assets", str(assets_dir), name="assets")
         if self.static_dir.exists():
             self.app.router.add_static("/static/", path=str(self.static_dir), name="static")
+
+    async def _handle_plugin_static(self, request: web.Request) -> web.Response:
+        """Serve a plugin's declared client module — the browser end of ``[ui].client_module``.
+
+        The path rules live in `harness.sdk.plugin_static.client_module_file` (the address must be the one the
+        manifest's declaration maps to, the file must resolve inside that plugin's own `static/` directory, and
+        only module/stylesheet suffixes are served). On top of those, this route adds the *session* rule: a
+        plugin the running daemon did not load has no business executing in the browser, even while its directory
+        sits on disk and even though `plugins.enable` has already recorded the user's intent.
+
+        Every refusal is a 404, never a 403: an undeclared sibling file, a traversal, and a plugin that is not
+        installed are the same answer, so the route cannot be used to probe what a machine has installed. And
+        like the client's own `/static/` tree this is public to the browser — the auth middleware allows
+        `/static/` so ES modules can import each other — which is only safe because what it serves is code a
+        trusted plugin published, never workspace data. That is exactly why the declared-address rule matters.
+        """
+        name = request.match_info["name"]
+        discovered = self.commands.registry.discovered.get(name)
+        if discovered is None or not self.commands.registry.is_loaded(name):
+            return _json_response({"error": "not found"}, status=404)
+        if not client_module_trusted(discovered):
+            # The loader drops an untrusted plugin's module declaration, so this path should already be closed.
+            # It is checked again here because the route is the only place the answer is certain: a registry
+            # assembled without going through `discover_directory` (a test, a second frontend) has no such guard.
+            return _json_response({"error": "not found"}, status=404)
+        path = client_module_file(discovered, name, request.match_info["tail"])
+        if path is None:
+            return _json_response({"error": "not found"}, status=404)
+        content_type = "text/css" if path.suffix == ".css" else "text/javascript"
+        return web.Response(body=path.read_bytes(), content_type=content_type)
 
     async def _handle_auth_ticket(self, request: web.Request) -> web.Response:
         """Issues a 60-second single-use ticket for EventSource / SSE connection."""
@@ -313,16 +358,91 @@ class HarnessWebServer:
         return response
 
     async def _handle_health(self, request: web.Request) -> web.Response:
-        """Reports server status, active session, spend, and sandbox origin."""
+        """Reports server status, active session, spend, sandbox origin, and the security posture.
+
+        `security` comes from the same command the Studio's status pill and `harness security show` read, so the
+        answer cannot differ per surface; see `harness/kernel/commands.py:security_status` for what it excludes.
+        """
         session = self.commands.session_manager.active_session
         spend_info = await self.commands.economics(session_id=session.session_id if session else None)
         return web.json_response({
             "status": "ok",
-            "version": "2.0.0",
+            "version": __version__,
+            "workspace": str(self.workspace),
             "active_session": session.info.to_dict() if session else None,
             "sandbox_origin": f"http://{self.host}:{self.sandbox_port}",
             "spend": spend_info,
+            "security": await self.commands.security_status(),
         })
+
+    async def _handle_api_artifact(self, request: web.Request) -> web.StreamResponse:
+        """Serve one workspace artifact with an opaque-origin, script-disabled viewer policy."""
+        filename = request.match_info.get("filename", "")
+        if not filename or filename in {".", ".."} or "/" in filename or "\\" in filename or "\x00" in filename:
+            return web.Response(text="Artifact not found.", status=404, content_type="text/plain")
+        workspace = self.workspace.expanduser().resolve()
+        harness_dir = workspace / ".harness"
+        artifacts_dir = harness_dir / "artifacts"
+        if harness_dir.is_symlink() or artifacts_dir.is_symlink():
+            return web.Response(text="Artifact not found.", status=404, content_type="text/plain")
+        try:
+            resolved_artifacts = artifacts_dir.resolve(strict=False)
+        except OSError:
+            return web.Response(text="Artifact not found.", status=404, content_type="text/plain")
+        if resolved_artifacts != artifacts_dir or not resolved_artifacts.is_relative_to(workspace):
+            return web.Response(text="Artifact not found.", status=404, content_type="text/plain")
+        try:
+            target = (artifacts_dir / filename).resolve(strict=True)
+        except (FileNotFoundError, NotADirectoryError, OSError):
+            return web.Response(text="Artifact not found.", status=404, content_type="text/plain")
+        if not target.is_relative_to(artifacts_dir) or not target.is_file():
+            return web.Response(text="Artifact not found.", status=404, content_type="text/plain")
+        return self._viewer_file_response(target)
+
+    async def _handle_workspace_file(self, request: web.Request) -> web.StreamResponse:
+        """Serve one safe workspace file; `.git` and all `.harness` state stay private."""
+        raw_path = request.match_info.get("path", "")
+        if not raw_path or "\x00" in raw_path or "\\" in raw_path:
+            return web.Response(text="File not found.", status=404, content_type="text/plain")
+        parts = Path(raw_path).parts
+        if Path(raw_path).is_absolute() or any(part in {"", ".", ".."} for part in parts):
+            return web.Response(text="File not found.", status=404, content_type="text/plain")
+        if any(part == ".git" for part in parts) or parts[0] == ".harness":
+            return web.Response(text="File not found.", status=404, content_type="text/plain")
+
+        workspace = self.workspace.expanduser().resolve()
+        try:
+            target = workspace.joinpath(*parts).resolve(strict=True)
+        except (FileNotFoundError, NotADirectoryError, OSError):
+            return web.Response(text="File not found.", status=404, content_type="text/plain")
+        if not target.is_relative_to(workspace) or not target.is_file():
+            return web.Response(text="File not found.", status=404, content_type="text/plain")
+        relative = target.relative_to(workspace)
+        private_roots = [(workspace / ".git").resolve(strict=False), (workspace / ".harness").resolve(strict=False)]
+        if (
+            any(part == ".git" for part in relative.parts)
+            or (relative.parts and relative.parts[0] == ".harness")
+            or any(target.is_relative_to(private_root) for private_root in private_roots)
+        ):
+            return web.Response(text="File not found.", status=404, content_type="text/plain")
+        return self._viewer_file_response(target)
+
+    @staticmethod
+    def _viewer_file_response(target: Path) -> web.FileResponse:
+        """FileResponse with CSP sandboxing even when opened in a top-level tab."""
+        return web.FileResponse(
+            target,
+            headers={
+                "Content-Security-Policy": (
+                    "default-src 'none'; img-src data: blob:; media-src data: blob:; "
+                    "style-src 'unsafe-inline'; script-src 'none'; connect-src 'none'; "
+                    "form-action 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox"
+                ),
+                "X-Frame-Options": "SAMEORIGIN",
+                "X-Content-Type-Options": "nosniff",
+                "Cache-Control": "no-store",
+            },
+        )
 
     async def _handle_command(self, request: web.Request) -> web.Response:
         """Direct JSON RPC dispatcher to Commands API (§11)."""
@@ -341,7 +461,9 @@ class HarnessWebServer:
             result = await self.commands.dispatch(name, args)
             return _json_response({"result": result, "status": "ok"})
         except (HarnessError, ValueError) as e:
-            return _json_response({"error": str(e), "status": "error"}, status=400)
+            # Errors that know their HTTP status (TurnInProgress → 409) keep it; the rest are bad requests.
+            status = getattr(e, "status_code", None) or 400
+            return _json_response({"error": str(e), "status": "error"}, status=status)
         except (KeyError, FileNotFoundError) as e:
             return _json_response({"error": str(e), "status": "error"}, status=404)
         except Exception as e:
@@ -425,14 +547,27 @@ class HarnessWebServer:
     async def _handle_sandbox_artifact(self, request: web.Request) -> web.Response:
         """Serves workspace artifacts with path traversal prevention."""
         filename = request.match_info["filename"]
-        artifacts_dir = (self.workspace / ".harness" / "artifacts").resolve()
-        target = (artifacts_dir / filename).resolve()
+        workspace = self.workspace.expanduser().resolve()
+        artifacts_dir = (workspace / ".harness" / "artifacts").resolve(strict=False)
+        if (
+            not filename
+            or filename in {".", ".."}
+            or "/" in filename
+            or "\\" in filename
+            or "\x00" in filename
+            or not artifacts_dir.is_relative_to(workspace)
+        ):
+            return web.json_response({"error": "Access denied"}, status=403)
+        try:
+            target = (artifacts_dir / filename).resolve(strict=True)
+        except (FileNotFoundError, NotADirectoryError, OSError):
+            return web.json_response({"error": "Artifact not found"}, status=404)
 
-        # Security check: must reside inside artifacts_dir
-        if not str(target).startswith(str(artifacts_dir)):
+        # Resolve symlinks and compare path components, not string prefixes.
+        if not target.is_relative_to(artifacts_dir):
             return web.json_response({"error": "Access denied"}, status=403)
 
-        if not target.exists() or not target.is_file():
+        if not target.is_file():
             return web.json_response({"error": "Artifact not found"}, status=404)
 
         suffix = target.suffix.lower()

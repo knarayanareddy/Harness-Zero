@@ -1,0 +1,28 @@
+name: ask_user_answered
+kind: web
+summary: The browser renders a structured question, submits an answer, and reloads both durable facts.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: allow
+turns:
+  - prompt: Ask which format to use, then continue with my choice.
+question_answers:
+  - format:
+      option_id: markdown
+      custom_text: ""
+expect:
+  tools_called: [ask_user]
+  event_types_include: [question.asked, question.answered]
+  model_saw: ["User answered:", "Markdown"]
+  timeline_contains: ["Which format should I use?", "Question answered", "You chose", "Markdown"]
+  reload_timeline_contains: ["Which format should I use?", "Question answered", "You chose", "Markdown"]
+  dom_answers_questions: true
+  dom_questions_answered: 1
+  dom_question_waiting_seen: true
+  dom_turns_completed: true
+  dom_reload: true
+  dom_reload_contains_live_lines: true
+  dom_restart: true
+  restart_timeline_contains: ["Which format should I use?", "You chose", "Markdown"]
+  sessions_after_restart: 1
+  auth_required: true

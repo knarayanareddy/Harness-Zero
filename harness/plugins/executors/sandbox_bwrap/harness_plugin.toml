@@ -1,0 +1,8 @@
+[plugin]
+name = "sandbox-bwrap"
+version = "1.0.0"
+api_version = "1"
+summary = "Linux bubblewrap backend for OS-confined executor processes"
+provides = ["sandbox"]
+capabilities = []
+entry = "harness.plugins.executors.sandbox_bwrap.plugin:BwrapSandboxPlugin"

@@ -16,6 +16,7 @@ import asyncio
 import json
 import os
 import stat
+import time
 from pathlib import Path
 
 import httpx
@@ -123,6 +124,10 @@ async def test_server_startup_and_daemon_json(
 
 @pytest.mark.asyncio
 async def test_health_and_host_guard(commands: Commands, event_bus: EventBus, workspace_dir: Path):
+    # The preset is a resolution layer, so this public status surface must read its effective value rather than
+    # repeat KERNEL_SCHEMA's default (`ask`).
+    commands.settings.set("kernel.security.preset", "open")
+    expected_security = await commands.security_status()
     server = HarnessWebServer(
         commands=commands,
         bus=event_bus,
@@ -140,8 +145,14 @@ async def test_health_and_host_guard(commands: Commands, event_bus: EventBus, wo
             assert res.status_code == 200
             data = res.json()
             assert data["status"] == "ok"
-            assert data["version"] == "2.0.0"
+            # P6: one version — /health reports harness.__version__ (which the package test pins to pyproject).
+            from harness import __version__
+
+            assert data["version"] == __version__
             assert data["sandbox_origin"] == f"http://127.0.0.1:{server.sandbox_port}"
+            assert data["security"] == expected_security
+            assert data["security"]["preset"] == "open"
+            assert data["security"]["settings"]["kernel.security.permission_mode"] == "allow"
 
             # 2. Host guard rejects invalid Host header with 421
             bad_res = await client.get(f"{base_url}/health", headers={"Host": "evil.example.com"})
@@ -306,6 +317,81 @@ async def test_sandbox_origin_csp_and_artifact_serving(
             # 3. Path traversal attack blocked
             res_trav = await client.get(f"{sb_url}/artifacts/../../secret.txt")
             assert res_trav.status_code in (403, 404)
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_same_origin_viewer_routes_are_sandboxed_and_path_confined(
+    commands: Commands, event_bus: EventBus, workspace_dir: Path, tmp_path: Path
+):
+    server = HarnessWebServer(
+        commands=commands,
+        bus=event_bus,
+        host="127.0.0.1",
+        port=0,
+        sandbox_port=0,
+        workspace=workspace_dir,
+    )
+    await server.start()
+    base_url = f"http://127.0.0.1:{server.port}"
+    auth = {"Authorization": f"Bearer {server.auth_token}"}
+    try:
+        artifacts = workspace_dir / ".harness" / "artifacts"
+        artifacts.mkdir(parents=True)
+        (artifacts / "result.html").write_text("<script>alert(1)</script><h1>Safe</h1>", encoding="utf-8")
+        (workspace_dir / "report.py").write_text("print('safe')\n", encoding="utf-8")
+        outside = tmp_path / "secret.txt"
+        outside.write_text("secret", encoding="utf-8")
+        (workspace_dir / "outside-link.txt").symlink_to(outside)
+
+        async with httpx.AsyncClient() as client:
+            artifact = await client.get(f"{base_url}/artifacts/result.html", headers=auth)
+            assert artifact.status_code == 200
+            assert "<h1>Safe</h1>" in artifact.text
+            csp = artifact.headers.get("Content-Security-Policy", "")
+            assert "sandbox" in csp and "script-src 'none'" in csp
+            assert artifact.headers.get("X-Frame-Options") == "SAMEORIGIN"
+
+            source = await client.get(f"{base_url}/workspace-files/report.py", headers=auth)
+            assert source.status_code == 200 and "print('safe')" in source.text
+            assert "sandbox" in source.headers.get("Content-Security-Policy", "")
+
+            assert (await client.get(f"{base_url}/workspace-files/.harness/settings.json", headers=auth)).status_code == 404
+            assert (await client.get(f"{base_url}/workspace-files/outside-link.txt", headers=auth)).status_code == 404
+            traversal = await client.get(f"{base_url}/workspace-files/%2E%2E/%2E%2E/secret.txt", headers=auth)
+            assert traversal.status_code in (403, 404)
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_viewer_routes_reject_symlinked_private_harness_directories(
+    commands: Commands, event_bus: EventBus, workspace_dir: Path
+):
+    server = HarnessWebServer(
+        commands=commands,
+        bus=event_bus,
+        host="127.0.0.1",
+        port=0,
+        sandbox_port=0,
+        workspace=workspace_dir,
+    )
+    await server.start()
+    base_url = f"http://127.0.0.1:{server.port}"
+    auth = {"Authorization": f"Bearer {server.auth_token}"}
+    try:
+        private = workspace_dir / ".harness" / "private"
+        private.mkdir(parents=True)
+        (private / "secret.txt").write_text("private checkpoint data", encoding="utf-8")
+        (workspace_dir / ".harness" / "artifacts").symlink_to(private, target_is_directory=True)
+        (workspace_dir / "public-alias").symlink_to(private, target_is_directory=True)
+
+        async with httpx.AsyncClient() as client:
+            artifact = await client.get(f"{base_url}/artifacts/secret.txt", headers=auth)
+            alias = await client.get(f"{base_url}/workspace-files/public-alias/secret.txt", headers=auth)
+            assert artifact.status_code == 404
+            assert alias.status_code == 404
     finally:
         await server.stop()
 
@@ -567,15 +653,26 @@ async def test_models_and_strategy_settings(
             health_json = res_health.json()
             assert health_json["sandbox_origin"] == f"http://127.0.0.1:{server.sandbox_port}"
 
-            # 2. Query models.list
+            # 2. Query models.list — P4: every row carries the provider's own verdict and the call is quick
+            #    even with every hosted key missing and no local Ollama (probe timeout 300 ms, cached).
+            t0 = time.monotonic()
             res_models = await client.post(
                 f"{base_url}/commands/models.list",
                 json={},
                 headers={"Authorization": f"Bearer {server.auth_token}"},
             )
             assert res_models.status_code == 200
+            assert time.monotonic() - t0 < 5.0
             models_list = res_models.json()["result"]
             assert isinstance(models_list, list)
+            for row in models_list:
+                assert row["status"] in ("ready", "needs_key", "unreachable"), row
+                if row["provider"] == "ollama":
+                    # Running or not, the row must say which — never "ready" while the daemon is down.
+                    assert row["reachable"] in (True, False)
+                    assert row["status"] == ("ready" if row["reachable"] else "unreachable")
+                elif row["provider"] in ("anthropic", "gemini", "openai", "openrouter", "deepseek"):
+                    assert row["configured"] is False and row["status"] == "needs_key", row
 
             # 3. Strategy settings get / set
             res_set_strategy = await client.post(
@@ -664,7 +761,24 @@ async def test_context_assembled_and_cost_events(
         await server.stop()
 
 
+@pytest.mark.asyncio
+async def test_turn_in_progress_is_409_over_http(commands: Commands, event_bus: EventBus, workspace_dir: Path):
+    """`TurnInProgress` carries `status_code = 409`; the command endpoint must not flatten it to 400."""
+    from harness.sdk.errors import TurnInProgress
 
+    server = HarnessWebServer(commands=commands, bus=event_bus, host="127.0.0.1", port=0, sandbox_port=0, workspace=workspace_dir)
+    await server.start()
+    base_url = f"http://127.0.0.1:{server.port}"
 
+    async def busy(**_: object):
+        raise TurnInProgress("sess-1")
 
+    commands.register_command("test.busy", busy)
+    try:
+        async with httpx.AsyncClient() as client:
+            res = await client.post(f"{base_url}/commands/test.busy", json={}, headers={"Authorization": f"Bearer {server.auth_token}"})
+            assert res.status_code == 409, res.text
+            assert res.json()["status"] == "error"
+    finally:
+        await server.stop()
 

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Repeat call reminder settings",
+  "x-namespace": "plugins.hook-repeat-call-reminder",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Count identical tool calls within a turn."
+    },
+    "repeat_after": {
+      "type": "integer",
+      "default": 3,
+      "minimum": 2,
+      "description": "Nag from this many identical calls in one turn."
+    },
+    "block_after": {
+      "type": "integer",
+      "default": 0,
+      "minimum": 0,
+      "description": "Block the call from this many identical calls; 0 never blocks."
+    },
+    "exempt_tools": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [
+        "manage_task",
+        "view_file"
+      ],
+      "description": "Tools that are expected to be polled or paged."
+    }
+  },
+  "additionalProperties": false
+}

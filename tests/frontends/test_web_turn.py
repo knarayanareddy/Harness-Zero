@@ -197,6 +197,80 @@ async def test_web_turn_submit_and_serialization(
 
 
 @pytest.mark.asyncio
+async def test_daemon_without_an_sse_approver_denies_write_before_handler(
+    runtime_setup: dict,
+    workspace_dir: Path,
+    event_bus: EventBus,
+    settings: SettingsStore,
+):
+    """A connected daemon is not an interactive approval: without an /events subscriber it must deny, not hang or execute."""
+    commands = runtime_setup["commands"]
+    registry = runtime_setup["registry"]
+    settings.set("kernel.security.preset", "careful")
+    settings.set("kernel.security.permission_mode", "ask")
+    executed: list[str] = []
+
+    async def write_handler(arguments: dict, context: ToolContext) -> ToolResult:
+        executed.append(str(arguments.get("target", "")))
+        return ToolResult(content=[TextBlock(text="write executed")])
+
+    write_spec = ToolSpec(
+        name="daemon_write",
+        description="A write that must wait for an interactive human",
+        risk_class=RiskClass.WRITE,
+        input_schema={"type": "object", "properties": {"target": {"type": "string"}}},
+    )
+    registry.register_tool(write_spec, write_handler, plugin_name="test_plugin")
+    provider = ScriptedProvider(models=[ModelInfo(id="gpt-4o", display_name="GPT-4o")])
+    provider.add_response([
+        ToolCallEnd(id="daemon_write_1", name="daemon_write", arguments={"target": "never-created.txt"}),
+        Done(stop_reason="tool_use"),
+    ])
+    provider.add_response([
+        TextDelta(text="The write was denied because no interactive approver was connected."),
+        UsageEvent(usage=Usage(input_tokens=40, output_tokens=12)),
+        Done(stop_reason="end_turn"),
+    ])
+    registry.register_provider(provider)
+
+    # This monitor receives events but deliberately does not count as an approval UI.
+    observer = event_bus.subscribe(interactive=False)
+    server = HarnessWebServer(
+        commands=commands,
+        bus=event_bus,
+        host="127.0.0.1",
+        port=0,
+        sandbox_port=0,
+        workspace=workspace_dir,
+    )
+    await server.start()
+    headers = {"X-Harness-Token": server.auth_token, "Content-Type": "application/json"}
+    try:
+        async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{server.port}") as client:
+            created = await client.post("/commands/sessions.create", headers=headers, json={})
+            assert created.status_code == 200
+            session_id = created.json()["result"]["session_id"]
+            turned = await client.post(
+                "/commands/submit_turn",
+                headers=headers,
+                json={"session_id": session_id, "prompt": "Write the file", "options": {"provider": "scripted", "model": "gpt-4o"}},
+            )
+            assert turned.status_code == 200, turned.text
+            assert "denied" in turned.json()["result"]["output"].lower()
+    finally:
+        await server.stop()
+        event_bus.unsubscribe(observer)
+
+    assert executed == [], "the tool handler must not run when no interactive approver is connected"
+    seen = []
+    while not observer.empty():
+        seen.append(observer.get_nowait())
+    assert any(e.type == "tool.decision" and e.data.get("action") == "ask" for e in seen)
+    assert any(e.type == "tool.result" and e.data.get("is_error") for e in seen)
+    assert not any(e.type == "approval.required" for e in seen), "no browser was connected to receive a request"
+
+
+@pytest.mark.asyncio
 async def test_web_turn_approval_roundtrip_and_events(
     runtime_setup: dict,
     workspace_dir: Path,

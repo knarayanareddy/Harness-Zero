@@ -19,6 +19,7 @@ from harness.kernel.context import (
     HookContextImpl,
     PolicyContextImpl,
     TurnContextImpl,
+    derive_messages,
     records_to_messages,
 )
 from harness.kernel.gate import (
@@ -77,6 +78,7 @@ __all__ = [
     "Compactor",
     "estimate_tokens",
     "estimate_request_tokens",
+    "derive_messages",
     "records_to_messages",
     "COMPACTION_SYSTEM_PROMPT",
     "CircuitBreaker",

@@ -1,0 +1,26 @@
+# The shipped web client's own UI contribution, declared exactly the way a plugin declares `[ui]` in
+# `harness_plugin.toml` (WS-05). A panel exists because it is declared here *and* backed by a dispatchable
+# command; the client mounts whatever this returns and renders it with one of the four built-in renderers
+# (`table | tree | markdown | list`). There is no second list of panels in `index.html`, and a pane with no
+# command behind it is deleted rather than declared — that is how the 10 stub tabs of the v0.2.1 review went
+# away, and why `tests/frontends/test_ui_contract.py` can compare the two sources without a fixture.
+#
+# Read by `PluginRegistry.ui_contributions()` under the source name `web`. The path is resolved as data, not
+# imported: the kernel must not depend on the frontend package to describe it.
+
+[ui]
+panels = [
+  # The Artifacts pane is the log's card stream for the active session, which is what `sessions.get` returns
+  # — the same records `renderRecord` paints in the timeline, projected sideways rather than re-derived.
+  { id = "artifact", title = "Artifacts", command = "sessions.get", renderer = "markdown" },
+  { id = "sessions", title = "Sessions", command = "sessions.list", renderer = "list" },
+  { id = "economics", title = "Spend", command = "economics", renderer = "table" },
+  # The integrations list: every plugin the kernel discovered, what it brings, and a switch that writes
+  # `kernel.plugins.disabled`. `plugins.list` is its data because the kernel — not the client — knows what is
+  # installed; the row markup and the Configure jump live in `static/panels/plugins.js`, which is mounted from
+  # this declaration rather than written into `index.html` (that is the WS-05 promise, and the pane is the proof).
+  { id = "plugins", title = "Plugins", command = "plugins.list", renderer = "list" },
+]
+
+# The client's own renderer set is the timeline code itself (`static/renderers/*.js`, WS-05b), which the
+# catalogue parses; `record_renderers` is for a plugin whose *module* paints a kind the client does not know.

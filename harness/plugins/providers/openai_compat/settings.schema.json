@@ -1,22 +1,37 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
+  "title": "OpenAI-compatible provider settings",
   "properties": {
     "base_url": {
       "type": "string",
       "default": "https://api.openai.com/v1",
-      "description": "Base URL for OpenAI completions API"
+      "title": "OpenAI Base URL",
+      "x-ui": {
+        "group": "Models & Providers",
+        "widget": "text"
+      }
     },
     "timeout_s": {
       "type": "number",
       "default": 60.0,
-      "minimum": 1.0,
-      "description": "Request timeout in seconds"
+      "title": "OpenAI-compatible Request Timeout (s)",
+      "x-ui": {
+        "group": "Models & Providers",
+        "widget": "number"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "x-secrets": {
+    "OPENAI_API_KEY": {
+      "title": "OpenAI API Key"
     },
-    "default_model": {
-      "type": "string",
-      "default": "gpt-4o",
-      "description": "Default model ID"
+    "OPENROUTER_API_KEY": {
+      "title": "OpenRouter API Key"
+    },
+    "DEEPSEEK_API_KEY": {
+      "title": "DeepSeek API Key"
     }
   }
 }

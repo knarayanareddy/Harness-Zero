@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Background job settings",
+  "x-namespace": "plugins.tools-jobs",
+  "additionalProperties": false,
+  "properties": {
+    "ring_bytes": {
+      "type": "integer",
+      "default": 65536,
+      "minimum": 1,
+      "maximum": 1048576,
+      "description": "In-memory output tail retained per job before reading the session spill file.",
+      "x-ui": {"title": "Job output ring (bytes)", "group": "Jobs", "order": 10}
+    },
+    "max_jobs": {
+      "type": "integer",
+      "default": 20,
+      "minimum": 1,
+      "maximum": 100,
+      "description": "Maximum retained jobs per session; oldest exited jobs are pruned before a new job starts.",
+      "x-ui": {"title": "Maximum retained jobs", "group": "Jobs", "order": 20}
+    },
+    "spill_max_bytes": {
+      "type": "integer",
+      "default": 52428800,
+      "minimum": 1,
+      "maximum": 52428800,
+      "description": "Maximum bytes retained in each session-scoped job output spill file.",
+      "x-ui": {"title": "Job spill limit (bytes)", "group": "Jobs", "order": 30}
+    }
+  }
+}

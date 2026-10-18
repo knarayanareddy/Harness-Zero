@@ -21,38 +21,174 @@ logger = logging.getLogger(__name__)
 
 CURRENT_SCHEMA_VERSION = 1
 
+
+class _Unset:
+    """What a resolver returns when it has no opinion about a path.
+
+    `None` cannot be that sentinel: a setting may legitimately be unset *as a value* (an empty `kernel.provider`
+    reads as `None`), and a resolution layer that swallowed it would turn "no one set this" into "the user chose
+    nothing". So abstention is its own object, and `SettingsStore.get` skips it.
+    """
+
+    _instance: _Unset | None = None
+
+    def __new__(cls) -> _Unset:
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self) -> str:  # pragma: no cover - logging aid
+        return "<unset>"
+
+    def __bool__(self) -> bool:
+        return False
+
+
+UNSET = _Unset()
+
 # Default kernel.* JSON Schema with default values and validation rules
 KERNEL_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
-        "provider": {"type": "string", "default": ""},
-        "model": {"type": "string", "default": ""},
+        "provider": {
+            "type": "string",
+            "default": "",
+            "title": "Default Provider",
+            "x-ui": {"group": "Models & Providers", "widget": "select"},
+        },
+        "model": {
+            "type": "string",
+            "default": "",
+            "title": "Default Model",
+            "x-ui": {"group": "Models & Providers", "widget": "text"},
+        },
         "strategy": {
             "type": "string",
             "default": "single_loop",
             "enum": ["single_loop", "architect_editor", "architect"],
+            "title": "Turn Strategy",
+            "x-ui": {"group": "Execution & Strategies", "widget": "select"},
         },
-        "max_tool_iterations": {"type": "integer", "default": 20, "minimum": 1},
+        "max_tool_iterations": {
+            "type": "integer",
+            "default": 20,
+            "minimum": 1,
+            "title": "Max Tool Iterations",
+            "x-ui": {"group": "Execution & Strategies", "widget": "number"},
+        },
+        "request_timeout_s": {
+            "type": "number",
+            "default": 60.0,
+            "minimum": 1.0,
+            "title": "Provider Request Timeout (s)",
+            "description": "HTTP timeout the Anthropic and Gemini providers use; Ollama applies 120 s.",
+            "x-ui": {"group": "Execution & Strategies", "widget": "number"},
+        },
         "security": {
             "type": "object",
             "additionalProperties": False,
             "properties": {
+                "preset": {
+                    "type": "string",
+                    "default": "careful",
+                    "enum": ["locked", "careful", "standard", "open"],
+                    "title": "Security Preset",
+                    "description": (
+                        "The combination this kernel runs with. Each preset stands for the settings below, so "
+                        "changing one of those *after* choosing a preset is allowed and is reported as "
+                        "customised; `bypass` is not offered here, only as an explicit Permission Mode. Locked "
+                        "reads and plans but never mutates; careful asks before every write; standard is careful "
+                        "plus sandboxed execution; open stops asking but still blocks destructive commands."
+                    ),
+                    "x-ui": {"group": "Security & Sandboxing", "widget": "select", "order": 0},
+                },
                 "permission_mode": {
                     "type": "string",
                     "default": "ask",
                     "enum": ["allow", "ask", "plan", "bypass"],
+                    "title": "Permission Mode",
+                    "description": "Left as-is, this follows the Security Preset. Set it to pin one value.",
+                    "x-ui": {"group": "Security & Sandboxing", "widget": "select"},
                 },
-                "destructive_blocking": {"type": "boolean", "default": True},
-                "approval_timeout_s": {"type": "integer", "default": 300, "minimum": 0},
-                "spend_cap_usd": {"type": "number", "default": 5.0, "minimum": 0.0},
+                "destructive_blocking": {
+                    "type": "boolean",
+                    "default": True,
+                    "title": "Block Destructive Commands",
+                    "x-ui": {"group": "Security & Sandboxing", "widget": "boolean"},
+                },
+                "approval_timeout_s": {
+                    "type": "integer",
+                    "default": 300,
+                    "minimum": 0,
+                    "title": "Approval Timeout (s)",
+                    "x-ui": {"group": "Security & Sandboxing", "widget": "number"},
+                },
+                "exec_in_sandbox": {
+                    "type": "string",
+                    "default": "ask",
+                    "enum": ["ask", "allow"],
+                    "title": "Execution in an available sandbox",
+                    "description": "`standard` allows executor calls only when the host reported an available sandbox; without it, they ask before running unconfined.",
+                    "x-ui": {"group": "Security & Sandboxing", "widget": "select"},
+                },
+                "spend_cap_usd": {
+                    "type": "number",
+                    "default": 5.0,
+                    "minimum": 0.0,
+                    "title": "Spend Cap (USD)",
+                    "x-ui": {"group": "Economics & Spend", "widget": "number"},
+                },
+            },
+        },
+        "sandbox": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "default": "preferred",
+                    "enum": ["required", "preferred", "off"],
+                    "title": "Process sandbox mode",
+                    "description": "Required refuses executor processes if the host cannot confine them; preferred asks before falling back; off runs without OS confinement.",
+                    "x-ui": {"group": "Security & Sandboxing", "widget": "select"},
+                },
+                "backend": {
+                    "type": "string",
+                    "default": "auto",
+                    "enum": ["auto", "bwrap", "seatbelt", "none"],
+                    "title": "Sandbox backend",
+                    "description": "Auto selects bubblewrap on Linux or Seatbelt on macOS. `none` is an explicit no-backend choice and never satisfies `required`.",
+                    "x-ui": {"group": "Security & Sandboxing", "widget": "select"},
+                },
+                "network": {
+                    "type": "boolean",
+                    "default": False,
+                    "title": "Allow network from confined processes",
+                    "description": "Off by default; the `open` preset runs without a sandbox and allows network.",
+                    "x-ui": {"group": "Security & Sandboxing", "widget": "boolean"},
+                },
+                "extra_readable": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "default": [],
+                    "title": "Extra readable paths",
+                    "description": "Absolute host paths mounted read-only for confined processes. Any extra path is reported as partial enforcement; do not add credential directories unless you intend the agent to read them.",
+                    "x-ui": {"group": "Security & Sandboxing", "widget": "path-list"},
+                },
             },
         },
         "context": {
             "type": "object",
             "additionalProperties": False,
             "properties": {
-                "budget_tokens": {"type": "integer", "default": 60000, "minimum": 1000},
+                "budget_tokens": {
+                    "type": "integer",
+                    "default": 60000,
+                    "minimum": 1000,
+                    "title": "Context Budget (tokens)",
+                    "x-ui": {"group": "Execution & Strategies", "widget": "number"},
+                },
             },
         },
         "background": {
@@ -67,6 +203,9 @@ KERNEL_SCHEMA: dict[str, Any] = {
             "additionalProperties": False,
             "properties": {
                 "tool_result_bytes": {"type": "integer", "default": 65536, "minimum": 1024},
+                # WS-03 cooperative timeout: after the deadline the handler gets this much time to
+                # return partial output (and to let a tracked process exit) before it is cancelled.
+                "tool_grace_s": {"type": "number", "default": 5.0, "minimum": 0.0},
                 "upload_bytes": {"type": "integer", "default": 26214400, "minimum": 1024},
             },
         },
@@ -78,6 +217,13 @@ KERNEL_SCHEMA: dict[str, Any] = {
                 "disabled": {"type": "array", "items": {"type": "string"}, "default": []},
                 "allow_inprocess_third_party": {"type": "boolean", "default": False},
                 "trusted_workspace_plugins": {"type": "boolean", "default": False},
+                # Capability overrides are read as f"kernel.plugins.capabilities.{name}"
+                # (registry), so this container stays open and keyed by plugin name.
+                "capabilities": {
+                    "type": "object",
+                    "default": {},
+                    "additionalProperties": {"type": "array", "items": {"type": "string"}},
+                },
             },
         },
         "secrets": {
@@ -193,12 +339,31 @@ class SettingsStore:
         self._migrations: dict[tuple[int, int], Callable[[dict[str, Any]], dict[str, Any]]] = {}
         self._data: dict[str, Any] = {}
         self._overrides: dict[str, Any] = {}
+        # Resolution layers consulted for a path nothing stored (see `add_resolver`). A list, not one slot,
+        # because presets and a later profile feature must be able to coexist without either owning the store.
+        self._resolvers: list[Callable[[str], Any]] = []
 
         # Register standard kernel schema
         self.register_schema("kernel", KERNEL_SCHEMA)
+        # The secrets namespace is a kernel surface: values live in the Secrets store, but the
+        # *key list* is contributed by plugins declaring `x-secrets` (WS-02). Seeded open so the
+        # settings panel always has the tab, and so a bare kernel is not missing a namespace.
+        self.register_schema(
+            "secrets", {"type": "object", "additionalProperties": True, "properties": {}}
+        )
 
         # Load existing or initialize
         self._load()
+
+        # WS-06a: permission presets belong to *reading a kernel setting*, not to one boot path, so the layer is
+        # installed here — `harness settings`, a unit test that builds a store, and the daemon all resolve the same
+        # answer. That is safe precisely because `careful`'s expansion equals the schema defaults (`ask`, `True`,
+        # `300`): installing the resolver changes nothing until someone switches preset, which
+        # `tests/kernel/test_presets.py` pins so this can never become a hidden behavioural diff for a store built
+        # outside `bootstrap_kernel`.
+        from harness.kernel.presets import install as _install_presets
+
+        _install_presets(self)
 
     def register_schema(self, namespace: str, schema: dict[str, Any]) -> None:
         """Registers a JSON Schema fragment for a namespace (e.g. 'kernel' or 'plugins.git')."""
@@ -272,6 +437,34 @@ class SettingsStore:
                 return None, True
         return curr, True
 
+    def add_resolver(self, resolver: Callable[[str], Any]) -> None:
+        """Adds a layer that may supply a value for a path nothing stored.
+
+        Order inside `get`: in-memory override, the stored document, resolvers in registration order, the
+        caller's `default`, the schema default. A resolver takes the dotted path and returns `UNSET` to abstain.
+        It must not call `get()` for a path it owns — that is the recursion every resolution layer invites. The
+        preset resolver reads only `kernel.security.preset`, a key it does not own, then returns the expansion for
+        the other keys.
+        """
+        if resolver not in self._resolvers:
+            self._resolvers.append(resolver)
+
+    def remove_resolver(self, resolver: Callable[[str], Any]) -> None:
+        """Drops a resolver by identity (`harness/kernel/presets.py:install` keeps the object to undo itself)."""
+        if resolver in self._resolvers:
+            self._resolvers.remove(resolver)
+
+    def has_explicit(self, path: str) -> bool:
+        """Whether this path was *chosen* — an override or a stored value — rather than defaulted."""
+        if path in self._overrides:
+            return True
+        curr: Any = self._data
+        for part in path.split("."):
+            if not isinstance(curr, dict) or part not in curr:
+                return False
+            curr = curr[part]
+        return True
+
     def set_override(self, path: str, value: Any) -> None:
         """Sets an in-memory override that takes precedence and does not persist to disk."""
         self._overrides[path] = copy.deepcopy(value)
@@ -296,6 +489,17 @@ class SettingsStore:
 
         if found:
             return copy.deepcopy(curr)
+
+        # No one stored this. Before falling back to a default, ask the resolution layers — this is where a
+        # preset (or a future profile) speaks. Note the position: a caller's `default` argument is what *this
+        # call site* believes is safe, and a resolver that had been consulted afterwards would be decorative.
+        for resolver in tuple(getattr(self, "_resolvers", ())):
+            # A layer that cannot resolve its key is a boot/configuration error, not permission to fall through
+            # to a different default. In particular, swallowing a broken security resolver could make the
+            # visible posture disagree with the policy that is meant to enforce it.
+            value = resolver(path)
+            if value is not UNSET:
+                return copy.deepcopy(value)
 
         if default is not None:
             return default
@@ -449,6 +653,7 @@ class PluginSettingsView:
             path.startswith(self._namespace + ".")
             or path.startswith("kernel.")
             or path.startswith("plugins.")
+            or path.startswith("extensions.")
         ):
             full_path = f"{self._namespace}.{path}"
         return self._store.get(full_path, default=default)

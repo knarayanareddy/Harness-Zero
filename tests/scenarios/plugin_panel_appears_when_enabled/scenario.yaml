@@ -1,0 +1,35 @@
+name: plugin_panel_appears_when_enabled
+kind: web
+summary: >-
+  A plugin installed under `<config>/plugins` gets a Studio panel of its own — mounted from its `[ui]`
+  declaration, painted by the client module the kernel serves at the URL `ui.contributions` advertises — and
+  switching it off in the Plugins pane plus restarting the daemon takes the panel away again.
+recorded_from: synthetic
+# The fixture is copied into the config dir before the kernel boots, which is what `harness plugin install`
+# leaves behind. `_lib/kernel_runner.py:seed_tree` resolves the `@` form.
+config_files:
+  plugins/probe-vault: "@_fixtures/plugins/probe-vault"
+turns:
+  - prompt: "What is the capital of the Netherlands?"
+expect:
+  tools_called: []
+  dom_turns_completed: true
+  timeline_contains: ["What is the capital of the Netherlands?", "is Amsterdam."]
+  # The tab exists because the plugin declared it, and the host is created by `PanelRegistry.mount()`: nothing
+  # in `index.html` mentions `probe-vault`.
+  dom_tabs_include: [probe-vault, plugins]
+  # The headless client executes the module bytes fetched from the URL `ui.contributions` advertised (rewriting
+  # only its core `/static/` imports to the same local shipped files, because Node cannot import HTTP modules).
+  # The panel's custom renderer fetches `plugins.list` and paints this line; a generic table cannot produce it.
+  dom_panel_text:
+    probe-vault: "Vault rows from the plugin module: 1"
+    plugins: "probe-vault"
+  dom_plugin_modules_served: true
+  # The pane's Enable/Disable switch is a plain `data-command` binding; it must reach the kernel and repaint.
+  dom_disable_plugin: probe-vault
+  # ...and the next start is when it applies — which is exactly what the pane tells the user.
+  dom_restart: true
+  dom_restart_tabs_exclude: [probe-vault]
+  dom_restart_tabs_include: [plugins]
+  settings_groups_include: ["Probe Vault"]
+  no_console_errors: true

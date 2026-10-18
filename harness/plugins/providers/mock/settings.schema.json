@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Mock provider settings",
+  "properties": {
+    "script_file": {
+      "type": "string",
+      "default": "",
+      "title": "Mock Script File",
+      "x-ui": {
+        "group": "Models & Providers",
+        "widget": "text"
+      },
+      "description": "Path to the scripted reply file used by the mock provider."
+    }
+  },
+  "additionalProperties": false
+}

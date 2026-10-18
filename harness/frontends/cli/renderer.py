@@ -260,6 +260,21 @@ def render_event(event: Event | Any, console: Console | None = None) -> Any:
             console.print(status_text)
         return status_text
 
+    if event_type == "question.asked":
+        questions = data.get("questions", [])
+        lines = [f"[bold]{item.get('question', '')}[/bold]" for item in questions]
+        panel = Panel("\n".join(lines), title="Model is waiting for your answer", border_style="cyan")
+        if console:
+            console.print(panel)
+        return panel
+
+    if event_type == "question.answered":
+        status = data.get("status", "answered")
+        text = "Question answered." if status == "answered" else f"Question {status}."
+        if console:
+            console.print(f"[dim]{text}[/dim]")
+        return text
+
     if event_type == "cost.updated":
         turn_usd = data.get("turn_usd", 0.0)
         session_usd = data.get("session_usd", 0.0)

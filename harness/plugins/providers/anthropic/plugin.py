@@ -22,7 +22,7 @@ class AnthropicProviderPlugin:
         timeout_s = 60.0
 
         if ctx.settings is not None and hasattr(ctx.settings, "get"):
-            base_url = ctx.settings.get("providers.anthropic.base_url", base_url)
+            base_url = ctx.settings.get("base_url", base_url)
             timeout_s = float(ctx.settings.get("kernel.request_timeout_s", 60.0))
 
         self.provider = AnthropicProvider(

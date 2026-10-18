@@ -13,7 +13,7 @@ from typing import Any
 from harness.kernel.bus import EventBus
 from harness.kernel.registry import PluginRegistry
 from harness.kernel.settings import SettingsStore
-from harness.sdk.events import Event
+from harness.sdk.events import CompactionCompleted, CompactionStarted, Event
 from harness.sdk.types import (
     ContentBlock,
     HookEvent,
@@ -137,7 +137,7 @@ class Compactor:
                 Event(
                     type="compaction.started",
                     session_id=session_id,
-                    data={"estimated_tokens": total_tokens},
+                    data=CompactionStarted(estimated_tokens=total_tokens),
                 )
             )
 
@@ -187,10 +187,10 @@ class Compactor:
                 Event(
                     type="compaction.completed",
                     session_id=session_id,
-                    data={
-                        "summary_tokens": estimate_tokens(summary),
-                        "duration_ms": duration_ms,
-                    },
+                    data=CompactionCompleted(
+                        summary_tokens=estimate_tokens(summary),
+                        duration_ms=duration_ms,
+                    ),
                 )
             )
 

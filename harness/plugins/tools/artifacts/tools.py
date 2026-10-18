@@ -76,19 +76,37 @@ async def handle_create_artifact(args: dict[str, Any], ctx: ToolContext) -> Tool
     request_feedback = bool(args.get("request_feedback", False))
     summary = str(args.get("summary", "")).strip()
 
-    artifacts_dir = ctx.data_dir / "artifacts"
-    artifacts_dir.mkdir(parents=True, exist_ok=True)
-
+    # Artifacts are workspace deliverables, not private plugin scratch data: the Studio viewer and the
+    # `present` tool resolve them from `<workspace>/.harness/artifacts/`. Refuse symlinked directories so an
+    # artifact name can never redirect writes into Harness internals or outside the workspace.
+    workspace = Path(ctx.workspace).expanduser().resolve(strict=True)
+    harness_dir = workspace / ".harness"
+    artifacts_dir = harness_dir / "artifacts"
+    manifest_file = harness_dir / "artifacts_manifest.json"
     try:
+        if harness_dir.is_symlink():
+            raise ValueError("Harness data directory may not be a symlink.")
+        harness_dir.mkdir(parents=True, exist_ok=True)
+        if artifacts_dir.is_symlink():
+            raise ValueError("Artifact directory may not be a symlink.")
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        if artifacts_dir.resolve(strict=True) != artifacts_dir or not artifacts_dir.is_relative_to(workspace):
+            raise ValueError("Artifact directory must resolve inside the workspace without symlinks.")
+        if manifest_file.is_symlink() or (manifest_file.exists() and not manifest_file.is_file()):
+            raise ValueError("Artifact manifest must be a regular file inside the Harness data directory.")
         target = _safe_artifact_path(name, artifacts_dir)
-    except ValueError as err:
+        if target.exists() and not target.is_file():
+            raise ValueError("Artifact target must be a regular file.")
+    except (OSError, ValueError) as err:
         return ToolResult.error(str(err))
 
     raw_bytes = content.encode("utf-8")
-    target.write_bytes(raw_bytes)
+    try:
+        target.write_bytes(raw_bytes)
+    except OSError as err:
+        return ToolResult.error(f"Could not write artifact: {err}")
 
     # Update manifest
-    manifest_file = ctx.data_dir / "artifacts_manifest.json"
     manifest: dict[str, Any] = {}
     if manifest_file.exists():
         try:

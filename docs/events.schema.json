@@ -14,12 +14,19 @@
       "enum": [
         "approval.required",
         "approval.resolved",
+        "checkpoint.created",
+        "checkpoint.restored",
         "compaction.completed",
         "compaction.started",
         "context.assembled",
         "cost.updated",
+        "deliverable.presented",
         "hook.fired",
-        "log",
+        "job.exited",
+        "job.output",
+        "job.started",
+        "mcp.server.status",
+        "mcp.tools.changed",
         "model.completed",
         "model.notice",
         "model.started",
@@ -28,20 +35,26 @@
         "model.tool_call",
         "plugin.error",
         "plugin.loaded",
+        "question.answered",
+        "question.asked",
         "session.started",
         "session.switched",
         "settings.changed",
+        "system.notice",
         "task.completed",
         "task.started",
         "tool.call",
         "tool.decision",
         "tool.output.delta",
+        "tool.repeat_detected",
         "tool.result",
+        "tool.result.pruned",
         "turn.cancelled",
         "turn.completed",
         "turn.error",
         "turn.started",
-        "ui.card"
+        "ui.card",
+        "workspace.changes"
       ],
       "description": "Event topic identifier"
     },
@@ -70,7 +83,2214 @@
     },
     "data": {
       "type": "object",
-      "description": "Event-specific payload"
+      "description": "Event-specific payload; see $defs/payloads/<type>"
+    },
+    "record": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Transcript record this event mirrors, as stored (durable types only)"
+    }
+  },
+  "events": {
+    "approval.required": {
+      "payload": "ApprovalRequired",
+      "durable": true,
+      "record_kind": "approval.requested",
+      "carries_record": true,
+      "transient": false
+    },
+    "approval.resolved": {
+      "payload": "ApprovalResolved",
+      "durable": true,
+      "record_kind": "approval.resolved",
+      "carries_record": true,
+      "transient": false
+    },
+    "checkpoint.created": {
+      "payload": "CheckpointCreated",
+      "durable": true,
+      "record_kind": "checkpoint.created",
+      "carries_record": true,
+      "transient": false
+    },
+    "checkpoint.restored": {
+      "payload": "CheckpointRestored",
+      "durable": true,
+      "record_kind": "checkpoint.restored",
+      "carries_record": true,
+      "transient": false
+    },
+    "compaction.completed": {
+      "payload": "CompactionCompleted",
+      "durable": true,
+      "record_kind": "compaction.summary",
+      "carries_record": false,
+      "transient": false
+    },
+    "compaction.started": {
+      "payload": "CompactionStarted",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": true
+    },
+    "context.assembled": {
+      "payload": "ContextAssembled",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": true
+    },
+    "cost.updated": {
+      "payload": "CostUpdated",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": true
+    },
+    "deliverable.presented": {
+      "payload": "DeliverablePresented",
+      "durable": true,
+      "record_kind": "deliverable.presented",
+      "carries_record": true,
+      "transient": false
+    },
+    "hook.fired": {
+      "payload": "HookFired",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": false
+    },
+    "job.exited": {
+      "payload": "JobExited",
+      "durable": true,
+      "record_kind": "job.exited",
+      "carries_record": true,
+      "transient": false
+    },
+    "job.output": {
+      "payload": "JobOutput",
+      "durable": true,
+      "record_kind": "job.output",
+      "carries_record": true,
+      "transient": false
+    },
+    "job.started": {
+      "payload": "JobStarted",
+      "durable": true,
+      "record_kind": "job.started",
+      "carries_record": true,
+      "transient": false
+    },
+    "mcp.server.status": {
+      "payload": "McpServerStatus",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": true
+    },
+    "mcp.tools.changed": {
+      "payload": "McpToolsChanged",
+      "durable": true,
+      "record_kind": "system.notice",
+      "carries_record": true,
+      "transient": false
+    },
+    "model.completed": {
+      "payload": "ModelCompleted",
+      "durable": true,
+      "record_kind": "assistant.message",
+      "carries_record": true,
+      "transient": false
+    },
+    "model.notice": {
+      "payload": "ModelNotice",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": false
+    },
+    "model.started": {
+      "payload": "ModelStarted",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": true
+    },
+    "model.text.delta": {
+      "payload": "ModelTextDelta",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": true
+    },
+    "model.thinking.delta": {
+      "payload": "ModelThinkingDelta",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": true
+    },
+    "model.tool_call": {
+      "payload": "ModelToolCall",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": true
+    },
+    "plugin.error": {
+      "payload": "PluginError",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": false
+    },
+    "plugin.loaded": {
+      "payload": "PluginLoaded",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": false
+    },
+    "question.answered": {
+      "payload": "QuestionAnswered",
+      "durable": true,
+      "record_kind": "question.answered",
+      "carries_record": true,
+      "transient": false
+    },
+    "question.asked": {
+      "payload": "QuestionAsked",
+      "durable": true,
+      "record_kind": "question.asked",
+      "carries_record": true,
+      "transient": false
+    },
+    "session.started": {
+      "payload": "SessionStarted",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": false
+    },
+    "session.switched": {
+      "payload": "SessionSwitched",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": false
+    },
+    "settings.changed": {
+      "payload": "SettingsChanged",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": false
+    },
+    "system.notice": {
+      "payload": "SystemNotice",
+      "durable": true,
+      "record_kind": "system.notice",
+      "carries_record": true,
+      "transient": false
+    },
+    "task.completed": {
+      "payload": "TaskCompleted",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": false
+    },
+    "task.started": {
+      "payload": "TaskStarted",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": false
+    },
+    "tool.call": {
+      "payload": "ToolCallStarted",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": true
+    },
+    "tool.decision": {
+      "payload": "ToolDecision",
+      "durable": true,
+      "record_kind": "tool.decision",
+      "carries_record": true,
+      "transient": false
+    },
+    "tool.output.delta": {
+      "payload": "ToolOutputDelta",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": true
+    },
+    "tool.repeat_detected": {
+      "payload": "ToolRepeatDetected",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": true
+    },
+    "tool.result": {
+      "payload": "ToolCallResult",
+      "durable": true,
+      "record_kind": "tool.result",
+      "carries_record": false,
+      "transient": false
+    },
+    "tool.result.pruned": {
+      "payload": "ToolResultPruned",
+      "durable": false,
+      "record_kind": null,
+      "carries_record": true,
+      "transient": true
+    },
+    "turn.cancelled": {
+      "payload": "TurnCancelled",
+      "durable": true,
+      "record_kind": "turn.cancelled",
+      "carries_record": true,
+      "transient": false
+    },
+    "turn.completed": {
+      "payload": "TurnCompleted",
+      "durable": true,
+      "record_kind": "turn.completed",
+      "carries_record": true,
+      "transient": false
+    },
+    "turn.error": {
+      "payload": "TurnError",
+      "durable": true,
+      "record_kind": "turn.error",
+      "carries_record": true,
+      "transient": false
+    },
+    "turn.started": {
+      "payload": "TurnStarted",
+      "durable": true,
+      "record_kind": "user.message",
+      "carries_record": true,
+      "transient": false
+    },
+    "ui.card": {
+      "payload": "UiCard",
+      "durable": true,
+      "record_kind": "ui.card",
+      "carries_record": true,
+      "transient": false
+    },
+    "workspace.changes": {
+      "payload": "WorkspaceChanges",
+      "durable": true,
+      "record_kind": "workspace.changes",
+      "carries_record": true,
+      "transient": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "approval.required"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/approval.required"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "approval.resolved"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/approval.resolved"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "checkpoint.created"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/checkpoint.created"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "checkpoint.restored"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/checkpoint.restored"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "compaction.completed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/compaction.completed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "compaction.started"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/compaction.started"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "context.assembled"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/context.assembled"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "cost.updated"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/cost.updated"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "deliverable.presented"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/deliverable.presented"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "hook.fired"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/hook.fired"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "job.exited"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/job.exited"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "job.output"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/job.output"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "job.started"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/job.started"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "mcp.server.status"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/mcp.server.status"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "mcp.tools.changed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/mcp.tools.changed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "model.completed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/model.completed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "model.notice"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/model.notice"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "model.started"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/model.started"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "model.text.delta"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/model.text.delta"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "model.thinking.delta"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/model.thinking.delta"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "model.tool_call"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/model.tool_call"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "plugin.error"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/plugin.error"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "plugin.loaded"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/plugin.loaded"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "question.answered"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/question.answered"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "question.asked"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/question.asked"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "session.started"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/session.started"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "session.switched"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/session.switched"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "settings.changed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/settings.changed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "system.notice"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/system.notice"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "task.completed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/task.completed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "task.started"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/task.started"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tool.call"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/tool.call"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tool.decision"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/tool.decision"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tool.output.delta"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/tool.output.delta"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tool.repeat_detected"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/tool.repeat_detected"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tool.result"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/tool.result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tool.result.pruned"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/tool.result.pruned"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "turn.cancelled"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/turn.cancelled"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "turn.completed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/turn.completed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "turn.error"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/turn.error"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "turn.started"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/turn.started"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "ui.card"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/ui.card"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "workspace.changes"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/payloads/workspace.changes"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "ContextBlockInfo": {
+      "title": "ContextBlockInfo",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "stability": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "tokens": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "stability",
+        "source",
+        "tokens"
+      ],
+      "description": "One assembled context block (nested in ``context.assembled``)."
+    },
+    "Usage": {
+      "title": "Usage",
+      "type": "object",
+      "properties": {
+        "input_tokens": {
+          "type": "integer"
+        },
+        "output_tokens": {
+          "type": "integer"
+        },
+        "cache_read_tokens": {
+          "type": "integer"
+        },
+        "cache_write_tokens": {
+          "type": "integer"
+        },
+        "reasoning_tokens": {
+          "type": "integer"
+        },
+        "cost_usd": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "payloads": {
+      "approval.required": {
+        "title": "ApprovalRequired",
+        "type": "object",
+        "properties": {
+          "approval_id": {
+            "type": "string"
+          },
+          "call_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object"
+          },
+          "timeout_s": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "approval_id",
+          "call_id",
+          "kind",
+          "summary",
+          "details",
+          "timeout_s",
+          "options"
+        ]
+      },
+      "approval.resolved": {
+        "title": "ApprovalResolved",
+        "type": "object",
+        "properties": {
+          "approval_id": {
+            "type": "string"
+          },
+          "approved": {
+            "type": "boolean"
+          },
+          "by": {
+            "type": "string"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "approval_id",
+          "approved",
+          "by"
+        ]
+      },
+      "checkpoint.created": {
+        "title": "CheckpointCreated",
+        "type": "object",
+        "properties": {
+          "sha": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "sha",
+          "label"
+        ],
+        "description": "A commit in the private checkpoint repository, never in the user's own git repository."
+      },
+      "checkpoint.restored": {
+        "title": "CheckpointRestored",
+        "type": "object",
+        "properties": {
+          "sha": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "files_touched": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "sha",
+          "label",
+          "files_touched"
+        ],
+        "description": "A user-approved restore of the shadow repository to an earlier commit."
+      },
+      "compaction.completed": {
+        "title": "CompactionCompleted",
+        "type": "object",
+        "properties": {
+          "summary_tokens": {
+            "type": "integer"
+          },
+          "duration_ms": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "summary_tokens",
+          "duration_ms"
+        ]
+      },
+      "compaction.started": {
+        "title": "CompactionStarted",
+        "type": "object",
+        "properties": {
+          "estimated_tokens": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "estimated_tokens"
+        ]
+      },
+      "context.assembled": {
+        "title": "ContextAssembled",
+        "type": "object",
+        "properties": {
+          "blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ContextBlockInfo"
+            }
+          },
+          "total_tokens": {
+            "type": "integer"
+          },
+          "history_messages": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "blocks",
+          "total_tokens",
+          "history_messages"
+        ]
+      },
+      "cost.updated": {
+        "title": "CostUpdated",
+        "type": "object",
+        "properties": {
+          "turn_usd": {
+            "type": "number"
+          },
+          "session_usd": {
+            "type": "number"
+          },
+          "lifetime_usd": {
+            "type": "number"
+          },
+          "cap_usd": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "unknown_pricing": {
+            "type": "boolean"
+          },
+          "usage": {
+            "$ref": "#/$defs/Usage"
+          }
+        },
+        "additionalProperties": false,
+        "description": "``cost.updated`` carries the same ``EconomicsSnapshot`` the ``economics`` command returns."
+      },
+      "deliverable.presented": {
+        "title": "DeliverablePresented",
+        "type": "object",
+        "properties": {
+          "turn_id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "caption": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "artifact",
+              "file"
+            ]
+          },
+          "size": {
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "turn_id",
+          "path",
+          "caption",
+          "kind",
+          "size",
+          "sha256"
+        ],
+        "description": "The file the agent marked as its user-facing result."
+      },
+      "hook.fired": {
+        "title": "HookFired",
+        "type": "object",
+        "properties": {
+          "hook": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "object"
+          },
+          "duration_ms": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "hook",
+          "event",
+          "command",
+          "outcome",
+          "duration_ms"
+        ]
+      },
+      "job.exited": {
+        "title": "JobExited",
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "exit_code": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "duration_ms": {
+            "type": "number"
+          },
+          "tail": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "job_id",
+          "label",
+          "exit_code",
+          "reason",
+          "duration_ms",
+          "tail"
+        ],
+        "description": "A durable terminal state for a completed, stopped, failed, or lost job."
+      },
+      "job.output": {
+        "title": "JobOutput",
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "offset_start": {
+            "type": "integer"
+          },
+          "offset_end": {
+            "type": "integer"
+          },
+          "stream": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "job_id",
+          "offset_start",
+          "offset_end",
+          "stream",
+          "text"
+        ],
+        "description": "A coalesced live chunk; its durable record points into the bounded spill file."
+      },
+      "job.started": {
+        "title": "JobStarted",
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "pid": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "started_at": {
+            "type": "number"
+          },
+          "sandbox": {
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "job_id",
+          "label",
+          "command",
+          "cwd",
+          "pid",
+          "started_at"
+        ],
+        "description": "A durable background process entered the jobs registry."
+      },
+      "mcp.server.status": {
+        "title": "McpServerStatus",
+        "type": "object",
+        "properties": {
+          "server": {
+            "type": "string"
+          },
+          "transport": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "connecting",
+              "connected",
+              "reconnecting",
+              "failed",
+              "stopped"
+            ]
+          },
+          "attempt": {
+            "type": "integer"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tools_count": {
+            "type": "integer"
+          },
+          "session_id_present": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "server",
+          "transport",
+          "state"
+        ],
+        "description": "Live status of one configured Model Context Protocol server."
+      },
+      "mcp.tools.changed": {
+        "title": "McpToolsChanged",
+        "type": "object",
+        "properties": {
+          "server": {
+            "type": "string"
+          },
+          "added": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "removed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "server"
+        ],
+        "description": "A durable notice that an MCP server's advertised tools changed."
+      },
+      "model.completed": {
+        "title": "ModelCompleted",
+        "type": "object",
+        "properties": {
+          "stop_reason": {
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/$defs/Usage"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "stop_reason",
+          "usage"
+        ]
+      },
+      "model.notice": {
+        "title": "ModelNotice",
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "message"
+        ]
+      },
+      "model.started": {
+        "title": "ModelStarted",
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "request_tokens_estimate": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "provider",
+          "model",
+          "request_tokens_estimate"
+        ]
+      },
+      "model.text.delta": {
+        "title": "ModelTextDelta",
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ]
+      },
+      "model.thinking.delta": {
+        "title": "ModelThinkingDelta",
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ]
+      },
+      "model.tool_call": {
+        "title": "ModelToolCall",
+        "type": "object",
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "arguments": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "call_id",
+          "name",
+          "arguments"
+        ]
+      },
+      "plugin.error": {
+        "title": "PluginError",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "error"
+        ]
+      },
+      "plugin.loaded": {
+        "title": "PluginLoaded",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "provides": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "trust": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "version",
+          "provides",
+          "capabilities",
+          "trust"
+        ]
+      },
+      "question.answered": {
+        "title": "QuestionAnswered",
+        "type": "object",
+        "properties": {
+          "interaction_id": {
+            "type": "string"
+          },
+          "call_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "turn_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "answers": {
+            "type": "object"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "answered",
+              "cancelled",
+              "timeout"
+            ]
+          },
+          "by": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "interaction_id",
+          "call_id",
+          "turn_id",
+          "answers",
+          "status",
+          "by"
+        ],
+        "description": "The user's answer, cancellation, or timeout for a structured question."
+      },
+      "question.asked": {
+        "title": "QuestionAsked",
+        "type": "object",
+        "properties": {
+          "interaction_id": {
+            "type": "string"
+          },
+          "call_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "turn_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "timeout_s": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "interaction_id",
+          "call_id",
+          "turn_id",
+          "questions",
+          "timeout_s"
+        ],
+        "description": "A structured question the model is waiting for a human to answer."
+      },
+      "session.started": {
+        "title": "SessionStarted",
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          },
+          "strategy": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "workspace",
+          "strategy",
+          "provider",
+          "model"
+        ]
+      },
+      "session.switched": {
+        "title": "SessionSwitched",
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "workspace"
+        ]
+      },
+      "settings.changed": {
+        "title": "SettingsChanged",
+        "type": "object",
+        "properties": {
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "paths"
+        ]
+      },
+      "system.notice": {
+        "title": "SystemNotice",
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "info",
+              "success",
+              "warn",
+              "error"
+            ]
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "message"
+        ],
+        "description": "Durable user-facing information emitted by a hook or plugin."
+      },
+      "task.completed": {
+        "title": "TaskCompleted",
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "exit_code": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "tail": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "task_id",
+          "label",
+          "exit_code",
+          "tail"
+        ]
+      },
+      "task.started": {
+        "title": "TaskStarted",
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "task_id",
+          "label"
+        ]
+      },
+      "tool.call": {
+        "title": "ToolCallStarted",
+        "type": "object",
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "arguments": {
+            "type": "object"
+          },
+          "risk": {
+            "type": "string"
+          },
+          "plugin": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "call_id",
+          "name",
+          "arguments",
+          "risk",
+          "plugin"
+        ],
+        "description": "A tool call entered the policy gate (``tool.call``)."
+      },
+      "tool.decision": {
+        "title": "ToolDecision",
+        "type": "object",
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny",
+              "ask"
+            ]
+          },
+          "policy": {
+            "type": "string"
+          },
+          "risk": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "plugin": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "call_id",
+          "action",
+          "policy",
+          "risk",
+          "reason"
+        ],
+        "description": "What the policy chain decided, and who it decided it about."
+      },
+      "tool.output.delta": {
+        "title": "ToolOutputDelta",
+        "type": "object",
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "stream": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "call_id",
+          "stream",
+          "text"
+        ]
+      },
+      "tool.repeat_detected": {
+        "title": "ToolRepeatDetected",
+        "type": "object",
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "blocked": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "call_id",
+          "name",
+          "count"
+        ],
+        "description": "Live-only (WS-03): this turn repeated an identical call whose result had not changed."
+      },
+      "tool.result": {
+        "title": "ToolCallResult",
+        "type": "object",
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "is_error": {
+            "type": "boolean"
+          },
+          "duration_ms": {
+            "type": "number"
+          },
+          "preview": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "call_id",
+          "name",
+          "is_error",
+          "duration_ms",
+          "preview"
+        ]
+      },
+      "tool.result.pruned": {
+        "title": "ToolResultPruned",
+        "type": "object",
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "original_chars": {
+            "type": "integer"
+          },
+          "shown_chars": {
+            "type": "integer"
+          },
+          "spill_path": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "call_id",
+          "name",
+          "original_chars",
+          "shown_chars"
+        ],
+        "description": "Live-only (WS-03): a finalize guard shortened what the model reads for this call."
+      },
+      "turn.cancelled": {
+        "title": "TurnCancelled",
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "reason"
+        ]
+      },
+      "turn.completed": {
+        "title": "TurnCompleted",
+        "type": "object",
+        "properties": {
+          "stop_reason": {
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/$defs/Usage"
+          },
+          "duration_ms": {
+            "type": "number"
+          },
+          "tool_calls": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "stop_reason",
+          "usage",
+          "duration_ms",
+          "tool_calls"
+        ]
+      },
+      "turn.error": {
+        "title": "TurnError",
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "message",
+          "kind"
+        ]
+      },
+      "turn.started": {
+        "title": "TurnStarted",
+        "type": "object",
+        "properties": {
+          "prompt_preview": {
+            "type": "string"
+          },
+          "strategy": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "options": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "prompt_preview",
+          "strategy",
+          "provider",
+          "model"
+        ]
+      },
+      "ui.card": {
+        "title": "UiCard",
+        "type": "object",
+        "properties": {
+          "card": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "card"
+        ],
+        "description": "A card for the frontends; ``card`` is ``harness.sdk.cards.Card.to_dict()``."
+      },
+      "workspace.changes": {
+        "title": "WorkspaceChanges",
+        "type": "object",
+        "properties": {
+          "turn_id": {
+            "type": "string"
+          },
+          "base": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "head": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "added": {
+            "type": "integer"
+          },
+          "removed": {
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "snapshot_skipped": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "turn_id",
+          "base",
+          "head",
+          "files",
+          "added",
+          "removed"
+        ],
+        "description": "The net tracked workspace delta between the turn-start and turn-end snapshots."
+      }
     }
   }
 }

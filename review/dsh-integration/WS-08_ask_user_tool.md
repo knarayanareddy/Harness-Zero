@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | specified |
+| Status | executed (2026-10-17; verified on the existing WS branch) |
 | Depends on | WS-05 (form renderer through the registry) — or land with the existing `cards.js` form renderer and migrate; WS-04 for durable `question.*` records |
 | Effort | ½–1 day |
 | Principles | P1, P3 |
@@ -13,10 +13,10 @@
 
 Tool `ask_user` (READ, no approval needed) that the model calls with up to 4 questions, each with 2–4 options and optional free text; the turn **pauses** until the user answers in the UI or the CLI; the answer comes back as the tool result; both question and answer are durable records and render after reload. Without an interactive client the tool returns an error result `ask_user unavailable: no interactive client connected` within 1 s (P3) so the model can proceed with its best assumption and say so.
 
-## 2. Current state (verified)
+## 2. Baseline before implementation (verified)
 
-- The pieces exist but are not connected: `Card.form` renders, `form.submit` arrives at the kernel and is discarded with a "submitted" notice. No tool emits a form, nothing awaits a submission.
-- The approval broker already implements the exact pattern needed (pending map + future + timeout + non-interactive denial + `approval.required/resolved` events) — generalise rather than duplicate.
+- The pieces existed but were not connected: `Card.form` rendered, `form.submit` arrived at the kernel and was discarded with a "submitted" notice. No tool emitted a form, and nothing awaited a submission.
+- The approval broker already implemented the needed pattern (pending map + future + timeout + non-interactive denial + `approval.required/resolved` events) — generalise rather than duplicate.
 
 ## 3. Design
 
@@ -103,3 +103,16 @@ harness ui → model asks → answer → model continues with the answer visible
 ## 8. Agent brief
 
 > Implement WS-08 from `review/dsh-integration/WS-08_ask_user_tool.md`. Generalise `ApprovalBroker` into `harness/kernel/interactions.py` without changing approval behaviour (existing approval tests unchanged). Add `ToolContext.ask_user`, the `tools/ask_user` plugin with the exact `ToolSpec` in §3.2, `question.asked/answered` records + events, `question.answer` command, web renderer, CLI prompt. Tests in §5 red first. Open PR `WS-08: ask_user tool`.
+
+## 9. Execution notes — 2026-10-17
+
+Implemented the broker facade, `ToolContext.ask_user()` / `remaining_time()`, plugin, durable question facts, `question.answer` plus `form.submit` compatibility routing, `approvals.list` as an alias of `interactions.list`, CLI and web prompts/renderers, turn cancellation, and a fail-fast headless result. Added fail-first kernel coverage, plugin conformance coverage, a CLI prompt test, and answered/headless scenarios. The shared question painter is `_question.js`, with registered `question.asked.js` and `question.answered.js` renderers so the core renderer map remains one-to-one with durable record kinds. Existing scenario request goldens were regenerated to include the newly advertised `ask_user` tool.
+
+Verification on the working tree:
+
+- `.venv/bin/pytest tests/scenarios -q`: **52 passed, 1 skipped** (flow-of-information suite).
+- `.venv/bin/pytest -q --ignore=tests/scenarios`: **641 passed, 3 skipped**.
+- `.venv/bin/ruff check .` and `git diff --check`: passed.
+- `.venv/bin/harness catalog --check`: drift, settings, UI, and refs passed; the existing README-completeness and scenario-coverage warnings remain.
+
+No commit or push was made; WS-08 is complete on the current PR branch pending the user's approval for any Git operation.

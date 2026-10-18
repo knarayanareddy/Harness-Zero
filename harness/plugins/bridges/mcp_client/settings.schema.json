@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "MCP client bridge settings",
+  "x-namespace": "plugins.bridge-mcp-client",
+  "properties": {
+    "servers": {
+      "type": "object",
+      "default": {},
+      "title": "MCP Servers",
+      "x-ui": {"widget": "json"},
+      "description": "External MCP servers, keyed by server name. Tools appear as mcp__<server>__<tool>.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "object",
+            "title": "stdio server",
+            "properties": {
+              "transport": {"type": "string", "enum": ["stdio"], "default": "stdio"},
+              "command": {"type": "string"},
+              "args": {"type": "array", "items": {"type": "string"}},
+              "env": {"type": "object", "additionalProperties": {"type": "string"}},
+              "enabled": {"type": "boolean", "default": true},
+              "call_timeout_s": {"type": "number", "minimum": 0.1},
+              "connect_timeout_s": {"type": "number", "minimum": 0.1}
+            },
+            "required": ["command"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "title": "Streamable HTTP server",
+            "properties": {
+              "transport": {"const": "http"},
+              "url": {"type": "string", "minLength": 1},
+              "headers": {"type": "object", "additionalProperties": {"type": "string"}},
+              "auth": {
+                "type": "object",
+                "properties": {"bearer_env": {"type": "string", "minLength": 1}},
+                "additionalProperties": false
+              },
+              "enabled": {"type": "boolean", "default": true},
+              "call_timeout_s": {"type": "number", "minimum": 0.1},
+              "connect_timeout_s": {"type": "number", "minimum": 0.1}
+            },
+            "required": ["transport", "url"],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "call_timeout_s": {
+      "type": "number",
+      "default": 60,
+      "minimum": 0.1,
+      "title": "Tool call timeout (seconds)",
+      "description": "Maximum time to wait for an MCP tool call unless its server overrides this value."
+    },
+    "connect_timeout_s": {
+      "type": "number",
+      "default": 15,
+      "minimum": 0.1,
+      "title": "Connection timeout (seconds)",
+      "description": "Timeout for MCP initialize and discovery requests."
+    },
+    "reconnect": {
+      "type": "object",
+      "default": {"max_attempts": 10, "max_backoff_s": 60},
+      "title": "Reconnect policy",
+      "properties": {
+        "max_attempts": {"type": "integer", "default": 10, "minimum": 0, "maximum": 100},
+        "max_backoff_s": {"type": "number", "default": 60, "minimum": 0.1, "maximum": 600}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "x-alias-namespaces": {
+    "plugins.mcp-client": {"servers": "servers"},
+    "extensions": {"mcp_servers": "servers"}
+  },
+  "x-secrets": {
+    "MCP_API_KEY": {
+      "title": "MCP API Key",
+      "description": "Optional credential for Streamable HTTP server headers."
+    }
+  }
+}

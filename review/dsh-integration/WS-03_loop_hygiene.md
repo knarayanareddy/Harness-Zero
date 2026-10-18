@@ -193,3 +193,48 @@ harness plugin doctor --all && harness plugin test --all && harness catalog --ch
 ## 8. Agent brief
 
 > Implement WS-03 from `review/dsh-integration/WS-03_loop_hygiene.md` as **two PRs**: (a) kernel seams — `HookEvent.TOOL_RESULT_FINALIZE` with `HookOutcome.result`, `Hook.order`, `turn_state`, cooperative timeout with `kernel.limits.tool_grace_s` and executor `terminate_for_call`, `view_file` read metadata — with `tests/kernel/test_tool_result_finalize_hook.py` and `test_cooperative_timeout.py` failing first; (b) the four hook plugins (`harness plugin new --kind hook …`, layout per `templates/PLUGIN_TEMPLATE.md`) with `tests/kernel/test_loop_hygiene_through_kernel.py` and the four scenarios. All model-visible texts are the exact strings in §1; put them in each plugin README "Model experience" section. Settings keys per §3.2; `harness catalog --check settings` must pass. Open PRs `WS-03a: tool result finalize hook + cooperative timeout` and `WS-03b: loop hygiene hooks`.
+
+---
+
+## 9. Execution notes (consolidation P8, PR #5)
+
+Executed as two commits on the session branch, `WS-03a` (seams) then `WS-03b` (plugins).
+
+**What shipped as specified**
+
+* `HookEvent.TOOL_RESULT_FINALIZE` (gate step 8b, after the handler, before sanitisation + truncation),
+  `HookOutcome.result` as the replacement channel, `Hook.order` with default 500 (spill 800 < pruner 900).
+* Cooperative timeout: `ToolContext.deadline`, `ToolContext.cancel_event`, `kernel.limits.tool_grace_s`
+  (default 5), `ToolContext.track_process()` + gate-side `terminate_tracked()`, and `emit_output_delta`
+  buffered so a cancelled call still hands its partial output to the model.
+* `HookContext.turn_state` (per turn, seeded with `records` = the live transcript list).
+* The four hooks and the four model-visible §1 strings, each pinned by a test and reproduced verbatim in
+  the plugin README's "Model experience" section.
+* `view_file` / `write_to_file` / `edit_file` publish `metadata.path` + `metadata.read_sha256`.
+
+**Deliberate deviations**
+
+1. *Namespaces.* Plugin names follow the repo convention `<kind>-<name>` (`hook-tool-result-pruner`), so the
+   keys are `plugins.hook-tool-result-pruner.*` — not `plugins.hooks-…`. §6's teeth test is therefore: set
+   `plugins.hook-tool-result-pruner.enabled` to `false` and
+   `tests/kernel/test_loop_hygiene_through_kernel.py::test_oversized_output_keeps_tail` fails (asserted in
+   the opposite direction by `test_turning_the_pruner_off_brings_back_head_only_truncation`).
+2. *Executor API.* The spec asked for `Executor.terminate_for_call(call_id)`. Not added: the gate — not the
+   executor — knows when a call dies, and the handler holds the `Process` handle, so `track_process()` +
+   `Process.kill()` is one less thing for every executor to implement. `Process.kill` is already the
+   cancel primitive; `local` implements it with a grace period.
+3. *Timeout scenario.* No `tool_timeout_partial_output` scenario: `run_command`'s 600 s `ToolSpec.timeout_s`
+   is not configurable, so a scenario would either wait ten minutes or fake a tool. Covered instead by
+   `tests/kernel/test_cooperative_timeout.py` (6 cases, incl. "the child process is gone") and
+   `test_a_stuck_tool_returns_partial_output_instead_of_nothing` (0.3 s tool through a booted kernel).
+   Operator-tunable per-tool timeouts are queued for WS-06.
+4. *Test layout.* Conformance + unit tests live in `tests/plugins/test_loop_hygiene_hooks.py` (P5's one test
+   estate, `harness plugin test --all` runs them) instead of a `tests/` directory inside each plugin.
+5. *One switch for the edit guard.* `read_before_edit` has `mode: block|warn|off` and no separate
+   `enabled` boolean; the other three have `enabled` and no mode.
+6. *Repeat exemption.* Defaults exempt `manage_task` **and** `view_file` — paging a file across four calls
+   is deliberate work, and the `runaway_tool_loop_kernel` scenario depends on that distinction.
+
+**Findings while executing** — R40 (timed-out call leaked its subprocess and lost its partial output) and
+R41 (`plugins.hook-repeat-call-reminder.enabled` declared but never read, caught by the new declared-settings
+test) in `review/CONSOLIDATION_LOG.md` §3.

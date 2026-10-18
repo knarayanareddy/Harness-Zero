@@ -1,12 +1,15 @@
 <!DOCTYPE html>
-<html lang="en" class="theme-dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <title>Harness-Zero | Sovereign Agent Studio</title>
+  <title>Harness-Zero</title>
   <meta name="harness-token" content="__HARNESS_TOKEN__">
   <meta name="sandbox-port" content="__SANDBOX_PORT__">
+  <!-- Two stylesheets, in this order: components (styles.css), then the compiled utilities (vendor/tw.css,
+       built by `npm run build:css` from the class names used in this file and *.js). -->
   <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/vendor/tw.css">
   <script src="/static/vendor/purify.min.js"></script>
   <script src="/static/vendor/marked.min.js"></script>
   <script src="/static/vendor/prism_bundle.js"></script>
@@ -14,24 +17,23 @@
 </head>
 <body>
 
-  <!-- Top Draggable macOS Window Header -->
-  <div class="window-titlebar">
+  <!-- Title bar: everything here is live state (workspace, spend, context size, connection) -->
+  <header class="window-titlebar">
     <div class="titlebar-center">
-      <span class="titlebar-pill">📁 Harness-Zero</span>
-      <span class="titlebar-pill">🪝 main</span>
-      <span class="titlebar-pill" id="economics-indicator">$0.0000 / $5.00</span>
-      <button type="button" id="btn-context-inspector" class="titlebar-pill" style="cursor:pointer; background:transparent;"><span>🧠 Context</span> <span id="context-tokens-badge">0 tok</span></button>
-      <button type="button" id="btn-open-settings" class="titlebar-pill" style="cursor:pointer; background:transparent;" data-modal-open="settings">⚙️ Settings</button>
+      <span class="titlebar-pill" id="workspace-pill" title="Workspace">📁 …</span>
+      <span class="titlebar-pill" id="economics-indicator" title="Session spend / per-turn cap">$0.0000 / —</span>
+      <button type="button" id="btn-context-inspector" class="titlebar-pill titlebar-button"><span>🧠 Context</span> <span id="context-tokens-badge">0 tok</span></button>
+      <button type="button" id="btn-open-settings" class="titlebar-pill titlebar-button" data-modal-open="settings">⚙️ Settings</button>
     </div>
 
     <div class="titlebar-status">
-      <div class="status-dot-pulse" id="status-dot"></div><span id="status-text">Sovereign Daemon Online</span>
+      <span class="status-dot" id="status-dot" data-state="connecting"></span><span id="status-text">Connecting…</span>
     </div>
-  </div>
+  </header>
 
-  <!-- Top Approval Banner for High-Risk Actions -->
+  <!-- Approval banner: shown by approval.required, hidden by approval.resolved -->
   <div id="approval-banner" class="approval-banner hidden" data-request-id="">
-    <div class="banner-content"><span>⚠️ High-Risk Action Approval Requested</span></div>
+    <div class="banner-content"><span>⚠️ High-risk action awaiting your approval</span></div>
     <div class="banner-actions">
       <button type="button" id="btn-approval-deny" class="btn-banner btn-banner-secondary">Deny</button>
       <button type="button" id="btn-approval-approve" class="btn-banner btn-banner-primary">Approve</button>
@@ -40,45 +42,45 @@
 
   <div class="app-viewport">
 
-    <!-- 1. Left Activity Bar -->
-    <div class="activity-bar">
-      <div class="antigravity-logo" data-act="chat" title="Harness-Zero Studio">
+    <!-- 1. Activity rail -->
+    <nav class="activity-bar">
+      <div class="app-logo" data-act="chat" title="Harness-Zero">
         <svg viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M144.248 149.062C151.748 154.688 162.998 150.938 152.685 140.625C121.748 110.625 128.31 28.125 89.8727 28.125C51.4352 28.125 57.9977 110.625 27.0602 140.625C15.8102 151.875 27.9977 154.688 35.4977 149.062C64.5602 129.375 62.6852 94.6875 89.8727 94.6875C117.06 94.6875 115.185 129.375 144.248 149.062Z" fill="currentColor"/>
         </svg>
       </div>
 
-      <div class="activity-item active" id="act-chat" data-act="chat" title="Agent Chat">
+      <div class="activity-item active" data-act="chat" title="Agent chat">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
       </div>
 
-      <div class="activity-item" id="act-sessions" data-act="sessions" title="Session History">
+      <div class="activity-item" data-act="sessions" title="Sessions">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
       </div>
 
       <div class="activity-bottom">
-        <div class="activity-item" data-modal-open="settings" title="Settings & API Keys">
+        <div class="activity-item" data-modal-open="settings" title="Settings &amp; API keys">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         </div>
       </div>
-    </div>
+    </nav>
 
-    <!-- 2. Dual-Pane Main Interface -->
+    <!-- 2. Two panes: conversation | studio -->
     <div class="main-workspace">
 
-      <!-- Left: Conversation Pane -->
-      <div class="agent-pane">
+      <!-- Conversation pane -->
+      <section class="agent-pane">
         <div class="agent-header">
           <div class="agent-title-cluster">
             <span>Agent Chat</span>
-            <span class="titlebar-pill" id="agent-mode-badge">Autonomous</span>
+            <span class="titlebar-pill" id="permission-mode-badge" title="Effective security preset and process confinement" data-state="unknown">security: …</span>
           </div>
 
           <div class="header-actions">
-            <button class="btn-icon" data-tab="sessions" title="Conversation History & Sessions">
+            <button class="btn-icon" data-tab="sessions" title="Sessions">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
             </button>
-            <button class="btn-icon" data-action="new-session" id="btn-new-session" title="New Session">
+            <button class="btn-icon" data-action="new-session" id="btn-new-session" title="New session">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </button>
             <button class="btn-icon" data-modal-open="settings" title="Settings">
@@ -87,32 +89,24 @@
           </div>
         </div>
 
-        <!-- Onboarding Banner -->
-        <div id="onboarding-banner" class="onboarding-banner hidden" style="background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.4); border-radius:8px; padding:10px 14px; margin:12px 16px 0 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:12px; color:#fde68a;">
-          <div style="display:flex; align-items:center; gap:8px;">
+        <!-- Shown when kernel.provider is empty -->
+        <div id="onboarding-banner" class="onboarding-banner hidden">
+          <div class="banner-content">
             <span>⚠️</span>
-            <span><strong>No model provider configured.</strong> Set up an API key or local model in Settings to begin.</span>
+            <span><strong>No model provider configured.</strong> Set up an API key or a local model in Settings to begin.</span>
           </div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <button type="button" id="btn-onboarding-configure" class="btn-banner btn-banner-primary" style="cursor:pointer; padding:4px 10px; font-size:11px;">Configure Settings</button>
-            <button type="button" id="btn-onboarding-dismiss" class="btn-banner btn-banner-secondary" style="cursor:pointer; padding:4px 8px; font-size:11px;">Dismiss</button>
-          </div>
-        </div>
-
-        <!-- Chat Stream -->
-        <div class="timeline-stream" id="timeline">
-          <div class="turn-card assistant-turn">
-            <div class="markdown-body">
-              <p>Welcome to <strong>Harness-Zero</strong>. I am your sovereign autonomous agent assistant.</p>
-              <p>Enter an instruction below to begin.</p>
-            </div>
+          <div class="banner-actions">
+            <button type="button" id="btn-onboarding-configure" class="btn-banner btn-banner-primary">Configure</button>
+            <button type="button" id="btn-onboarding-dismiss" class="btn-banner btn-banner-secondary">Dismiss</button>
           </div>
         </div>
 
-        <!-- Floating Composer Dock -->
+        <!-- Conversation: filled by reloadTranscript() / live events; empty-state hint comes from app.js -->
+        <div class="timeline-stream" id="timeline"></div>
+
+        <!-- Composer -->
         <div class="composer-dock">
-          <!-- Starter Prompt Pills -->
-          <div class="chips-carousel" style="margin-bottom:8px;">
+          <div class="chips-carousel">
             <div class="suggestion-chip" data-prompt="Explain the core architecture and features of Harness-Zero.">🎓 Learn</div>
             <div class="suggestion-chip" data-prompt="Write a concise documentation guide for this project.">✏️ Write</div>
             <div class="suggestion-chip" data-prompt="Create an interactive HTML artifact visualization.">🎨 Create</div>
@@ -120,37 +114,16 @@
             <div class="suggestion-chip" data-prompt="what can you do?">✨ What can you do?</div>
           </div>
 
-          <!-- Input Card -->
-          <form id="composer-form" class="composer-card">
-            <!-- Slash Commands Menu Popover -->
-            <div id="slash-menu" class="slash-menu" style="display:none;">
-              <div class="slash-item" data-slash="/plan">
-                <span class="slash-name">/plan</span>
-                <span class="slash-desc">Formulate architectural design spec</span>
-              </div>
-              <div class="slash-item" data-slash="/diff">
-                <span class="slash-name">/diff</span>
-                <span class="slash-desc">Inspect workspace git diffs</span>
-              </div>
-              <div class="slash-item" data-slash="/compact">
-                <span class="slash-name">/compact</span>
-                <span class="slash-desc">Compress conversation context</span>
-              </div>
-              <div class="slash-item" data-slash="/pytest">
-                <span class="slash-name">/pytest</span>
-                <span class="slash-desc">Execute test suite</span>
-              </div>
-              <div class="slash-item" data-slash="/git">
-                <span class="slash-name">/git</span>
-                <span class="slash-desc">Check git status</span>
-              </div>
-            </div>
+          <div id="question-waiting" class="question-waiting hidden" role="status" aria-live="polite">
+            Waiting for your answer — submit the question card above, or press Stop to cancel this turn.
+          </div>
 
+          <form id="composer-form" class="composer-card">
             <textarea
               class="composer-input"
               id="composer-input"
               rows="1"
-              placeholder="How can I help you today? (/ commands, @ files)"
+              placeholder="How can I help you today?"
             ></textarea>
 
             <div class="composer-controls">
@@ -165,124 +138,112 @@
                 </select>
               </div>
 
-              <div style="display:flex; align-items:center; gap:6px;">
-                <button class="btn-stop hidden" id="btn-stop" data-action="stop" title="Stop Generation">
+              <div class="controls-right">
+                <button class="btn-stop hidden" id="btn-stop" data-action="stop" title="Stop generation">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
                   <span>Stop</span>
                 </button>
-                <button class="btn-send" id="btn-send" data-action="send" title="Send instruction (Enter)">
+                <button class="btn-send" id="btn-send" data-action="send" title="Send (Enter)">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
                 </button>
               </div>
             </div>
           </form>
         </div>
-      </div>
+      </section>
 
-      <!-- Right: Studio Pane -->
-      <div class="studio-pane">
+      <!-- Studio pane: artifacts | sessions | economics -->
+      <section class="studio-pane">
         <div class="studio-tabs">
-          <div class="studio-tab active" id="tab-artifact" data-tab="artifact">
+          <div class="studio-tab active" data-tab="artifact">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-            <span id="tab-artifact-label">Artifact Studio</span>
+            <span>Artifacts</span>
           </div>
 
-          <div class="studio-tab" id="tab-sessions" data-tab="sessions">
+          <div class="studio-tab" data-tab="sessions">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
             <span>Sessions</span>
           </div>
 
-          <div class="studio-tab" id="tab-economics" data-tab="economics">
+          <div class="studio-tab" data-tab="economics">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
             <span>Economics</span>
           </div>
         </div>
 
-        <div class="studio-viewport" id="studio-viewport">
-          <!-- Proceed Banner for Artifact Approvals -->
+        <div class="studio-viewport">
+          <!-- Shown for artifact cards that request feedback; title/description come from the card -->
           <div class="proceed-banner hidden" id="proceed-banner">
             <div>
               <div class="banner-title">
-                <span class="tool-badge badge-success">AWAITING APPROVAL</span>
-                <span id="banner-artifact-title">Architecture Plan</span>
+                <span class="card-badge" data-status="ask">Feedback requested</span>
+                <span id="banner-artifact-title"></span>
               </div>
-              <div class="banner-desc" id="banner-artifact-desc">Review the proposed implementation plan below.</div>
+              <div class="banner-desc" id="banner-artifact-desc"></div>
             </div>
             <div class="banner-actions">
-              <button type="button" id="btn-proceed-submit" class="btn-proceed">Proceed (Apply)</button>
+              <button type="button" id="btn-proceed-submit" class="btn-proceed">Proceed</button>
               <button type="button" id="btn-proceed-dismiss" class="btn-changes">Dismiss</button>
             </div>
           </div>
 
           <div id="session-list" class="session-list hidden"></div>
-          <div id="economics-view" class="economics-view hidden" style="padding:16px;"></div>
-          <div id="studio-content-area" class="markdown-body">
-            <p style="color:#71717a; font-style:italic;">No active artifact generated yet. Instruct the agent to build, refactor, or plan an architecture.</p>
+          <div id="economics-view" class="economics-view hidden"></div>
+          <!-- Artifact cards (ui.card kind=artifact) render here; the timeline keeps a copy in conversation order -->
+          <div id="studio-content-area" class="artifact-view">
+            <p class="artifact-empty">No artifacts yet. Ask the agent to create a file, a plan or a visualization and it appears here.</p>
           </div>
         </div>
-      </div>
+      </section>
 
     </div>
 
   </div>
 
-  <!-- Bottom IDE Status Bar -->
-  <div class="status-bar">
+  <!-- Status bar: live values only -->
+  <footer class="status-bar">
     <div class="status-bar-left">
-      <span class="status-pill-link">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>
-        <span>main</span>
-      </span>
-      <span>● Ready</span>
+      <span id="active-session-display" title="Active session">No session</span>
     </div>
 
     <div class="status-bar-right">
-      <span id="active-model-display">Autonomous Heuristic</span>
-      <span>UTF-8</span>
+      <span id="active-model-display" title="Model used for the next prompt">Default Model</span>
+      <span id="version-display" title="Daemon version"></span>
     </div>
-  </div>
+  </footer>
 
-  <!-- Settings Modal (Schema-Driven, backed by real settings commands) -->
+  <!-- Settings modal (schema-driven; backed by settings.schema / settings.get / settings.set) -->
   <div class="modal-backdrop hidden" id="settings-modal" data-modal-close="settings">
-    <div class="modal-dialog" style="max-width:760px; width:92vw; height:580px; max-height:90vh; display:flex; flex-direction:column;">
-      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #27272a; padding-bottom:12px; margin-bottom:12px;">
-        <div style="display:flex; align-items:center; gap:12px;">
-          <span style="font-weight:700; font-size:16px; color:#f4f4f5;">Harness Settings</span>
-          <input type="text" id="settings-search-input" placeholder="Search settings..." style="background:#18181b; border:1px solid #3f3f46; border-radius:6px; padding:4px 8px; font-size:12px; color:#f4f4f5; width:180px;">
+    <div class="modal-dialog modal-dialog-settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-title" id="settings-title">Settings</span>
+          <input type="text" id="settings-search-input" class="modal-search" placeholder="Search settings…">
         </div>
-        <button type="button" class="btn-icon" id="btn-close-settings" data-modal-close="settings">✕</button>
+        <button type="button" class="btn-icon" id="btn-close-settings" data-modal-close="settings" title="Close">✕</button>
       </div>
 
-      <div class="settings-content" id="settings-content" style="flex:1; overflow-y:auto;"></div>
+      <div class="modal-body" id="settings-content"></div>
     </div>
   </div>
 
-  <!-- Context Inspector Drawer -->
+  <!-- Context inspector: what context.assembled reported for the last turn -->
   <aside id="context-inspector" class="context-inspector hidden">
     <div class="inspector-header">
       <div class="inspector-title-group">
         <span class="inspector-title">Context Assembler</span>
         <span id="inspector-total-tokens" class="inspector-tokens-badge">0 tokens</span>
       </div>
-      <button type="button" id="btn-close-inspector" class="btn-close-drawer">&times;</button>
+      <button type="button" id="btn-close-inspector" class="btn-close-drawer" title="Close">&times;</button>
     </div>
     <div class="inspector-meta">
       <span id="inspector-history-count" class="inspector-meta-item">History: 0 msgs</span>
-      <span id="inspector-cache-status" class="inspector-meta-cache">Cache Tier: Invariant</span>
+      <span id="inspector-stability-summary" class="inspector-meta-item" title="Blocks by cache stability (static / session / turn)">—</span>
     </div>
     <div id="inspector-blocks" class="inspector-blocks">
       <div class="inspector-empty">No turn context assembled yet. Send a prompt to inspect blocks.</div>
     </div>
   </aside>
-
-  <!-- Terminal Drawer -->
-  <div id="terminal-drawer" class="terminal-drawer" style="display:none;">
-    <div class="terminal-header">
-      <span>Terminal & Tool Output Stream</span>
-      <button type="button" id="btn-terminal-clear" class="btn-terminal-clear">Clear</button>
-    </div>
-    <div id="terminal-body" class="terminal-body"></div>
-  </div>
 
 </body>
 </html>

@@ -1,0 +1,15 @@
+[plugin]
+name = "tools-jobs"
+version = "0.3.0"
+api_version = "1"
+summary = "Durable session-scoped background jobs with bounded output and recovery"
+provides = ["tool", "command"]
+capabilities = ["exec"]
+entry = "harness.plugins.tools.jobs.plugin:JobsPlugin"
+settings_schema = "settings.schema.json"
+
+[ui]
+panels = [
+  { id = "jobs", title = "Jobs", command = "plugins.tools-jobs.list", renderer = "list" },
+]
+client_module = "static/panel.js"

@@ -1,0 +1,19 @@
+name: restore_turn
+kind: kernel
+summary: The model writes a file, the user explicitly approves a turn-start restore, and the workspace returns to its original state.
+recorded_from: synthetic
+settings:
+  kernel.security.permission_mode: ask
+  kernel.security.destructive_blocking: false
+workspace_files:
+  draft.txt: "before\n"
+approvals: [approve]
+turns:
+  - prompt: "Change draft.txt to say after, then restore the workspace to the start of this turn."
+expect:
+  tools_called: [write_to_file, checkpoint_restore]
+  files:
+    draft.txt: {contains: "before"}
+  event_types_include: [approval.required, approval.resolved, checkpoint.restored, workspace.changes, turn.completed]
+  reload_equals_live: true
+  event_types_exclude: [turn.error, turn.cancelled]

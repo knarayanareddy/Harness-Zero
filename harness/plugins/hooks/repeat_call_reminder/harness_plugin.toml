@@ -1,0 +1,11 @@
+[plugin]
+name = "hook-repeat-call-reminder"
+version = "1.0.0"
+api_version = "1"
+summary = "Tells the model when it repeats an identical tool call in one turn, and can stop it"
+provides = ["hook"]
+capabilities = []
+entry = "harness.plugins.hooks.repeat_call_reminder.plugin:RepeatCallReminderPlugin"
+
+[settings]
+schema = "settings.schema.json"

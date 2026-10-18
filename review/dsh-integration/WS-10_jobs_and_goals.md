@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | specified |
+| Status | WS-10a Jobs executed locally (uncommitted); WS-10b Goals remains specified/not started |
 | Depends on | WS-04 (durable `job.*` / `goal.*` records; log-before-execute), WS-03 (cooperative timeout), WS-05 (panel) |
 | Effort | 2–3 days jobs + 2–3 days goals (separate PRs) |
 | Principles | P1, P2, P3 |
@@ -17,8 +17,18 @@
 
 ## 2. Current state (verified)
 
-- `run_command` + `manage_task` support background processes within a daemon lifetime; nothing is persisted; the UI has `task.*` handlers but no panel; the model is not told when a task finished unless it polls.
-- No multi-round driver; `max_iterations` bounds tool loops within one turn only.
+### WS-10a Jobs — executed locally, uncommitted
+
+- The `tools-jobs` plugin registers a session-scoped durable registry, `job_start/output/list/kill`, panel commands, and the plugin-owned Jobs pane. The panel refreshes on `job.started/output/exited`; stop uses the approval broker.
+- Job starts, coalesced output ranges, and terminal outcomes are recorded as `job.started/output/exited`. Output is kept in the bounded in-memory ring and session spill file; active snapshots are recovered as `lost` and announced to the model on its next turn.
+- Detached `job_start` jobs do not block the current turn or inject same-turn reactive wakeups. Legacy `run_command` background tasks retain reactive waits and the `manage_task` compatibility alias.
+- The registry rejects symlinked, non-regular, and multiply-linked state files; all job-data opens use nonblocking/no-follow flags where supported and validate the opened file descriptor. FIFO safety tests cover both the index and spill paths.
+- Evidence on the current uncommitted branch: job kernel/restart tests **9 passed**; `job_finishes_between_turns` replay **1 passed**; full `pytest -q` **716 passed, 4 skipped**. `ruff check .`, strict UI audit, `harness plugin doctor --all`, `git diff --check`, and generated catalog drift checks pass. Catalog README/scenario-coverage warnings remain advisory; the Jobs tools are exercised by kernel integration tests, but not all have separate model-replay scenarios.
+- These results are local only: no commit or push was made. `npm ci` was run to enable the web DOM scenarios; npm reported 7 dependency audit advisories, and no automatic audit fix was applied.
+
+### WS-10b Goals — not started
+
+- No goal plugin, goal records, or round driver have been added. Goals remain outside the WS-10a edit approval and require their own phase.
 
 ## 3. Design
 
@@ -91,11 +101,28 @@ docs/events.schema.json (gen)
 
 ## 6. Acceptance
 
+### WS-10a Jobs — locally verified
+
 ```bash
-pytest tests/kernel/test_jobs_*.py tests/kernel/test_goal_driver.py -q && pytest tests/scenarios -q -k "job or goal"
-harness ui → "start the dev server as a job" → Jobs panel tails output; restart daemon → job marked lost, next turn shows the notice
+./.venv/bin/pytest tests/kernel/test_jobs_through_kernel.py tests/kernel/test_jobs_survive_restart.py -q  # 9 passed
+./.venv/bin/pytest tests/scenarios/test_scenarios.py -q -k job_finishes_between_turns  # 1 passed
+./.venv/bin/pytest -q  # 716 passed, 4 skipped; includes all flow/scenario and frontend tests
+./.venv/bin/ruff check .
+./.venv/bin/python tests/frontends/ui_audit.py --strict
+./.venv/bin/harness plugin doctor --all
+./.venv/bin/harness catalog --check
+```
+
+The generated catalog's drift, settings, UI, and reference checks pass. Its plugin-README and scenario-coverage diagnostics remain advisory; the `job_start/output/list/kill` tools and `manage_task` alias are covered by kernel integration tests. The Jobs panel ownership, reachable module, command wiring, and static UI contract are covered by UI contribution/contract tests and the strict audit. An interactive browser smoke test was not separately performed. The scenario asserts durable lifecycle semantics, model-visible next-turn notice, and exclusion of legacy `task.*` records; event validation remains active while exact cross-order goldens are disabled for the async `job.exited`/`cost.updated` race.
+
+### WS-10b Goals — pending
+
+The goal-driver and goal-budget acceptance checks below remain specified, unimplemented, and unrun; they are not part of WS-10a.
+
+```bash
+./.venv/bin/pytest tests/kernel/test_goal_driver.py -q
+./.venv/bin/pytest tests/scenarios -q -k goal
 harness ui → "goal: make tests pass, budget 5 rounds" → rounds run, approvals still prompt, card on budget
-harness catalog --check
 ```
 
 ## 7. Non-goals / cautions

@@ -55,6 +55,75 @@ def prompt_approval(
         return False
 
 
+def prompt_question(
+    interaction_id: str,
+    questions: list[dict[str, Any]],
+    console: Console | None = None,
+    input_fn: Callable[[str], str] | None = None,
+) -> dict[str, dict[str, str]] | None:
+    """Prompt for structured question answers; ``None`` signals that the prompt was aborted."""
+    c = console or Console()
+    ask = input_fn or input
+    c.print(Panel(
+        f"[bold cyan]Question Request [id={interaction_id}][/bold cyan]",
+        border_style="cyan",
+        title="The model needs your input",
+    ))
+    answers: dict[str, dict[str, str]] = {}
+    for question in questions:
+        c.print(f"\n[bold]{question['question']}[/bold]")
+        options = question.get("options", [])
+        for index, option in enumerate(options, start=1):
+            description = f" — {option['description']}" if option.get("description") else ""
+            c.print(f"  [cyan]{index}.[/cyan] {option['label']}[dim]{description}[/dim]")
+        allow_custom = question.get("allow_custom", True)
+        prompt = "Choose an option by number"
+        if allow_custom:
+            prompt += " (or c for a custom answer)"
+        prompt += ": "
+        try:
+            choice = ask(prompt).strip()
+        except (EOFError, KeyboardInterrupt):
+            c.print("\n[yellow]Question prompt aborted; cancelling the turn.[/yellow]")
+            return None
+
+        if allow_custom and choice.lower() in {"c", "custom"}:
+            try:
+                custom_text = ask("Your answer: ").strip()
+            except (EOFError, KeyboardInterrupt):
+                c.print("\n[yellow]Question prompt aborted; cancelling the turn.[/yellow]")
+                return None
+            answers[question["id"]] = {"option_id": "custom", "custom_text": custom_text}
+            continue
+
+        selected = None
+        if choice.isdigit() and 1 <= int(choice) <= len(options):
+            selected = options[int(choice) - 1]
+        else:
+            selected = next(
+                (option for option in options if choice.casefold() in {
+                    str(option.get("id", "")).casefold(), str(option.get("label", "")).casefold()
+                }),
+                None,
+            )
+        if selected is None:
+            c.print("[red]Invalid choice; the turn will be cancelled.[/red]")
+            return None
+        custom_text = ""
+        if allow_custom:
+            try:
+                custom_text = ask("Optional custom detail (press Enter to skip): ").strip()
+            except (EOFError, KeyboardInterrupt):
+                c.print("\n[yellow]Question prompt aborted; cancelling the turn.[/yellow]")
+                return None
+        answers[question["id"]] = {
+            "option_id": str(selected["id"]),
+            "custom_text": custom_text,
+        }
+    c.print("[green]✓ Answers submitted[/green]")
+    return answers
+
+
 def prompt_form(
     form_id: str,
     schema: dict[str, Any],
