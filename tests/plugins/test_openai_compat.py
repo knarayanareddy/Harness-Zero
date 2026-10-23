@@ -19,6 +19,7 @@ from harness.sdk.errors import ProviderError
 from harness.sdk.testing import ProviderKit
 from harness.sdk.types import (
     Done,
+    ImageBlock,
     Message,
     ModelParams,
     ModelRequest,
@@ -28,7 +29,9 @@ from harness.sdk.types import (
     TextDelta,
     ThinkingDelta,
     ToolCallEnd,
+    ToolResultBlock,
     ToolSpec,
+    ToolUseBlock,
 )
 
 
@@ -56,6 +59,70 @@ def make_mock_transport(sse_lines: list[str], status_code: int = 200) -> httpx.M
         )
 
     return httpx.MockTransport(handler)
+
+
+@pytest.mark.parametrize("role", [Role.USER, Role.TOOL])
+def test_tool_continuation_preserves_each_id_and_error_without_empty_user_message(role):
+    provider = OpenAICompatProvider(name="local", base_url="http://127.0.0.1:1/v1")
+    req = ModelRequest(model="test", system=[], tools=[], params=ModelParams(), messages=[
+        Message(role=Role.ASSISTANT, content=[
+            ToolUseBlock(id="first", name="read_one", input={}),
+            ToolUseBlock(id="second", name="read_two", input={}),
+        ]),
+        Message(role=role, content=[
+            ToolResultBlock(tool_use_id="first", content=[TextBlock("OK")]),
+            ToolResultBlock(tool_use_id="second", content=[TextBlock("failed")], is_error=True),
+        ]),
+    ])
+    before = req.to_dict()
+    wire = provider._convert_messages(req)
+    assert [m["role"] for m in wire] == ["assistant", "tool", "tool"]
+    assert wire[1] == {"role": "tool", "tool_call_id": "first", "content": "OK"}
+    assert wire[2] == {"role": "tool", "tool_call_id": "second", "content": "[Tool error]\nfailed"}
+    assert req.to_dict() == before, "OpenAI conversion must not mutate canonical SDK history"
+
+
+def test_mixed_user_notes_and_images_follow_tool_results_without_being_dropped():
+    provider = OpenAICompatProvider(name="local", base_url="http://127.0.0.1:1/v1")
+    image = ImageBlock(media_type="image/png", url="https://example.invalid/synthetic.png")
+    req = ModelRequest(model="test", system=[], tools=[], params=ModelParams(), messages=[
+        Message(role=Role.USER, content=[TextBlock("Keep this note"),
+            ToolResultBlock(tool_use_id="call", content=[TextBlock("result")]), image]),
+    ])
+    wire = provider._convert_messages(req)
+    assert wire == [
+        {"role": "tool", "tool_call_id": "call", "content": "result"},
+        {"role": "user", "content": [
+            {"type": "text", "text": "Keep this note"},
+            {"type": "image_url", "image_url": {"url": image.url}},
+        ]},
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", [Role.USER, Role.TOOL])
+async def test_unsupported_tool_result_image_is_rejected_before_network_not_silently_dropped(role):
+    captured = []
+
+    def reply(request):
+        captured.append(request)
+        return httpx.Response(200, headers={"Content-Type": "text/event-stream"},
+            text='data: {"choices":[{"delta":{"content":"wrongly accepted"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n')
+
+    image = ImageBlock(media_type="image/png", data_b64="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC")
+    request = ModelRequest(model="fixture", system=[], tools=[], params=ModelParams(), messages=[
+        Message(role=Role.ASSISTANT, content=[ToolUseBlock(id="image", name="fixture", input={})]),
+        Message(role=role, content=[ToolResultBlock(tool_use_id="image", content=[image])]),
+    ])
+    original = request.to_dict()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(reply)) as client:
+        provider = OpenAICompatProvider(name="fixture", base_url="http://local.invalid/v1", client=client)
+        with pytest.raises(ProviderError) as error:
+            _ = [event async for event in provider.generate(request)]
+    assert error.value.kind == "bad_request" and error.value.retryable is False
+    assert "tool-result image" in str(error.value)
+    assert captured == []
+    assert request.to_dict() == original
 
 
 @pytest.fixture

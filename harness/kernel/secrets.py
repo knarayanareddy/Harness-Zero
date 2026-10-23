@@ -62,18 +62,27 @@ class Secrets:
                 self.path = p
 
         self.env_precedence = env_precedence
+        # Values already handed to consumers can remain live after credential
+        # rotation/removal. Retain them only in memory for later output masking.
+        self._resolved_values: set[str] = set()
 
-    def _load(self) -> dict[str, str]:
-        """Loads raw secrets dictionary from disk."""
-        if not self.path.exists():
-            return {}
+    def _load(self, *, strict: bool = False) -> dict[str, str]:
+        """Load file values; redaction callers must not suppress discovery errors."""
         try:
             raw = self.path.read_text(encoding="utf-8")
             data = json.loads(raw)
             if isinstance(data, dict):
+                if strict and any(not isinstance(v, str) for v in data.values()):
+                    raise ValueError("Secrets file values must be strings")
                 return {str(k): str(v) for k, v in data.items() if isinstance(v, str)}
+            if strict:
+                raise ValueError("Secrets file must contain an object")
+            return {}
+        except FileNotFoundError:
             return {}
         except Exception as e:
+            if strict:
+                raise
             logger.warning(f"Failed to read secrets from {self.path}: {e}")
             return {}
 
@@ -106,6 +115,23 @@ class Secrets:
         """Returns the count of secrets stored at rest."""
         return len(self._load())
 
+    def redaction_values(self) -> tuple[str, ...]:
+        """Discover file, credential-named and resolved environment secret values.
+
+        Ordinary environment values are not secrets by mere presence: masking
+        HOME or PATH would corrupt canonical read-path audit facts. Arbitrarily
+        named environment values join this set when requested through get().
+        """
+        stored = self._load(strict=True)
+        values = set(stored.values()) | self._resolved_values
+        aliases = {alias for name in stored for alias in _candidate_aliases(name)}
+        for name, value in os.environ.items():
+            if name in aliases or any(marker in name.upper() for marker in (
+                "API_KEY", "TOKEN", "PASSWORD", "SECRET", "CREDENTIAL", "PRIVATE_KEY", "ACCESS_KEY",
+            )):
+                values.add(value)
+        return tuple(sorted((value for value in values if len(value) >= 6), key=lambda value: (-len(value), value)))
+
     def has(self, name: str) -> bool:
         """
         Checks whether a secret exists without revealing its value.
@@ -123,6 +149,8 @@ class Secrets:
             for alias in aliases:
                 val = os.environ.get(alias)
                 if val:
+                    if len(val) >= 6:
+                        self._resolved_values.add(val)
                     return val
             return None
 
@@ -130,6 +158,8 @@ class Secrets:
             stored = self._load()
             for alias in aliases:
                 if alias in stored:
+                    if len(stored[alias]) >= 6:
+                        self._resolved_values.add(stored[alias])
                     return stored[alias]
             return None
 

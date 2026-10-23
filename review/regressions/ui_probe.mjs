@@ -1,0 +1,22 @@
+// Shipped ES modules, synthetic session envelopes; no browser-security claim.
+import {JSDOM} from '../../node_modules/jsdom/lib/api.js';
+const dom = new JSDOM('<div id="timeline"></div><button id="btn-send"></button><button id="btn-stop"></button>', {url:'http://localhost/'});
+globalThis.window = dom.window;
+globalThis.document = dom.window.document;
+const {HarnessStudioApp} = await import('../../harness/frontends/web/static/app.js');
+const app = new HarnessStudioApp();
+app.activeSessionId = 'B';
+app.setupEventHandlers();
+app.events._dispatch('turn.started', {session_id:'A',data:{}});
+app.events._dispatch('model.text.delta', {session_id:'A',data:{text:'FOREIGN_REPLY'}});
+const foreign_visible = document.querySelector('#timeline').textContent.includes('FOREIGN_REPLY');
+const foreign_busy = app.isBusy;
+let resolveA, resolveB;
+app.api = {command: (_name,args) => new Promise(resolve => {if(args.session_id==='A')resolveA=resolve;else resolveB=resolve;})};
+app.renderers = {render: (_app,rec) => {const el=document.createElement('div');el.textContent=rec.content;document.querySelector('#timeline').append(el);}};
+app.activeSessionId='A';const a=app.reloadTranscript();
+app.activeSessionId='B';const b=app.reloadTranscript();
+resolveB({records:[{content:'B_HISTORY'}]});await b;
+resolveA({records:[{content:'A_HISTORY'}]});await a;
+console.log(JSON.stringify({foreign_visible,foreign_busy,stale_visible:document.querySelector('#timeline').textContent.includes('A_HISTORY')}));
+dom.window.close();

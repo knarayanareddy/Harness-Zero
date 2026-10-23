@@ -354,12 +354,109 @@ def test_seatbelt_profile_is_workspace_scoped_and_network_off_by_default(tmp_pat
     assert isinstance(wrapped.command, list)
     assert wrapped.command[0] == "/usr/bin/sandbox-exec"
     profile = wrapped.command[2]
+    assert '(allow file-read-data (literal "/"))' in profile
+    assert '(subpath "/")' not in profile
     assert "(deny network*)" in profile
     assert f'(subpath "{workspace}")' in profile
     assert f'(allow file-write* (subpath "{workspace}") (subpath "/private/tmp"))' in profile
     assert wrapped.command[-3:] == ["/bin/sh", "-c", "touch inside.txt"]
     assert "HOME=/private/tmp" in wrapped.command
     assert wrapped.shell is False
+
+
+def test_seatbelt_availability_probe_allows_root_directory_only(tmp_path: Path, monkeypatch):
+    import subprocess
+
+    profiles = []
+    monkeypatch.setattr("harness.sdk.sandbox_seatbelt.platform.system", lambda: "Darwin")
+    monkeypatch.setattr("harness.sdk.sandbox_seatbelt.shutil.which", lambda _name: "/usr/bin/sandbox-exec")
+
+    def capture(command, **kwargs):
+        profiles.append(command[2])
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("harness.sdk.sandbox_seatbelt.subprocess.run", capture)
+    assert SeatbeltBackend().available().available
+    assert len(profiles) == 1
+    assert '(allow file-read-data (literal "/"))' in profiles[0]
+    assert '(subpath "/")' not in profiles[0]
+
+
+@pytest.mark.parametrize("shell", [False, True])
+def test_seatbelt_preserves_validated_nested_cwd(tmp_path: Path, monkeypatch, shell):
+    workspace = tmp_path / "workspace"
+    nested = workspace / "nested space"
+    nested.mkdir(parents=True)
+    backend = SeatbeltBackend()
+    backend._executable = "/usr/bin/sandbox-exec"
+    monkeypatch.setattr(backend, "available", lambda: SandboxAvailability(
+        backend="seatbelt", available=True, reason="wrapper-only fixture", enforcement="partial"))
+    command = "pwd" if shell else ["/bin/pwd"]
+    request = ExecRequest(command=command, cwd=nested, shell=shell, timeout_s=7, interactive=True)
+    wrapped = backend.wrap(request, SandboxPolicy(workspace=workspace, writable=(workspace,)))
+    assert wrapped.cwd == nested.resolve()
+    assert wrapped.timeout_s == 7 and wrapped.interactive is True and wrapped.shell is False
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (workspace / "outside-link").symlink_to(outside, target_is_directory=True)
+    for invalid in (outside, workspace / "outside-link"):
+        with pytest.raises(ValueError, match="cwd must be a directory inside"):
+            backend.wrap(ExecRequest(command=command, cwd=invalid, shell=shell), SandboxPolicy(workspace=workspace))
+
+
+@pytest.mark.asyncio
+async def test_seatbelt_native_nested_cwd_and_relative_write(tmp_path: Path):
+    if sys.platform != "darwin":
+        pytest.skip("Seatbelt native integration is macOS-only")
+    workspace = tmp_path / "workspace"
+    nested = workspace / "nested space"
+    nested.mkdir(parents=True)
+    settings = settings_at(tmp_path, "careful")
+    settings.set("kernel.sandbox.mode", "required")
+    settings.set("kernel.sandbox.backend", "seatbelt")
+    service = SandboxService(settings, workspace)
+    service.register_backend(SeatbeltBackend(), "test-sandbox")
+    availability = service.availability()
+    if not availability.available:
+        pytest.skip(f"Seatbelt native qualification unavailable: {availability.reason}")
+    executor = service.wrap_executor(LocalExecutor(default_cwd=workspace))
+    proc = await executor.start(ExecRequest(command=["/bin/sh", "-c", "pwd; printf nested > inside.txt"], cwd=nested))
+    result = await proc.wait()
+    assert result.exit_code == 0, result.stderr
+    assert Path(result.stdout.strip()).resolve() == nested.resolve()
+    assert (nested / "inside.txt").read_text() == "nested"
+    assert not (workspace / "inside.txt").exists()
+    assert result.metadata["sandbox"]["enforcement"] == "partial"
+
+
+@pytest.mark.asyncio
+async def test_seatbelt_native_root_directory_permission_does_not_expose_outside_files(tmp_path: Path):
+    if sys.platform != "darwin":
+        pytest.skip("Seatbelt native integration is macOS-only")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside.txt"
+    outside.write_text("synthetic outside content")
+    marker = tmp_path / "outside-write.txt"
+    settings = settings_at(tmp_path, "careful")
+    settings.set("kernel.sandbox.mode", "required")
+    settings.set("kernel.sandbox.backend", "seatbelt")
+    service = SandboxService(settings, workspace)
+    service.register_backend(SeatbeltBackend(), "test-sandbox")
+    availability = service.availability()
+    if not availability.available:
+        pytest.skip(f"Seatbelt native qualification unavailable: {availability.reason}")
+    executor = service.wrap_executor(LocalExecutor(default_cwd=workspace))
+    proc = await executor.start(ExecRequest(
+        command=["/bin/sh", "-c", 'cat "$1"; printf changed > "$2"', "test", str(outside), str(marker)],
+        cwd=workspace,
+    ))
+    result = await proc.wait()
+    assert result.exit_code != 0
+    assert "synthetic outside content" not in result.stdout
+    assert outside.read_text() == "synthetic outside content"
+    assert not marker.exists()
+    assert result.metadata["sandbox"]["enforcement"] == "partial"
 
 
 def test_bwrap_builder_is_argv_based_workspace_only_and_network_off_by_default(tmp_path: Path, monkeypatch):

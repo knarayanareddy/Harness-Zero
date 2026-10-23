@@ -195,9 +195,12 @@ class ToolContextImpl(ToolContext):
         # separate from the turn-level cancellation signal: timing out one tool must not cancel the whole turn.
         self.deadline: float | None = None
         self.cancel_event = asyncio.Event()
+        self.cancel_reason: str | None = None
         self._turn_cancel_event = turn_cancel_event
         self._output_buffer: list[str] = []
         self._live_procs: list[Any] = []
+        self._termination_errors: list[str] = []
+        self._termination_tasks: set[asyncio.Task[int]] = set()
         self.call_id = call_id
         self.session_id = session_id
         self.turn_id = turn_id
@@ -278,19 +281,38 @@ class ToolContextImpl(ToolContext):
 
     async def terminate_tracked(self) -> int:
         """Best-effort kill of every still-running tracked process. Returns how many were alive."""
+        processes, self._live_procs = self._live_procs, []
+        if processes:
+            task = asyncio.create_task(self._terminate_snapshot(processes))
+            self._termination_tasks.add(task)
+            task.add_done_callback(self._termination_tasks.discard)
+        pending = tuple(self._termination_tasks)
+        if not pending:
+            return 0
+        # Ownership covers the WHOLE snapshot, not just whichever kill was
+        # active when the requesting task was cancelled.
+        return sum(await asyncio.shield(asyncio.gather(*pending)))
+
+    async def _terminate_snapshot(self, processes: list[Any]) -> int:
         alive = 0
-        for proc in self._live_procs:
+        for proc in processes:
             try:
                 if getattr(proc, "returncode", None) is None:
                     alive += 1
                 kill = getattr(proc, "kill", None)
                 if kill is not None:
-                    outcome = kill()
+                    try:
+                        outcome = kill(grace_s=0.5)
+                    except TypeError:
+                        outcome = kill()  # Raw asyncio Process used by embedders/tests.
                     if hasattr(outcome, "__await__"):
                         await outcome
+                wait = getattr(proc, "wait", None)
+                if callable(wait):
+                    await asyncio.wait_for(wait(), timeout=0.5)
             except Exception as err:  # noqa: BLE001 — cleanup must not mask the timeout
+                self._termination_errors.append(type(err).__name__)
                 logger.debug("terminate_tracked: %s", err)
-        self._live_procs.clear()
         return alive
 
     def emit_output_delta(self, stream: Literal["stdout", "stderr"], text: str) -> None:
@@ -460,8 +482,10 @@ class PolicyGate:
         if log is None or not kind:
             return None
         try:
-            await log.append(TranscriptRecord(kind=kind, role="system", content=content, metadata=metadata))
-            return log.records[-1]
+            from harness.kernel.transcript import record_at_step
+
+            step = await log.append(TranscriptRecord(kind=kind, role="system", content=content, metadata=metadata))
+            return record_at_step(log.records, step)
         except Exception as e:
             logger.warning(f"Could not record {kind} in the session log: {e}")
             return None
@@ -796,6 +820,7 @@ class PolicyGate:
                 timeout_s=float(timeout_s),
                 auto_approve=auto_approve,
                 session_id=session_id,
+                cancel_event=cancel_event,
             )
 
             if not approved:
@@ -909,25 +934,87 @@ class PolicyGate:
         # children either way. The result is the same text the model is told about (P1).
         grace_s = float(self.settings.get("kernel.limits.tool_grace_s", 5.0) or 0.0)
         tool_ctx.deadline = asyncio.get_running_loop().time() + float(spec.timeout_s)
-        task = asyncio.create_task(handler(current_args, tool_ctx))
+        async def run_handler() -> ToolResult:
+            # Run this check inside the scheduled task, not before create_task:
+            # cancellation may arrive between approval and the task's first step.
+            if cancel_event is not None and cancel_event.is_set():
+                return ToolResult.error("Tool execution cancelled before handler start", cancelled=True)
+            return await handler(current_args, tool_ctx)
+
+        task = asyncio.create_task(run_handler())
+        turn_cancel_task: asyncio.Task | None = None
+        if cancel_event is not None:
+            async def relay_turn_cancellation() -> None:
+                await cancel_event.wait()
+                tool_ctx.cancel_reason = "turn"
+                tool_ctx.cancel_event.set()
+
+            turn_cancel_task = asyncio.create_task(relay_turn_cancellation())
         timed_out = False
         try:
-            result = await asyncio.wait_for(asyncio.shield(task), timeout=spec.timeout_s)
+            waiters = {task}
+            if turn_cancel_task is not None:
+                waiters.add(turn_cancel_task)
+            done, _ = await asyncio.wait(waiters, timeout=spec.timeout_s, return_when=asyncio.FIRST_COMPLETED)
+            if cancel_event is not None and cancel_event.is_set():
+                tool_ctx.cancel_reason = "turn"
+                tool_ctx.cancel_event.set()
+                await tool_ctx.terminate_tracked()
+                try:
+                    result = await asyncio.wait_for(asyncio.shield(task), timeout=min(grace_s, 0.5))
+                except (TimeoutError, Exception):
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+                    result = ToolResult.error("Tool stopped after turn cancellation")
+                await tool_ctx.terminate_tracked()  # Include a child registered during startup/cleanup.
+                partial = tool_ctx.drain_output_buffer()
+                result = ToolResult(
+                    content=([TextBlock(text=partial)] if partial else []) + list(result.content),
+                    is_error=True,
+                    metadata={**dict(result.metadata), "cancelled": True, "effects_may_remain": True},
+                )
+                if tool_ctx._termination_errors:
+                    result.metadata.update(termination_confirmed=False, termination_errors=list(tool_ctx._termination_errors))
+            elif task in done:
+                result = task.result()
+            else:
+                raise TimeoutError
         except TimeoutError:
             timed_out = True
+            tool_ctx.cancel_reason = "timeout"
             tool_ctx.cancel_event.set()
             timeout_note = f"Tool '{spec.name}' exceeded {spec.timeout_s:g}s"
             returned_in_grace = False
             try:
                 # The handler may still return something useful inside the grace period.
-                result = await asyncio.wait_for(task, timeout=grace_s)
-                returned_in_grace = True
-            except (TimeoutError, asyncio.CancelledError):
+                grace_waiters = {task}
+                if turn_cancel_task is not None:
+                    grace_waiters.add(turn_cancel_task)
+                grace_done, _ = await asyncio.wait(grace_waiters, timeout=grace_s, return_when=asyncio.FIRST_COMPLETED)
+                if cancel_event is not None and cancel_event.is_set():
+                    tool_ctx.cancel_reason = "turn"
+                    task.cancel()
+                    await tool_ctx.terminate_tracked()
+                    await asyncio.gather(task, return_exceptions=True)
+                    result = ToolResult.error("Turn cancelled during tool timeout cleanup; partial effects may remain", cancelled=True)
+                elif task in grace_done:
+                    result = task.result()
+                    returned_in_grace = True
+                else:
+                    raise TimeoutError
+            except TimeoutError:
                 task.cancel()
                 # Await the cancellation so the handler's own cleanup runs before the turn moves on;
                 # gathering without it would leave a pending task nobody owns.
                 await asyncio.gather(task, return_exceptions=True)
                 result = ToolResult.error(f"{timeout_note} and was cancelled.")
+            except asyncio.CancelledError:
+                tool_ctx.cancel_reason = "turn"
+                tool_ctx.cancel_event.set()
+                task.cancel()
+                await tool_ctx.terminate_tracked()
+                await asyncio.gather(task, return_exceptions=True)
+                raise
             except Exception as err:  # noqa: BLE001 — the handler failing on the way out is not new info
                 task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
@@ -946,10 +1033,21 @@ class PolicyGate:
                 head = ""
             content = ([TextBlock(text=head)] if head else []) + list(result.content)
             result = ToolResult(content=content, is_error=True, metadata=metadata)
+        except asyncio.CancelledError:
+            tool_ctx.cancel_reason = "turn"
+            tool_ctx.cancel_event.set()
+            await tool_ctx.terminate_tracked()
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            await tool_ctx.terminate_tracked()
+            raise
         except Exception as err:
             logger.exception(f"Unhandled exception in tool '{spec.name}': {err}")
             result = ToolResult.error(f"{type(err).__name__}: {err}")
         finally:
+            if turn_cancel_task is not None:
+                turn_cancel_task.cancel()
+                await asyncio.gather(turn_cancel_task, return_exceptions=True)
             tool_ctx.deadline = None
             if not timed_out:
                 tool_ctx.drain_output_buffer()  # streamed output is already in the result; drop the copy

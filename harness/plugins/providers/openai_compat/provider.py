@@ -190,7 +190,23 @@ class OpenAICompatProvider:
             if msg.role == Role.SYSTEM:
                 messages.append({"role": "system", "content": msg.text()})
 
-            elif msg.role == Role.USER:
+            elif msg.role in (Role.USER, Role.TOOL):
+                results = [c for c in msg.content if isinstance(c, ToolResultBlock)]
+                for result in results:
+                    if any(isinstance(part, ImageBlock) for part in result.content):
+                        raise ProviderError(
+                            provider=self.name, model=req.model, kind="bad_request", retryable=False,
+                            message="This OpenAI-compatible Chat Completions adapter does not support tool-result images",
+                        )
+                    text = "\n".join(c.text for c in result.content if isinstance(c, TextBlock))
+                    if result.is_error:
+                        text = "[Tool error]\n" + text
+                    messages.append({"role": "tool", "tool_call_id": result.tool_use_id, "content": text})
+                # Canonical SDK continuations carry tool results in USER-role
+                # messages. Emit those first, before any ordinary user content,
+                # and do not fabricate an empty user turn for a result-only batch.
+                if msg.role == Role.TOOL or (results and len(results) == len(msg.content)):
+                    continue
                 has_images = any(isinstance(c, ImageBlock) for c in msg.content)
                 if not has_images:
                     messages.append({"role": "user", "content": msg.text()})
@@ -226,18 +242,6 @@ class OpenAICompatProvider:
                         for b in tool_use_blocks
                     ]
                 messages.append(m)
-
-            elif msg.role == Role.TOOL:
-                for c in msg.content:
-                    if isinstance(c, ToolResultBlock):
-                        tool_text = "\n".join(
-                            sub.text for sub in c.content if isinstance(sub, TextBlock)
-                        )
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": c.tool_use_id,
-                            "content": tool_text,
-                        })
 
         return messages
 

@@ -8,7 +8,7 @@ import logging
 from harness.sdk.context import PluginContext
 from harness.sdk.manifest import PluginManifest
 
-from .server import MCPServer
+from .server import MCPServer, resolve_expose_list
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +25,7 @@ class MCPServerBridgePlugin:
     async def setup(self, ctx: PluginContext) -> None:
         """Configures MCPServer with expose allow-list from settings."""
         settings = getattr(ctx, "settings", None)
-        expose_list: list[str] | None = None
-        if settings:
-            # Own namespace first, then the pre-0.2 spelling kept in older settings files.
-            expose_list = settings.get("expose") or settings.get("plugins.mcp-server.expose")
+        expose_list = resolve_expose_list(settings)
 
         # Expose provider reading tools from registry if available
         def _get_tools():

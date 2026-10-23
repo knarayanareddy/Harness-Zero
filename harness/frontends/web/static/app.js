@@ -238,6 +238,14 @@ export class HarnessStudioApp {
   }
 
   setupEventHandlers() {
+    // Session-only facts require correlation. Only explicitly opted-in workspace
+    // notifications may omit session_id; a foreign session never paints this view.
+    const onSessionEvent = (type, handler, allowUnscoped = false) => this.events.on(type, (data, envelope) => {
+      const sessionId = envelope?.session_id;
+      if (sessionId == null ? !allowUnscoped : sessionId !== this.activeSessionId) return;
+      handler(data, envelope);
+    });
+
     // Connection status indicators
     this.events.on('$connected', () => {
       this.setStatusIndicator('online', 'Connected');
@@ -252,23 +260,23 @@ export class HarnessStudioApp {
     });
 
     // Lifecycle events
-    this.events.on('turn.started', (data) => {
+    onSessionEvent('turn.started', () => {
       this.setBusy(true);
       this.appendTurnBlock('assistant');
     });
 
-    this.events.on('turn.completed', () => {
+    onSessionEvent('turn.completed', () => {
       this.setBusy(false);
       this.finalizeStreamingBlock();
     });
 
-    this.events.on('turn.cancelled', (data) => {
+    onSessionEvent('turn.cancelled', (data) => {
       this.setBusy(false);
       this.finalizeStreamingBlock();
       this.appendNotice(data.reason || 'Turn cancelled.', 'warn');
     });
 
-    this.events.on('turn.error', (data) => {
+    onSessionEvent('turn.error', (data) => {
       this.setBusy(false);
       this.finalizeStreamingBlock();
       this.appendNotice(data.message, 'error');
@@ -277,37 +285,37 @@ export class HarnessStudioApp {
     // Durable plugin facts carry their transcript record in the named SSE envelope. These listeners are
     // registered before `connect()`, and events.js also subscribes to the SDK's complete event vocabulary.
     this.events.on('system.notice', (data, envelope) => {
-      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.session_id != null && envelope.session_id !== this.activeSessionId) return;
       if (envelope?.record) this.renderRecord(envelope.record);
       else this.appendNotice(data?.message || 'The workspace operation needs attention.', data?.level || 'info');
     });
 
     for (const type of ['job.started', 'job.output', 'job.exited']) {
       this.events.on(type, (_data, envelope) => {
-        if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+        if (envelope?.session_id != null && envelope.session_id !== this.activeSessionId) return;
         this.panels?.refresh('jobs');
       });
     }
 
     this.events.on('workspace.changes', (_data, envelope) => {
-      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.session_id != null && envelope.session_id !== this.activeSessionId) return;
       if (envelope?.record) this.renderRecord(envelope.record);
       this.panels?.refresh('diffs');
     });
 
     this.events.on('deliverable.presented', (_data, envelope) => {
-      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.session_id != null && envelope.session_id !== this.activeSessionId) return;
       if (envelope?.record) this.renderRecord(envelope.record);
     });
 
     this.events.on('checkpoint.restored', (_data, envelope) => {
-      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.session_id != null && envelope.session_id !== this.activeSessionId) return;
       if (envelope?.record) this.renderRecord(envelope.record);
       this.panels?.refresh('diffs');
     });
 
     // Streaming Deltas
-    this.events.on('model.text.delta', (data) => {
+    onSessionEvent('model.text.delta', (data) => {
       if (!this.currentAssistantBlock) {
         this.appendTurnBlock('assistant');
       }
@@ -316,7 +324,7 @@ export class HarnessStudioApp {
       }
     });
 
-    this.events.on('model.thinking.delta', (data) => {
+    onSessionEvent('model.thinking.delta', (data) => {
       if (!this.currentAssistantBlock) {
         this.appendTurnBlock('assistant');
       }
@@ -325,7 +333,7 @@ export class HarnessStudioApp {
       }
     });
 
-    this.events.on('tool.output.delta', (data) => {
+    onSessionEvent('tool.output.delta', (data) => {
       // {call_id, stream, text}: streamed into the tool card it belongs to (there is no separate terminal).
       if (data.text) {
         this.appendToolOutput(data.call_id, data.text, data.stream);
@@ -343,7 +351,7 @@ export class HarnessStudioApp {
     });
 
     // Tool execution & cards
-    this.events.on('tool.call', (data) => {
+    onSessionEvent('tool.call', (data) => {
       // Text streamed before this call stays above the card; text from the next model
       // call starts a fresh block below it (model.text.delta creates one on demand).
       if (this.currentAssistantBlock) {
@@ -354,64 +362,62 @@ export class HarnessStudioApp {
       this.appendToolCall(data);
     });
 
-    this.events.on('tool.decision', (data) => {
+    onSessionEvent('tool.decision', (data) => {
       this.updateToolDecision(data);
     });
 
-    this.events.on('tool.result', (data) => {
+    onSessionEvent('tool.result', (data) => {
       this.updateToolResult(data);
     });
 
-    this.events.on('task.started', (data) => {
+    onSessionEvent('task.started', (data) => {
       this.appendTask(data);
     });
 
-    this.events.on('task.completed', (data) => {
+    onSessionEvent('task.completed', (data) => {
       this.completeTask(data);
     });
 
-    this.events.on('compaction.started', () => {
+    onSessionEvent('compaction.started', () => {
       this.appendNotice('Compacting context memory to optimize tokens...', 'info');
     });
 
-    this.events.on('compaction.completed', (data) => {
+    onSessionEvent('compaction.completed', (data) => {
       this.appendCard({ kind: 'compaction', data });
     });
 
-    this.events.on('ui.card', (data) => {
+    onSessionEvent('ui.card', (data) => {
       this.appendCard(data.card);
-    });
+    }, true);
 
     // Approvals
-    this.events.on('approval.required', (data) => {
+    onSessionEvent('approval.required', (data) => {
       this.showApproval(data);
     });
 
-    this.events.on('approval.resolved', (data) => {
+    onSessionEvent('approval.resolved', (data) => {
       this.resolveApprovalUI(data);
     });
 
     // A pending question and its answer are transcript records; paint the stored record so live and reload
     // share the same renderer and never invent a second client-side copy of the payload.
-    this.events.on('question.asked', (data, envelope) => {
-      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+    onSessionEvent('question.asked', (data, envelope) => {
       if (envelope?.record) this.renderRecord(envelope.record);
       else this.showQuestion(data);
     });
 
-    this.events.on('question.answered', (data, envelope) => {
-      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+    onSessionEvent('question.answered', (data, envelope) => {
       if (envelope?.record) this.renderRecord(envelope.record);
       else this.resolveQuestionUI(data);
     });
 
     // Economics
-    this.events.on('cost.updated', (data) => {
+    onSessionEvent('cost.updated', (data) => {
       this.updateEconomics(data);
     });
 
     // Context Assembler Inspector
-    this.events.on('context.assembled', (data) => {
+    onSessionEvent('context.assembled', (data) => {
       this.updateContextInspector(data);
     });
 
@@ -427,6 +433,7 @@ export class HarnessStudioApp {
 
     this.events.on('session.switched', (data) => {
       if (data.session_id === this.activeSessionId) return;
+      this.resetSessionView();
       this.activeSessionId = data.session_id;
       this.loadSessions();
       this.reloadTranscript();
@@ -1425,6 +1432,8 @@ export class HarnessStudioApp {
     }
     try {
       await this.api.switchSession(sessionId);
+      if (sessionId === this.activeSessionId) return;
+      this.resetSessionView();
       this.activeSessionId = sessionId;
       await this.loadSessions();
       await this.reloadTranscript();
@@ -1436,6 +1445,7 @@ export class HarnessStudioApp {
   async createNewSession() {
     try {
       const s = await this.api.createSession();
+      this.resetSessionView();
       this.activeSessionId = s.session_id;
       await this.loadSessions();
       await this.reloadTranscript();
@@ -1460,6 +1470,16 @@ export class HarnessStudioApp {
     } catch (err) {
       console.warn('Failed to reload transcript:', err);
     }
+  }
+
+  resetSessionView() {
+    this.finalizeStreamingBlock();
+    this.setBusy(false);
+    this.pendingQuestions.clear();
+    const approvalBanner = document.getElementById('approval-banner');
+    approvalBanner?.classList.add('hidden');
+    approvalBanner?.removeAttribute('data-request-id');
+    this.dismissProceedBanner();
   }
 
   // One renderer per fact (WS-04c). `sessions.get` returns the session log's records; each kind maps to

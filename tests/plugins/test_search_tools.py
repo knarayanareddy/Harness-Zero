@@ -15,7 +15,6 @@ from harness.kernel.jail import WorkspaceJail
 from harness.kernel.registry import PluginRegistry
 from harness.kernel.secrets import Secrets
 from harness.kernel.settings import SettingsStore
-from harness.plugins.executors.local.executor import LocalExecutor
 from harness.plugins.tools.search.tools import (
     SEARCH_CODEBASE_SPEC,
     handle_search_codebase,
@@ -122,16 +121,25 @@ async def test_search_python_fallback(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_search_with_executor_ripgrep(tmp_path: Path):
-    f = tmp_path / "sample.py"
+async def test_search_with_executor_still_uses_confined_reader(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    f = workspace / "sample.py"
     f.write_text("import os\nimport sys\n# TODO: implement logic\n", encoding="utf-8")
+    outside = tmp_path / "outside.txt"
+    outside.write_text("TODO: outside-canary logic")
+    (workspace / "linked.txt").symlink_to(outside)
 
-    executor = LocalExecutor(default_cwd=tmp_path)
-    ctx = DummySearchContext(workspace=tmp_path, executor=executor)
+    class UnusedExecutor:
+        async def start(self, request):
+            raise AssertionError("Search must not reopen mutable paths through a subprocess")
+
+    ctx = DummySearchContext(workspace=workspace, executor=UnusedExecutor())
 
     res = await handle_search_codebase({"query": "TODO.*logic"}, ctx)
     assert not res.is_error
     assert "TODO: implement logic" in res.output
+    assert "outside-canary" not in res.output
 
 
 @pytest.mark.asyncio

@@ -43,6 +43,7 @@ class InteractionRequest:
     approved: bool = False
     resolved_by: str = ""
     resolution_reason: str = ""
+    cancel_event: asyncio.Event | None = None
 
     @property
     def interaction_id(self) -> str:
@@ -84,6 +85,7 @@ class InteractionBroker:
         self.log_for = log_for
         self._pending: dict[str, InteractionRequest] = {}
         self._resolution_lock = asyncio.Lock()
+        self._cleanup_tasks: set[asyncio.Task[Any]] = set()
 
     async def _record(
         self,
@@ -99,10 +101,12 @@ class InteractionBroker:
             log = self.log_for(session_id)
             if log is None:
                 return None
-            await log.append(
+            from harness.kernel.transcript import record_at_step
+
+            step = await log.append(
                 TranscriptRecord(kind=kind, role="system", content=content, metadata=metadata)
             )
-            return log.records[-1]
+            return record_at_step(log.records, step)
         except Exception as err:  # pragma: no cover - a human decision must still settle on a log failure
             logger.warning("Could not record %s in the session log: %s", kind, err)
             return None
@@ -131,6 +135,8 @@ class InteractionBroker:
         """
         if kind not in ("approval", "question"):
             raise ValueError(f"unsupported interaction kind: {kind!r}")
+        if cancel_event is not None and cancel_event.is_set():
+            return (False, "Turn cancelled by user") if kind == "approval" else None
         if kind == "approval" and auto_approve:
             return True, "auto_approved"
 
@@ -163,16 +169,19 @@ class InteractionBroker:
             future=future,
             session_id=session_id,
             turn_id=turn_id,
+            cancel_event=cancel_event,
         )
         self._pending[request_id] = request
 
-        record = await self._record_request(request)
-        self._publish_asked(request, record)
-
         cancel_task: asyncio.Task[bool] | None = None
+        cleanup_task: asyncio.Task[Any] | None = None
         try:
+            # Persistence is part of the pending lifecycle too: cancellation
+            # here must not leave a registered request with no owning waiter.
+            record = await self._record_request(request)
+            self._publish_asked(request, record)
             waiters: set[asyncio.Future[Any] | asyncio.Task[bool]] = {future}
-            if kind == "question" and cancel_event is not None:
+            if cancel_event is not None:
                 cancel_task = asyncio.create_task(cancel_event.wait())
                 waiters.add(cancel_task)
             done, _pending = await asyncio.wait(
@@ -180,6 +189,12 @@ class InteractionBroker:
                 timeout=effective_timeout,
                 return_when=asyncio.FIRST_COMPLETED,
             )
+            # Cancellation wins over an answer delivered in the same loop turn.
+            if (cancel_event is not None and cancel_event.is_set()) or (cancel_task is not None and cancel_task in done):
+                if kind == "approval":
+                    return await asyncio.shield(self._cancel_approval(request))
+                await self.resolve_question(request_id, {}, status="cancelled", by="user", reason="Turn cancelled by user")
+                return None
             if future in done:
                 answer = future.result()
                 if kind == "question":
@@ -197,26 +212,48 @@ class InteractionBroker:
                 )
                 return None
 
-            return await self._timeout_approval(request)
+            return await asyncio.shield(self._timeout_approval(request))
         except asyncio.CancelledError:
-            if kind == "question" and not request.resolved:
-                await asyncio.shield(
-                    self.resolve_question(
-                        request_id,
-                        {},
-                        status="cancelled",
-                        by="user",
-                        reason="Question handler cancelled",
-                    )
-                )
+            if not request.resolved:
+                # The broker, not the repeatedly-cancelled requester, owns the
+                # terminal write. Keep its request registered until it settles.
+                request.resolving = True
+                async def finish_cancelled_request() -> None:
+                    try:
+                        if kind == "approval":
+                            await self._cancel_approval(request)
+                        else:
+                            await self.resolve_question(
+                                request_id, {}, status="cancelled", by="user",
+                                reason="Question handler cancelled",
+                            )
+                    finally:
+                        self._release_request(request)
+
+                cleanup_task = asyncio.create_task(finish_cancelled_request())
+                self._cleanup_tasks.add(cleanup_task)
+
+                def cleanup_finished(task: asyncio.Task[Any]) -> None:
+                    self._cleanup_tasks.discard(task)
+                    if not task.cancelled() and task.exception() is not None:
+                        logger.error("Interaction cancellation cleanup failed for %s: %r", request.id, task.exception())
+
+                cleanup_task.add_done_callback(cleanup_finished)
+                await asyncio.shield(cleanup_task)
             raise
         finally:
             if cancel_task is not None:
                 cancel_task.cancel()
                 await asyncio.gather(cancel_task, return_exceptions=True)
-            if not future.done():
-                future.cancel()
-            self._pending.pop(request_id, None)
+            if cleanup_task is None or cleanup_task.done():
+                self._release_request(request)
+
+    def _release_request(self, request: InteractionRequest) -> None:
+        """Release a waiter only after its owned terminal cleanup has finished."""
+        if not request.future.done():
+            request.future.cancel()
+        if self._pending.get(request.id) is request:
+            self._pending.pop(request.id, None)
 
     async def _record_request(self, request: InteractionRequest) -> dict[str, Any] | None:
         if request.interaction_type == "approval":
@@ -327,6 +364,21 @@ class InteractionBroker:
                 )
             return False, "timed out"
 
+    async def _cancel_approval(self, request: InteractionRequest) -> tuple[bool, str]:
+        """Persist cancellation once; a late positive resolution cannot replace it."""
+        reason = "Turn cancelled by user"
+        async with self._resolution_lock:
+            if not request.resolved:
+                request.resolving = True
+                record = await self._record(
+                    request.session_id, "approval.resolved", f"Cancelled: {request.summary}",
+                    {"approval_id": request.id, "call_id": request.call_id,
+                     "approval_kind": request.kind, "approved": False, "by": "user",
+                     "reason": reason, "status": "cancelled"},
+                )
+                self._settle_approval(request, False, "user", reason, request.session_id, record)
+        return False, reason
+
     async def resolve_approval_recorded(
         self,
         approval_id: str,
@@ -336,8 +388,21 @@ class InteractionBroker:
         session_id: str = "",
     ) -> bool:
         """Durably records an approval answer before settling its waiter and publishing the event."""
+        # Once persistence starts, an HTTP/CLI caller disappearing must not
+        # leave a claimed request permanently resolving. The waiter still
+        # observes turn cancellation independently and the gate rechecks it.
+        return await asyncio.shield(self._resolve_approval_recorded(
+            approval_id, approved, by=by, reason=reason, session_id=session_id,
+        ))
+
+    async def _resolve_approval_recorded(
+        self, approval_id: str, approved: bool, by: str, reason: str, session_id: str,
+    ) -> bool:
         async with self._resolution_lock:
             request = self._pending.get(approval_id)
+            if not self._can_resolve(request):
+                return False
+            request.resolving = True
             sid = session_id or (request.session_id if request else "")
             summary = request.summary if request else approval_id
             approval_kind = request.kind if request else "action"
@@ -354,14 +419,13 @@ class InteractionBroker:
                     "reason": reason,
                 },
             )
-            return self.resolve_approval(
-                approval_id,
-                approved,
-                by=by,
-                reason=reason,
-                session_id=sid,
-                record=record,
-            )
+            return self._settle_approval(request, approved, by, reason, sid, record)
+
+    @staticmethod
+    def _can_resolve(request: InteractionRequest | None) -> bool:
+        return bool(request is not None and request.interaction_type == "approval"
+                    and not request.resolved and not request.resolving and not request.future.done()
+                    and not (request.cancel_event is not None and request.cancel_event.is_set()))
 
     def resolve_approval(
         self,
@@ -374,18 +438,22 @@ class InteractionBroker:
     ) -> bool:
         """Synchronous compatibility path for CLI keypresses and existing embedders."""
         request = self._pending.get(approval_id)
-        if (
-            request is None
-            or request.interaction_type != "approval"
-            or request.resolved
-            or request.future.done()
-        ):
+        if not self._can_resolve(request):
             return False
+        return self._settle_approval(request, approved, by, reason, session_id, record)
+
+    def _settle_approval(
+        self, request: InteractionRequest, approved: bool, by: str, reason: str,
+        session_id: str, record: dict[str, Any] | None,
+    ) -> bool:
+        """Settle a claimed resolution without re-entering the public late-answer guard."""
         request.resolved = True
+        request.resolving = False
         request.approved = approved
         request.resolved_by = by
         request.resolution_reason = reason
-        request.future.set_result((approved, reason))
+        if not request.future.done():
+            request.future.set_result((approved, reason))
         if self.bus is not None:
             self.bus.publish(
                 Event(
@@ -393,7 +461,7 @@ class InteractionBroker:
                     type="approval.resolved",
                     session_id=session_id or request.session_id,
                     data=ApprovalResolved(
-                        approval_id=approval_id,
+                        approval_id=request.id,
                         approved=approved,
                         by=by,
                         reason=reason,
@@ -412,14 +480,23 @@ class InteractionBroker:
         reason: str = "",
     ) -> bool:
         """Validate and durably settle a pending question interaction."""
+        return await asyncio.shield(self._resolve_question(
+            interaction_id, answers, status=status, by=by, reason=reason,
+        ))
+
+    async def _resolve_question(
+        self, interaction_id: str, answers: dict[str, Any], *,
+        status: Literal["answered", "cancelled", "timeout"], by: str, reason: str,
+    ) -> bool:
         async with self._resolution_lock:
             request = self._pending.get(interaction_id)
             if (
                 request is None
                 or request.interaction_type != "question"
                 or request.resolved
-                or request.resolving
+                or (request.resolving and status != "cancelled")
                 or request.future.done()
+                or (status == "answered" and request.cancel_event is not None and request.cancel_event.is_set())
             ):
                 return False
             if status not in ("answered", "cancelled", "timeout"):

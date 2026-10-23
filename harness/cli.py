@@ -14,12 +14,10 @@ from typing import Any
 
 import click
 from rich.console import Console
-from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
 from harness import __version__
-from harness.frontends.cli import CliApp
 from harness.kernel.bootstrap import bootstrap_kernel
 from harness.kernel.presets import PRESET_ORDER
 from harness.sdk.errors import HarnessError, ProviderError
@@ -72,6 +70,10 @@ async def _run_kernel_turn(
     log_file: str | None,
     resume: bool = False,
 ):
+    from rich.markdown import Markdown
+
+    from harness.frontends.cli import CliApp
+
     try:
         overrides: dict[str, Any] = {}
         if mock_script:
@@ -143,6 +145,8 @@ async def _run_kernel_interactive(
     log_file: str | None,
     resume: bool = True,
 ):
+    from harness.frontends.cli import CliApp
+
     try:
         runtime = await bootstrap_kernel(
             workspace=workspace,
@@ -624,18 +628,179 @@ def mcp(ctx: click.Context, workspace: str):
     if ctx.invoked_subcommand is not None:
         return
     from harness.plugins.bridges.mcp_server import MCPServer, run_mcp_server_from_stdio
+    from harness.plugins.bridges.mcp_server.server import resolve_expose_list
 
     async def _run_server() -> None:
-        runtime = await bootstrap_kernel(workspace=workspace)
-        expose = runtime.settings.get("plugins.mcp-server.expose")
-        server = MCPServer(
-            tools_provider=lambda: [spec for spec, _, _ in runtime.registry.tools.values()],
-            tool_executor=lambda call: runtime.gate.execute_tool(call),
-            expose_list=expose,
-        )
-        await run_mcp_server_from_stdio(server)
+        runtime = await bootstrap_kernel(workspace=workspace, resume_session=False)
+        try:
+            # The stdio connection owns one session. Remote arguments cannot
+            # promote its principal into approval-bypass capabilities.
+            session = await runtime.session_manager.create_session(
+                metadata={"transport": "mcp_stdio", "principal": "mcp_stdio"},
+            )
+            await session.log.load(compact=False)
+
+            expose = resolve_expose_list(runtime.settings)
+            execute_tool = _make_mcp_tool_executor(runtime.gate, session)
+            server = MCPServer(
+                tools_provider=lambda: [spec for spec, _, _ in runtime.registry.tools.values()],
+                tool_executor=execute_tool,
+                expose_list=expose,
+                cancellable_tool_executor=execute_tool,
+            )
+            await run_mcp_server_from_stdio(server)
+        finally:
+            await runtime.registry.unload_all()
 
     asyncio.run(_run_server())
+
+
+def _sanitize_mcp_audit_value(
+    value: Any, secret_values: tuple[str, ...] | list[str], *, _forms: tuple[str, ...] | None = None,
+) -> Any:
+    """Redact an audit-only JSON copy without changing the arguments sent to the gate."""
+    from harness.kernel.sanitizer import sanitize_output
+
+    if _forms is None:
+        import json
+
+        forms = set()
+        for secret in secret_values:
+            if isinstance(secret, str) and len(secret) >= 6:
+                forms.update((secret, repr(secret), json.dumps(secret, ensure_ascii=True)))
+        _forms = tuple(sorted(forms, key=lambda item: (-len(item), item)))
+    if isinstance(value, str):
+        # Schema errors can quote/escape the invalid value. Mask complete known
+        # representations before generic patterns can replace only a prefix.
+        for secret in _forms:
+            value = value.replace(secret, "[REDACTED SECRET]")
+        return sanitize_output(value)
+    if isinstance(value, dict):
+        return {
+            _sanitize_mcp_audit_value(key, secret_values, _forms=_forms) if isinstance(key, str) else key:
+            _sanitize_mcp_audit_value(item, secret_values, _forms=_forms)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize_mcp_audit_value(item, secret_values, _forms=_forms) for item in value]
+    return value
+
+
+def _make_mcp_tool_executor(gate: Any, session: Any):
+    """Build the stdio executor with durable canonical MCP call/result records."""
+    from dataclasses import replace
+
+    from harness.sdk.types import TextBlock, ToolResult, ToolResultBlock, TranscriptRecord
+
+    fenced = False
+    fenced_message = "MCP transcript append failed; this connection is fenced."
+
+    async def _execute_tool(call, cancel_event: asyncio.Event | None = None):
+        nonlocal fenced, fenced_message
+        if fenced:
+            raise RuntimeError(fenced_message)
+
+        # Discovery failures stop before audit persistence or handler admission;
+        # silently using an empty mask set could write credentials to disk.
+        try:
+            secret_values = gate.secrets.redaction_values()
+        except Exception:
+            # Filesystem diagnostics can contain the private configuration path.
+            # No effect or call append has started, so return only that safe fact.
+            return ToolResult.error("MCP credential discovery failed; execution was not started")
+        audit_metadata = {
+            "origin": "external_mcp",
+            "model_generated": False,
+            "transport": "mcp_stdio",
+            "principal": "mcp_stdio",
+            "call_id": call.id,
+            "tool_name": call.name,
+        }
+        call_record = TranscriptRecord(
+            # Canonical tool-use carrier; provenance above explicitly says this
+            # is an external invocation, not a model-generated utterance/usage.
+            kind="assistant.message",
+            role="assistant",
+            tool_calls=[{
+                "id": call.id,
+                "name": call.name,
+                "arguments": _sanitize_mcp_audit_value(call.arguments, secret_values),
+            }],
+            metadata=audit_metadata,
+        )
+        async with session.turn_lock():
+            try:
+                # The owned transcript append completes before the gate can start a handler.
+                await session.log.append(call_record)
+            except asyncio.CancelledError:
+                raise
+            except Exception as err:
+                fenced = True
+                fenced_message = (
+                    "MCP tool call could not be durably recorded; execution was not started and this connection is fenced."
+                )
+                raise RuntimeError(
+                    fenced_message
+                ) from err
+
+            if cancel_event is not None and cancel_event.is_set():
+                result = ToolResult.error("Tool call cancelled before execution")
+            else:
+                try:
+                    result = await gate.execute(
+                        call,
+                        options={},
+                        session_id=session.session_id,
+                        turn_id=f"mcp-turn-{call.id}",
+                        principal_capabilities=frozenset(),
+                        turn_state={"records": session.log.records},
+                        log=session.log,
+                        cancel_event=cancel_event,
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    # Preserve call/result pairing without exposing exception text or implying
+                    # that an action which raised after starting had no effects.
+                    result = ToolResult.error("Tool execution failed; effect status may be uncertain")
+
+            try:
+                # Tools can resolve an arbitrary environment-backed credential
+                # during execution; discover again before persisting the result.
+                result_secrets = (*secret_values, *gate.secrets.redaction_values())
+                result_block = ToolResultBlock(
+                    tool_use_id=call.id,
+                    content=[
+                        replace(block, text=_sanitize_mcp_audit_value(block.text, result_secrets))
+                        if isinstance(block, TextBlock) else block
+                        for block in result.content
+                    ],
+                    is_error=result.is_error,
+                )
+                result_record = TranscriptRecord(
+                    kind="tool.result",
+                    role="user",
+                    tool_results=[result_block.to_dict()],
+                    metadata={**audit_metadata, "is_error": result.is_error},
+                )
+                # Early gate errors need their own redacted audit copy. Retain
+                # typed blocks, not metadata's potentially unsized full_content.
+                await session.log.append(result_record)
+            except asyncio.CancelledError:
+                fenced = True
+                fenced_message = (
+                    "MCP transcript append failed; a tool effect may have occurred and this connection is fenced."
+                )
+                raise
+            except Exception as err:
+                fenced = True
+                fenced_message = (
+                    "MCP transcript append failed; a tool effect may have occurred and this connection is fenced."
+                )
+                raise RuntimeError(fenced_message) from err
+            return result
+
+    return _execute_tool
 
 
 @mcp.command(name="status")
@@ -684,16 +849,20 @@ def mcp_status(ctx: click.Context, workspace: str | None) -> None:
 @main.command()
 @click.option("--workspace", "-w", default=".", help="Workspace path")
 def acp(workspace: str):
-    """Run Harness as an Agent Client Protocol stdio server for IDE editors."""
+    """Run the internal legacy ACP-compatible stdio frontend."""
     from harness.plugins.bridges.acp.server import run_acp_server_from_stdio
 
     async def _run():
-        runtime = await bootstrap_kernel(workspace=workspace)
-        await run_acp_server_from_stdio(commands=runtime.commands, bus=runtime.bus)
+        # ACP connections own only sessions they explicitly create; never reuse the
+        # workspace's active/resumed session implicitly.
+        runtime = await bootstrap_kernel(workspace=workspace, resume_session=False)
+        try:
+            await run_acp_server_from_stdio(commands=runtime.commands, bus=runtime.bus)
+        finally:
+            await runtime.registry.unload_all()
 
     asyncio.run(_run())
 
 
 if __name__ == "__main__":
     main()
-

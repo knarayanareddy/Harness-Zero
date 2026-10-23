@@ -76,8 +76,11 @@ class SingleLoopStrategy:
             if not tool_use_blocks:
                 # No tool calls: check for pending background tasks
                 pending = k.pending_tasks()
-                if pending and turn.options.get("wait_for_background", True):
-                    wait_s = turn.options.get("background_wait_s", 600.0)
+                if turn.options.get("wait_for_background", True):
+                    # A process may have exited while the model/record commit
+                    # ran. Consume a queued completion even with no live tasks;
+                    # only wait when there is still an active task to finish.
+                    wait_s = turn.options.get("background_wait_s", 600.0) if pending else 0.0
                     wakeup = await k.wait_for_wakeup(timeout_s=wait_s)
                     if wakeup:
                         wakeup_msg = Message(

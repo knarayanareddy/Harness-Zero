@@ -119,6 +119,7 @@ async def test_server_startup_and_daemon_json(
     finally:
         await server.stop()
 
+
     assert not (workspace_dir / ".harness" / "daemon.json").exists()
 
 
@@ -298,11 +299,17 @@ async def test_sandbox_origin_csp_and_artifact_serving(
         (artifacts_dir / "preview.html").write_text("<h1>Report</h1>", encoding="utf-8")
 
         async with httpx.AsyncClient() as client:
-            # 1. API index has frame-src pointing to sandbox
+            # 1. API index can frame same-origin sandboxed viewer routes and the separate sandbox origin.
             res_api = await client.get(f"{api_url}/")
             assert res_api.status_code == 200
             csp_api = res_api.headers.get("Content-Security-Policy", "")
-            assert f"frame-src http://127.0.0.1:{server.sandbox_port}" in csp_api
+            frame_src = next(
+                (directive.strip() for directive in csp_api.split(";") if directive.strip().startswith("frame-src ")),
+                "",
+            )
+            assert "'self'" in frame_src
+            assert f"http://127.0.0.1:{server.sandbox_port}" in frame_src
+            assert f"http://localhost:{server.sandbox_port}" in frame_src
 
             # 2. Sandbox has strict CSP (no scripts, connect-src none, frame-ancestors API)
             res_sb = await client.get(f"{sb_url}/artifacts/preview.html")
@@ -781,4 +788,3 @@ async def test_turn_in_progress_is_409_over_http(commands: Commands, event_bus: 
             assert res.json()["status"] == "error"
     finally:
         await server.stop()
-

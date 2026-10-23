@@ -126,7 +126,7 @@
       "payload": "CompactionCompleted",
       "durable": true,
       "record_kind": "compaction.summary",
-      "carries_record": false,
+      "carries_record": true,
       "transient": false
     },
     "compaction.started": {

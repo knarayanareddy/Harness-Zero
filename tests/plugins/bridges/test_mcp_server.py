@@ -34,6 +34,7 @@ async def test_mcp_server_in_memory_protocol():
     server = MCPServer(
         tools_provider=lambda: dummy_tools,
         tool_executor=_exec,
+        expose_list=["echo_test"],
     )
 
     # 1. Initialize

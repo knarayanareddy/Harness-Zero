@@ -218,7 +218,7 @@ class MCPClient:
             # A server may implement another MCP feature without advertising tools.
             current_tools = []
 
-        if initial or self._tools is None:
+        if initial:
             self._tools = copy.deepcopy(current_tools)
             await self._set_status("connected", error=None)
             return

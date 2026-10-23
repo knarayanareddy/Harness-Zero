@@ -191,19 +191,27 @@ async def handle_run_command(args: dict[str, Any], ctx: ToolContext) -> ToolResu
     )
 
     if cancel_wait is not None and cancel_wait in done:
-        with contextlib.suppress(Exception):
+        confirmed = True
+        try:
             await proc.kill(grace_s=0.5)
             await proc.wait()
+        except Exception:
+            confirmed = False
+        wait_proc_task.cancel()
+        await asyncio.gather(wait_proc_task, return_exceptions=True)
         drain_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await drain_task
         out = "".join(stdout_acc)
         err = "".join(stderr_acc)
         body = out + (f"\n[stderr]\n{err}" if err else "")
+        reason = "the turn was cancelled; partial effects may remain" if getattr(ctx, "cancel_reason", None) == "turn" else "the tool call exceeded its deadline"
+        state = "stopped" if confirmed else "stop requested; termination unconfirmed"
         return ToolResult.text(
-            (body or "(no output)") + "\n[stopped: the tool call exceeded its deadline]",
+            (body or "(no output)") + f"\n[{state}: {reason}]",
             is_error=True,
             cancelled=True,
+            termination_confirmed=confirmed,
             sandbox=getattr(proc, "sandbox", None),
         )
     if cancel_wait is not None:
@@ -219,9 +227,11 @@ async def handle_run_command(args: dict[str, Any], ctx: ToolContext) -> ToolResu
             full = f"{out}\n[stderr]\n{err}" if out else err
         if not full.strip():
             full = f"(Command exited with code {res.exit_code} and no output)"
+        if res.metadata.get("output_error"):
+            full += f"\n[output stream failed: {res.metadata['output_error']}; process-group stop requested]"
         return ToolResult.text(
             full,
-            is_error=(res.exit_code != 0),
+            is_error=(res.exit_code != 0 or bool(res.metadata.get("output_error"))),
             exit_code=res.exit_code,
             duration_ms=res.duration_ms,
             sandbox=res.metadata.get("sandbox", getattr(proc, "sandbox", None)),

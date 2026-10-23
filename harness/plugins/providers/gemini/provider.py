@@ -4,15 +4,18 @@ Absorbs MDL-03 (Gemini) and Decision D6.
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import logging
 import time
 from collections.abc import AsyncIterator
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
-from harness.sdk.errors import ProviderError, ProviderErrorKind
+from harness.sdk.errors import ProviderError
 from harness.sdk.types import (
     Done,
     ImageBlock,
@@ -88,20 +91,26 @@ class GeminiProvider:
         self.timeout_s = timeout_s
         self.extra_headers = extra_headers or {}
         self._external_client = client is not None
-        self._client: httpx.AsyncClient = client or httpx.AsyncClient(
-            timeout=httpx.Timeout(
-                connect=10.0,
-                read=timeout_s,
-                write=30.0,
-                pool=10.0,
-            )
+        self._client: httpx.AsyncClient | None = client
+        self._owned_client_closed = False
+        self._client_timeout = httpx.Timeout(
+            connect=10.0, read=timeout_s, write=30.0, pool=10.0,
         )
         self._cached_models: list[ModelInfo] | None = None
         self._cached_models_ts: float = 0.0
 
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._owned_client_closed:
+            raise RuntimeError("Provider is closed")
+        if self._client is None:
+            self._client = httpx.AsyncClient(timeout=self._client_timeout)
+        return self._client
+
     async def aclose(self) -> None:
-        if not self._external_client and not self._client.is_closed:
-            await self._client.aclose()
+        if not self._external_client:
+            self._owned_client_closed = True
+            if self._client is not None and not self._client.is_closed:
+                await self._client.aclose()
 
     def is_configured(self) -> bool:
         """An API key is required (an injected client counts as configured for tests)."""
@@ -124,7 +133,7 @@ class GeminiProvider:
 
         try:
             headers = {"x-goog-api-key": self.api_key, **self.extra_headers}
-            resp = await self._client.get(f"{self.base_url}/models", headers=headers)
+            resp = await self._get_client().get(f"{self.base_url}/models", headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
                 raw_models = data.get("models", [])
@@ -151,14 +160,86 @@ class GeminiProvider:
         self._cached_models_ts = now
         return DEFAULT_GEMINI_MODELS
 
+    def _image_part(self, block: ImageBlock, model: str) -> dict[str, Any]:
+        media_type = block.media_type.lower()
+        inline_types = {"image/png", "image/jpeg", "image/webp", "image/heic", "image/heif"}
+        url_types = {"image/bmp", "image/png", "image/jpeg", "image/webp"}
+        if (block.data_b64 is None) == (block.url is None):
+            raise ProviderError(
+                provider=self.name, model=model, kind="bad_request",
+                message="Gemini image requires exactly one of data_b64 or url",
+            )
+        if block.url is not None:
+            if media_type not in url_types:
+                raise ProviderError(
+                    provider=self.name, model=model, kind="bad_request",
+                    message=f"Gemini external image URLs do not support media type {block.media_type!r}",
+                )
+            model_name = model.rsplit("/", 1)[-1]
+            if model_name.startswith("gemini-2.0"):
+                raise ProviderError(
+                    provider=self.name, model=model, kind="bad_request",
+                    message="Gemini 2.0 models do not support external image URLs",
+                )
+            try:
+                parsed_url = urlsplit(block.url)
+                hostname = parsed_url.hostname
+                if parsed_url.netloc.endswith(":"):
+                    raise ValueError("empty URL port")
+                port = parsed_url.port
+                if port is not None and not 0 <= port <= 65535:
+                    raise ValueError("URL port is out of range")
+            except ValueError as err:
+                raise ProviderError(
+                    provider=self.name, model=model, kind="bad_request", retryable=False,
+                    message="Gemini external image url must have a valid authority",
+                ) from err
+            if parsed_url.scheme != "https" or not hostname:
+                raise ProviderError(
+                    provider=self.name, model=model, kind="bad_request", retryable=False,
+                    message="Gemini external image url must be an absolute HTTPS URL with a hostname",
+                )
+            return {"fileData": {"mimeType": media_type, "fileUri": block.url}}
+        if media_type not in inline_types:
+            raise ProviderError(
+                provider=self.name, model=model, kind="bad_request",
+                message=f"Gemini does not support image media type {block.media_type!r}",
+            )
+        if block.data_b64 is None:
+            raise ProviderError(provider=self.name, model=model, kind="bad_request", message="Gemini image requires data_b64")
+        try:
+            if not block.data_b64:
+                raise ValueError("empty base64 image")
+            base64.b64decode(block.data_b64, validate=True)
+        except (binascii.Error, ValueError) as err:
+            raise ProviderError(
+                provider=self.name, model=model, kind="bad_request",
+                message="Gemini image data_b64 must be valid standard base64",
+            ) from err
+        return {"inlineData": {"mimeType": media_type, "data": block.data_b64}}
+
+    @staticmethod
+    def _effective_model_id(model: str) -> str:
+        model_id = model or "gemini-2.0-flash"
+        for prefix in ("gemini/", "google/"):
+            if model_id.startswith(prefix):
+                return model_id[len(prefix):]
+        return model_id
+
     def _prepare_payload(self, req: ModelRequest) -> dict[str, Any]:
         """Constructs Gemini streamGenerateContent request body."""
         payload: dict[str, Any] = {}
+        model_id = self._effective_model_id(req.model)
 
         # 1. System instructions
         system_texts: list[str] = [b.text for b in req.system if b.text]
         for m in req.messages:
             if m.role == Role.SYSTEM:
+                if any(isinstance(c, ImageBlock) for c in m.content):
+                    raise ProviderError(
+                        provider=self.name, model=model_id, kind="bad_request",
+                        message="Gemini system instructions support text only, not image blocks",
+                    )
                 for c in m.content:
                     if isinstance(c, TextBlock) and c.text:
                         system_texts.append(c.text)
@@ -202,12 +283,7 @@ class GeminiProvider:
                     if c.text:
                         parts.append({"text": c.text})
                 elif isinstance(c, ImageBlock):
-                    parts.append({
-                        "inlineData": {
-                            "mimeType": c.media_type,
-                            "data": c.data,
-                        }
-                    })
+                    parts.append(self._image_part(c, model_id))
                 elif isinstance(c, ToolUseBlock):
                     parts.append({
                         "functionCall": {
@@ -216,6 +292,11 @@ class GeminiProvider:
                         }
                     })
                 elif isinstance(c, ToolResultBlock):
+                    if any(isinstance(block, ImageBlock) for block in c.content):
+                        raise ProviderError(
+                            provider=self.name, model=model_id, kind="bad_request",
+                            message="This Gemini adapter does not support tool result images",
+                        )
                     fn_name = tool_id_to_name.get(c.tool_use_id, c.tool_use_id)
                     out_text = "\n".join(b.text for b in c.content if isinstance(b, TextBlock))
                     parts.append({
@@ -258,12 +339,7 @@ class GeminiProvider:
 
     async def generate(self, req: ModelRequest) -> AsyncIterator[ModelEvent]:
         """Streams ModelEvents from Gemini streamGenerateContent."""
-        model_id = req.model or "gemini-2.0-flash"
-        # Strip provider prefix if present
-        if model_id.startswith("gemini/"):
-            model_id = model_id[len("gemini/"):]
-        elif model_id.startswith("google/"):
-            model_id = model_id[len("google/"):]
+        model_id = self._effective_model_id(req.model)
 
         payload = self._prepare_payload(req)
         url = f"{self.base_url}/models/{model_id}:streamGenerateContent?alt=sse"
@@ -274,24 +350,11 @@ class GeminiProvider:
         }
 
         try:
-            req_network = self._client.build_request("POST", url, json=payload, headers=headers)
-            resp = await self._client.send(req_network, stream=True)
-        except httpx.TimeoutException as exc:
-            raise ProviderError(
-                provider=self.name,
-                model=model_id,
-                kind=ProviderErrorKind.TIMEOUT,
-                message=f"Gemini API timeout: {exc}",
-                retryable=True,
-            ) from exc
-        except httpx.NetworkError as exc:
-            raise ProviderError(
-                provider=self.name,
-                model=model_id,
-                kind=ProviderErrorKind.NETWORK,
-                message=f"Gemini connection failure: {exc}",
-                retryable=True,
-            ) from exc
+            client = self._get_client()
+            req_network = client.build_request("POST", url, json=payload, headers=headers)
+            resp = await client.send(req_network, stream=True)
+        except httpx.TransportError as exc:
+            raise self._transport_error(exc, model_id) from exc
 
         if resp.status_code != 200:
             error_body = ""
@@ -356,8 +419,21 @@ class GeminiProvider:
                             )
 
             yield Done(stop_reason=finish_reason)
+        except httpx.TransportError as exc:
+            raise self._transport_error(exc, model_id) from exc
         finally:
             await resp.aclose()
+
+    def _transport_error(self, exc: httpx.TransportError, model: str) -> ProviderError:
+        """Map HTTPX transport failures into the SDK's provider error vocabulary."""
+        timed_out = isinstance(exc, httpx.TimeoutException)
+        return ProviderError(
+            provider=self.name,
+            model=model,
+            kind="timeout" if timed_out else "unavailable",
+            message=f"Gemini API timeout: {exc}" if timed_out else f"Gemini connection failure: {exc}",
+            retryable=True,
+        )
 
     def _handle_error_status(self, status: int, error_body: str, model: str) -> None:
         """Maps HTTP status and error body into typed ProviderError."""

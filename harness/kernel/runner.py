@@ -12,14 +12,14 @@ from typing import Any
 
 from harness.kernel.breaker import CircuitBreaker
 from harness.kernel.bus import EventBus
-from harness.kernel.compaction import Compactor, estimate_request_tokens
+from harness.kernel.compaction import CompactionError, Compactor, estimate_request_tokens
 from harness.kernel.context import ContextAssembler, HookContextImpl, TurnContextImpl
 from harness.kernel.economics import economics_snapshot
 from harness.kernel.gate import PolicyGate
 from harness.kernel.inbox import BackgroundInbox, WakeupEvent
 from harness.kernel.registry import PluginRegistry
 from harness.kernel.settings import SettingsStore
-from harness.kernel.transcript import TranscriptAppendError, TranscriptLog
+from harness.kernel.transcript import TranscriptAppendError, TranscriptLog, record_at_step
 from harness.sdk.contracts import CostLedger, Provider, SearchIndex, Strategy, TranscriptStore
 from harness.sdk.errors import ProviderError, SpendCapExceeded
 from harness.sdk.events import (
@@ -110,9 +110,9 @@ class SingleLoopStrategy:
             if not tool_use_blocks:
                 # No tool calls: check if pending background tasks and wait policy
                 pending = k.pending_tasks()
-                if pending and turn.options.get("wait_for_background", True):
+                if turn.options.get("wait_for_background", True):
                     wakeup = await k.wait_for_wakeup(
-                        timeout_s=turn.options.get("background_wait_s", 600.0)
+                        timeout_s=turn.options.get("background_wait_s", 600.0) if pending else 0.0
                     )
                     if wakeup:
                         wakeup_msg = Message(
@@ -231,6 +231,7 @@ class KernelServicesImpl:
         # Turn state
         self._pending_model_completed: Any = None
         self.turn_cost_usd: float = 0.0
+        self.compaction_usage = Usage()
         self.turn_unknown_pricing: bool = False
         # WS-04: the transcript log is the source of truth; there is no parallel in-memory record list
         # any more. `log.records` is the log's own read-through cache, appended to by `record()`.
@@ -297,20 +298,35 @@ class KernelServicesImpl:
             return False
         # Collect current messages
         req = await self.assemble_context()
-        all_blocks = req.system + [
-            TextBlock(text=m.text()) for m in req.messages
-        ]
+        all_blocks = req.system + req.messages
         # Check budget trigger via compactor
         provider_name = self.options.get("provider", "")
         provider = self._resolve_provider(provider_name)
-        return await self.compactor.maybe_compact(
+        work = asyncio.create_task(self.compactor.maybe_compact(
             session_id=self.session.session_id,
             blocks=all_blocks,
             records=self.log.records,
             provider=provider,
             model=req.model,
             bus=self.bus,
-        )
+            log=self.log,
+            hook_ctx=HookContextImpl(
+                session_id=self.session.session_id, workspace=self.session.workspace,
+                turn_id=self.turn_id, turn_state=self.turn_state, log=self.log,
+                bus=self.bus, settings=self.settings,
+            ),
+            on_usage=self._account_compaction_usage,
+        ))
+        stopped = asyncio.create_task(self.cancel.wait())
+        try:
+            await asyncio.wait({work, stopped}, return_when=asyncio.FIRST_COMPLETED)
+            if self.cancel.is_set():
+                raise asyncio.CancelledError
+            return work.result()
+        finally:
+            work.cancel()
+            stopped.cancel()
+            await asyncio.gather(work, stopped, return_exceptions=True)
 
     async def assemble_context(
         self, *, tools: list[ToolSpec] | None = None
@@ -491,9 +507,35 @@ class KernelServicesImpl:
                 self.breaker.record_failure(provider.name, req.model, err)
             raise
 
-        # Cost accounting & spend cap enforcement. Unknown pricing stays None (never 0.0) so the
-        # ledger, the economics command and the cost.updated event agree on "unknown".
-        call_cost = await self._calculate_cost(provider, req.model, usage)
+        usage = await self._account_model_usage(provider, req.model, usage)
+
+        # `model.completed` is durable, so it is not published yet: the assistant record it names does not
+        # exist until the strategy records the message, and an event that points at nothing would be the
+        # second source of truth. `record()` emits it with the stored record attached; the flush in
+        # `execute_turn` guarantees a turn that never recorded still tells the client the call finished.
+        self._pending_model_completed = ModelCompleted(stop_reason=stop_reason, usage=usage)
+
+        content_blocks = []
+        if thinking_parts:
+            content_blocks.append(ThinkingBlock(text="".join(thinking_parts)))
+        if text_parts:
+            content_blocks.append(TextBlock(text="".join(text_parts)))
+        for tc in tool_calls_dict.values():
+            content_blocks.append(ToolUseBlock(id=tc.id, name=tc.name, input=tc.arguments))
+
+        return Message(
+            role=Role.ASSISTANT,
+            content=content_blocks,
+            metadata={"usage": usage.to_dict(), "stop_reason": stop_reason},
+        )
+
+    async def _account_compaction_usage(self, usage: Usage) -> None:
+        priced = await self._account_model_usage(self._resolve_provider(), self.options.get("model") or self.settings.get("kernel.model"), usage)
+        self.compaction_usage = self.compaction_usage + priced
+
+    async def _account_model_usage(self, provider: Provider, model: str, usage: Usage) -> Usage:
+        """Share ledger, unknown-pricing and spend-cap handling across both inference paths."""
+        call_cost = await self._calculate_cost(provider, model, usage)
         usage = Usage(
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
@@ -509,7 +551,7 @@ class KernelServicesImpl:
         if self.cost_ledger:
             try:
                 await self.cost_ledger.record(
-                    model=req.model,
+                    model=model,
                     provider=provider.name,
                     usage=usage,
                     turn_id=self.turn_id,
@@ -539,25 +581,7 @@ class KernelServicesImpl:
                 f"Turn spend of ${self.turn_cost_usd:.4f} exceeded configured spend cap of ${self.spend_cap_usd:.2f}"
             )
 
-        # `model.completed` is durable, so it is not published yet: the assistant record it names does not
-        # exist until the strategy records the message, and an event that points at nothing would be the
-        # second source of truth. `record()` emits it with the stored record attached; the flush in
-        # `execute_turn` guarantees a turn that never recorded still tells the client the call finished.
-        self._pending_model_completed = ModelCompleted(stop_reason=stop_reason, usage=usage)
-
-        content_blocks = []
-        if thinking_parts:
-            content_blocks.append(ThinkingBlock(text="".join(thinking_parts)))
-        if text_parts:
-            content_blocks.append(TextBlock(text="".join(text_parts)))
-        for tc in tool_calls_dict.values():
-            content_blocks.append(ToolUseBlock(id=tc.id, name=tc.name, input=tc.arguments))
-
-        return Message(
-            role=Role.ASSISTANT,
-            content=content_blocks,
-            metadata={"usage": usage.to_dict(), "stop_reason": stop_reason},
-        )
+        return usage
 
     async def execute_tool(self, call: ToolCall) -> ToolResult:
         """Executes a single tool call via the PolicyGate.
@@ -636,7 +660,7 @@ class KernelServicesImpl:
         # the model act on a conversation that no longer exists anywhere — and the turn would look
         # normal until someone reloaded the session and found half of it missing.
         step_idx = await self.log.append(rec)
-        rec = self.log.records[-1]
+        rec = record_at_step(self.log.records, step_idx)
 
         # Pair the model call with its record: `model.completed` waits here so the event and the log agree
         # on what the assistant said, in that order. Only the assistant message the stream produced carries
@@ -774,12 +798,12 @@ class TurnRunner:
             "job_ids": job_ids,
         }
         try:
-            await services.log.append_notice(message, metadata=metadata)
+            notice_step = await services.log.append_notice(message, metadata=metadata)
         except TranscriptAppendError as err:
             # Do not acknowledge the notice: the durable job state remains available for the next turn.
             logger.warning("Could not persist pending job notice for %s: %s", session_id, err)
             return
-        record = services.log.records[-1] if services.log.records else None
+        record = record_at_step(services.log.records, notice_step)
         if self.bus is not None:
             self.bus.publish(
                 Event(
@@ -837,10 +861,10 @@ class TurnRunner:
             return None
         content, metadata = _marker_fields(kind, data)
         try:
-            await services.log.append(
+            step = await services.log.append(
                 TranscriptRecord(kind=kind, role="system", content=content, metadata=metadata)
             )
-            return services.log.records[-1]
+            return record_at_step(services.log.records, step)
         except Exception as e:
             logger.warning(f"Could not append the {kind} marker to the session log: {e}")
             return None
@@ -878,6 +902,23 @@ class TurnRunner:
         return False
 
     async def execute_turn(
+        self,
+        session: SessionInfo,
+        prompt: str,
+        media: list[ImageBlock] | None = None,
+        options: dict[str, Any] | None = None,
+        cancel_event: asyncio.Event | None = None,
+        depth: int = 0,
+    ) -> TurnResult:
+        """Own the cancellation entry through terminal hooks and all exit paths."""
+        cancel = cancel_event if cancel_event is not None else asyncio.Event()
+        try:
+            return await self._execute_turn(session, prompt, media, options, cancel, depth)
+        finally:
+            if self._active_cancels.get(session.session_id) is cancel:
+                self._active_cancels.pop(session.session_id, None)
+
+    async def _execute_turn(
         self,
         session: SessionInfo,
         prompt: str,
@@ -971,7 +1012,7 @@ class TurnRunner:
         if media:
             user_blocks.extend(media)
         try:
-            await services.record(Message(role=Role.USER, content=user_blocks))
+            prompt_step = await services.record(Message(role=Role.USER, content=user_blocks))
         except TranscriptAppendError as e:
             return await self._fail_closed(session.session_id, turn_id, services, e)
 
@@ -986,7 +1027,7 @@ class TurnRunner:
                 model=model_name,
                 options=turn_options,
             ),
-            record=services.log.records[-1] if services.log.records else None,
+            record=record_at_step(services.log.records, prompt_step),
         )
 
         # 4. Fire USER_PROMPT_SUBMIT hooks
@@ -1009,15 +1050,27 @@ class TurnRunner:
             stop_hooks_ran = True
             stop_payload = {"output": output, "terminal": terminal, "turn_id": turn_id}
             for stop_hook in self.registry.get_hooks_for_event(HookEvent.STOP):
+                hook_task = asyncio.create_task(stop_hook.on(HookEvent.STOP, stop_payload, hook_ctx))
+                stop_cancel = asyncio.create_task(cancel.wait()) if not cancel.is_set() else None
                 try:
-                    await asyncio.wait_for(
-                        stop_hook.on(HookEvent.STOP, stop_payload, hook_ctx),
-                        timeout=stop_hook.timeout_s,
-                    )
+                    waiters = {hook_task}
+                    if stop_cancel is not None:
+                        waiters.add(stop_cancel)
+                    done, _ = await asyncio.wait(waiters, timeout=stop_hook.timeout_s, return_when=asyncio.FIRST_COMPLETED)
+                    if stop_cancel is not None and cancel.is_set():
+                        return
+                    if hook_task not in done:
+                        raise TimeoutError("STOP hook exceeded its deadline")
+                    hook_task.result()
                 except asyncio.CancelledError:
-                    logger.warning("STOP hook '%s' was cancelled", stop_hook.name)
+                    raise  # An outer deadline/Task.cancel must never become success.
                 except Exception as err:
                     logger.warning("Error in STOP hook '%s': %s", stop_hook.name, err)
+                finally:
+                    hook_task.cancel()
+                    if stop_cancel is not None:
+                        stop_cancel.cancel()
+                    await asyncio.gather(hook_task, *([stop_cancel] if stop_cancel is not None else []), return_exceptions=True)
 
         hooks = self.registry.get_hooks_for_event(HookEvent.USER_PROMPT_SUBMIT)
         for h in hooks:
@@ -1038,6 +1091,8 @@ class TurnRunner:
                     await run_stop_hooks(terminal="hook_blocked")
                     return TurnResult(output="", error=err_msg, stop_reason="cancelled")
             except asyncio.CancelledError:
+                if stop_hooks_ran:
+                    raise  # A hook-blocked terminal path must not swallow STOP cancellation.
                 await self._announce(
                     services=services,
                     session_id=session.session_id,
@@ -1086,6 +1141,13 @@ class TurnRunner:
             )
             await run_stop_hooks(terminal="spend_cap_exceeded")
             return TurnResult(output="", error=str(e), stop_reason="spend_cap_exceeded")
+        except CompactionError as e:
+            await self._announce(
+                services=services, session_id=session.session_id, turn_id=turn_id,
+                data=TurnError(message=str(e), kind="compaction_error", retryable=False), marker=True,
+            )
+            await run_stop_hooks(terminal="compaction_error")
+            return TurnResult(output="", error=str(e), stop_reason="error")
         except ProviderError as e:
             logger.warning(f"Provider configuration error: {e}")
             await self._announce(
@@ -1120,7 +1182,6 @@ class TurnRunner:
             # owes the client its `model.completed`; flushing here keeps the event from vanishing while
             # `record()` keeps it ordered after the record it points at.
             await services.flush_pending_model_completed()
-            self._active_cancels.pop(session.session_id, None)
 
         # Check if cancelled during strategy
         if cancel.is_set():
@@ -1137,7 +1198,19 @@ class TurnRunner:
             return TurnResult(output="Turn cancelled", stop_reason="cancelled")
 
         # 7. STOP hooks run on every terminal path, before the final marker on success.
+        result.usage = result.usage + services.compaction_usage
         await run_stop_hooks(result.output, terminal="completed")
+
+        if cancel.is_set():
+            await self._announce(
+                services=services, session_id=session.session_id, turn_id=turn_id,
+                data=TurnCancelled(reason="Turn cancelled during terminal hooks"), marker=True,
+            )
+            return TurnResult(output="Turn cancelled; partial effects may remain", stop_reason="cancelled")
+        # Terminal success is now committed; subsequent cancel requests must not
+        # claim acceptance while the final audit marker is being written.
+        if self._active_cancels.get(session.session_id) is cancel:
+            self._active_cancels.pop(session.session_id, None)
 
         # 8. Record how the turn ended, then announce it (WS-04: log first, event second).
         duration_ms = int((time.time() - start_time) * 1000)

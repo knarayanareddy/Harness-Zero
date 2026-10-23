@@ -142,10 +142,12 @@ class _PluginCommandRuntime:
         event_type = getattr(type(payload), "EVENT_TYPE", None)
         if not kind or not event_type:
             raise HarnessError(f"Payload {type(payload).__name__} is not a durable event")
-        await session.log.append(
+        from harness.kernel.transcript import record_at_step
+
+        step = await session.log.append(
             TranscriptRecord(kind=kind, role="system", content=content, metadata=dict(metadata))
         )
-        record = session.log.records[-1]
+        record = record_at_step(session.log.records, step)
         if self._commands.bus is not None:
             self._commands.bus.publish(
                 Event(

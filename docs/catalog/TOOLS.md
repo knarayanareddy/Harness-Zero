@@ -44,7 +44,7 @@ The committed catalogue is generated from the Linux runtime. Plugins that regist
 - **`read_resource`** — Reads content from an external Model Context Protocol resource URI. Required: `uri`.
 - **`remember`** — Stores a persistent fact, preference, or architectural decision across sessions. Required: `text`.
 - **`run_command`** — Runs a shell command in the workspace via the executor with real-time output streaming and background transition. Required: none.
-- **`search_codebase`** — Searches files across the workspace using regex pattern matching with ripgrep or Python fallback. Required: none.
+- **`search_codebase`** — Searches regular workspace files using regex matching without following symlinks. Required: none.
 - **`search_memory`** — Searches remembered facts and previous session turns/transcripts using full-text search. Required: `query`.
 - **`view_file`** — Reads and displays the contents of a file in the workspace with optional line ranges. Required: `file_path`.
 - **`view_skill`** — Loads and displays the complete playbook instructions and methodology for a specialized skill. Required: `skill_name`.

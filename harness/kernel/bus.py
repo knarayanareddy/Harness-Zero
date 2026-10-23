@@ -131,7 +131,8 @@ class EventBus:
                 same_call = sub._last_delta.data.get("call_id") == event.data.get("call_id")
                 same_stream = sub._last_delta.data.get("stream") == event.data.get("stream")
                 same_turn = sub._last_delta.turn_id == event.turn_id
-                if same_call and same_stream and same_turn:
+                same_session = sub._last_delta.session_id == event.session_id
+                if same_call and same_stream and same_turn and same_session:
                     prev_text = sub._last_delta.data.get("text", "")
                     new_text = event.data.get("text", "")
                     # `_last_delta` is this subscriber's private copy (see below), so the

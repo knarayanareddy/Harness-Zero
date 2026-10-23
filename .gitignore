@@ -53,3 +53,9 @@ htmlcov/
 /artifacts/
 *.spec
 node_modules/
+
+# Private local verification evidence and credentials
+/parent.evidence/
+.env
+.env.*
+!.env.example

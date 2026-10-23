@@ -4,6 +4,8 @@ Supports local models via /v1/chat/completions with native tools and automatic X
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import logging
 import time
@@ -91,22 +93,28 @@ class OllamaProvider:
         self.base_url = base_url.rstrip("/")
         self.timeout_s = timeout_s
         self._external_client = client is not None
-        self._client: httpx.AsyncClient = client or httpx.AsyncClient(
-            timeout=httpx.Timeout(
-                connect=10.0,
-                read=timeout_s,
-                write=30.0,
-                pool=10.0,
-            )
+        self._client: httpx.AsyncClient | None = client
+        self._owned_client_closed = False
+        self._client_timeout = httpx.Timeout(
+            connect=10.0, read=timeout_s, write=30.0, pool=10.0,
         )
         # One probe feeds both is_reachable() and list_models(): (timestamp, up?, installed models)
         self._probe_ts: float = 0.0
         self._probe_up: bool | None = None
         self._installed: list[ModelInfo] = []
 
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._owned_client_closed:
+            raise RuntimeError("Provider is closed")
+        if self._client is None:
+            self._client = httpx.AsyncClient(timeout=self._client_timeout)
+        return self._client
+
     async def aclose(self) -> None:
-        if not self._external_client and not self._client.is_closed:
-            await self._client.aclose()
+        if not self._external_client:
+            self._owned_client_closed = True
+            if self._client is not None and not self._client.is_closed:
+                await self._client.aclose()
 
     def is_configured(self) -> bool:
         """Ollama needs no credentials; whether it is *running* is `is_reachable()`'s answer."""
@@ -120,7 +128,7 @@ class OllamaProvider:
         up = False
         installed: list[ModelInfo] = []
         try:
-            resp = await self._client.get(f"{self.base_url}/api/tags", timeout=self.PROBE_TIMEOUT_S)
+            resp = await self._get_client().get(f"{self.base_url}/api/tags", timeout=self.PROBE_TIMEOUT_S)
             if resp.status_code == 200:
                 up = True
                 for m in resp.json().get("models", []):
@@ -149,6 +157,31 @@ class OllamaProvider:
             return list(self._installed)
         return list(DEFAULT_OLLAMA_MODELS)
 
+    def _image_part(self, block: ImageBlock, model: str) -> dict[str, Any]:
+        media_type = block.media_type.lower()
+        if media_type not in {"image/png", "image/jpeg"}:
+            raise ProviderError(
+                provider=self.name, model=model, kind="bad_request",
+                message=f"Ollama OpenAI-compatible vision supports only documented PNG/JPEG inputs, not {block.media_type!r}",
+            )
+        if block.url is not None:
+            raise ProviderError(
+                provider=self.name, model=model, kind="bad_request",
+                message="Ollama OpenAI-compatible vision does not support image URL sources; provide data_b64",
+            )
+        if block.data_b64 is None:
+            raise ProviderError(provider=self.name, model=model, kind="bad_request", message="Ollama image requires data_b64")
+        try:
+            if not block.data_b64:
+                raise ValueError("empty base64 image")
+            base64.b64decode(block.data_b64, validate=True)
+        except (binascii.Error, ValueError) as err:
+            raise ProviderError(
+                provider=self.name, model=model, kind="bad_request",
+                message="Ollama image data_b64 must be valid standard base64",
+            ) from err
+        return {"type": "image_url", "image_url": f"data:{media_type};base64,{block.data_b64}"}
+
     def _prepare_payload(self, req: ModelRequest, use_xml_tools: bool = False) -> dict[str, Any]:
         """Prepares OpenAI-compatible payload, either with native tools or XML prompt fallback."""
         messages: list[dict[str, Any]] = []
@@ -163,6 +196,11 @@ class OllamaProvider:
 
         # History messages
         for m in req.messages:
+            if m.role != Role.USER and any(isinstance(c, ImageBlock) for c in m.content):
+                raise ProviderError(
+                    provider=self.name, model=req.model, kind="bad_request",
+                    message="Ollama OpenAI-compatible vision supports images only in user messages",
+                )
             if m.role == Role.SYSTEM:
                 content_text = "\n".join(b.text for b in m.content if isinstance(b, TextBlock))
                 if content_text:
@@ -174,11 +212,13 @@ class OllamaProvider:
                     if isinstance(c, TextBlock):
                         text_accum.append(c.text)
                     elif isinstance(c, ImageBlock):
-                        parts.append({
-                            "type": "image_url",
-                            "image_url": {"url": f"data:{c.media_type};base64,{c.data}"},
-                        })
+                        parts.append(self._image_part(c, req.model))
                     elif isinstance(c, ToolResultBlock):
+                        if any(isinstance(block, ImageBlock) for block in c.content):
+                            raise ProviderError(
+                                provider=self.name, model=req.model, kind="bad_request",
+                                message="This Ollama OpenAI-compatible adapter does not support tool result images",
+                            )
                         out_text = "\n".join(b.text for b in c.content if isinstance(b, TextBlock))
                         if use_xml_tools:
                             text_accum.append(
@@ -269,8 +309,9 @@ class OllamaProvider:
         payload = self._prepare_payload(req, use_xml_tools=False)
 
         try:
-            req_obj = self._client.build_request("POST", url, json=payload, headers=headers)
-            resp = await self._client.send(req_obj, stream=True)
+            client = self._get_client()
+            req_obj = client.build_request("POST", url, json=payload, headers=headers)
+            resp = await client.send(req_obj, stream=True)
         except httpx.TimeoutException as exc:
             raise ProviderError(
                 provider=self.name,
@@ -301,8 +342,8 @@ class OllamaProvider:
             logger.info("Ollama native tools returned 400; retrying with XML fallback protocol: %s", err_body)
             xml_payload = self._prepare_payload(req, use_xml_tools=True)
             try:
-                req_obj = self._client.build_request("POST", url, json=xml_payload, headers=headers)
-                resp = await self._client.send(req_obj, stream=True)
+                req_obj = client.build_request("POST", url, json=xml_payload, headers=headers)
+                resp = await client.send(req_obj, stream=True)
             except Exception as exc:
                 raise ProviderError(
                     provider=self.name,

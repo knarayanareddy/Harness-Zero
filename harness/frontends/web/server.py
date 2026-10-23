@@ -234,7 +234,7 @@ class HarnessWebServer:
                 "img-src 'self' data: blob:; "
                 "style-src 'self' 'unsafe-inline'; "
                 "script-src 'self'; "
-                f"frame-src {sb_origin_127} {sb_origin_local}; "
+                f"frame-src 'self' {sb_origin_127} {sb_origin_local}; "
                 "frame-ancestors 'none'; "
                 "connect-src 'self' ws:;"
             )

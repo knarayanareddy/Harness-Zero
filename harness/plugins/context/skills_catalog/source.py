@@ -10,19 +10,16 @@ from typing import Any
 
 import yaml
 
+from harness.sdk.skill_resources import iter_skill_contents
 from harness.sdk.types import ContextBlock, Stability
 
 logger = logging.getLogger(__name__)
 
 
-def parse_skill_meta(skill_dir: Path) -> dict[str, str] | None:
-    """Reads metadata from SKILL.md in a skill directory."""
-    skill_file = skill_dir / "SKILL.md"
-    if not skill_file.exists():
-        return None
-
+def parse_skill_meta(skill_file: Path, content: str) -> dict[str, str] | None:
+    """Parse already-confined content; the display path is never reopened."""
+    skill_dir = skill_file.parent
     try:
-        content = skill_file.read_text(encoding="utf-8")
         if content.startswith("---"):
             parts = content.split("---", 2)
             if len(parts) >= 3:
@@ -50,28 +47,10 @@ def discover_skills(workspace: Path | None = None) -> list[dict[str, str]]:
     """Discovers skills from builtin and workspace locations."""
     skills_map: dict[str, dict[str, str]] = {}
 
-    search_dirs: list[Path] = []
-
-    # 1. Built-in skills (locate relative to repo / package)
-    builtin_skills = Path(__file__).resolve().parents[4] / "builtin" / "skills"
-    if builtin_skills.exists():
-        search_dirs.append(builtin_skills)
-
-    # 2. Workspace skills
-    if workspace:
-        harness_skills = workspace / ".harness" / "skills"
-        if harness_skills.exists():
-            search_dirs.append(harness_skills)
-        ws_skills = workspace / "skills"
-        if ws_skills.exists():
-            search_dirs.append(ws_skills)
-
-    for base in search_dirs:
-        for entry in sorted(base.iterdir()):
-            if entry.is_dir():
-                meta = parse_skill_meta(entry)
-                if meta and meta["name"] not in skills_map:
-                    skills_map[meta["name"]] = meta
+    for path, content in iter_skill_contents(workspace):
+        meta = parse_skill_meta(path, content)
+        if meta and meta["name"] not in skills_map:
+            skills_map[meta["name"]] = meta
 
     return sorted(skills_map.values(), key=lambda s: s["name"])
 

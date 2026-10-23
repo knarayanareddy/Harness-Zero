@@ -120,7 +120,7 @@ def test_transient_events_name_no_record() -> None:
 def test_events_that_carry_a_record_are_the_durable_ones(tmp_path: Path) -> None:
     """`carries_record` is not decoration: exactly the events that write a record attach one.
 
-    The two exceptions named in the schema (`tool.result`, `compaction.completed`) pair by id instead —
+    The exception named in the schema (`tool.result`) pairs by id instead —
     `tool.result` because a strategy batches a step's results into one record, which is the shape a
     provider requires. That pairing is asserted in `test_tool_result_events_pair_with_the_log`.
     """
@@ -286,7 +286,86 @@ async def test_a_clean_log_is_left_alone(tmp_path: Path) -> None:
         await rt.registry.unload_all()
 
 
+@pytest.mark.asyncio
+async def test_every_dangling_call_is_closed_durably_and_returned(tmp_path: Path) -> None:
+    rt, _provider, sub, _ws = await _boot(tmp_path, [[Done(stop_reason="end_turn")]])
+    try:
+        session = await rt.session_manager.create_session()
+        log = session.log
+        await log.append({"v": 2, "kind": "assistant.message", "role": "assistant", "tool_calls": [
+            {"id": "c1", "name": "view_file", "arguments": {"file_path": "app.py"}},
+            {"id": "c2", "name": "view_file", "arguments": {"file_path": "app.py"}},
+        ]})
+        repaired = await log.repair_dangling_tool_calls()
+        assert [r["metadata"]["call_id"] for r in repaired] == ["c1", "c2"]
+        assert all(r["metadata"]["synthetic"] and r["tool_results"][0]["is_error"] for r in repaired)
+        assert log.dangling_tool_calls() == []
+        assert await log.repair_dangling_tool_calls() == []
+        stored = await log.read(compact=False)
+        assert [r for r in stored if r.get("metadata", {}).get("synthetic")] == repaired
+    finally:
+        if sub is not None:
+            rt.bus.unsubscribe(sub)
+        await rt.registry.unload_all()
+
+
 # --------------------------------------------------------------------------- the pairings and the new facts
+
+
+@pytest.mark.asyncio
+async def test_repair_restart_between_individual_results_is_idempotent(tmp_path: Path) -> None:
+    from harness.kernel.transcript import TranscriptAppendError, TranscriptLog
+    from harness.plugins.stores.jsonl_transcript.store import JsonlTranscriptStore
+
+    store = JsonlTranscriptStore(tmp_path)
+    log = TranscriptLog(store, session_id="restart")
+    await log.append({"role": "assistant", "tool_calls": [
+        {"id": "first", "name": "never_execute"}, {"id": "second", "name": "never_execute"},
+    ]})
+
+    class InterruptedStore:
+        async def append(self, data):
+            if data.get("metadata", {}).get("call_id") == "second":
+                raise OSError("synthetic crash before second repair")
+            return await store.append(data)
+
+    log._store = InterruptedStore()
+    with pytest.raises(TranscriptAppendError):
+        await log.repair_dangling_tool_calls()
+    persisted = await store.read(compact=False)
+    assert [r["metadata"]["call_id"] for r in persisted if r.get("metadata", {}).get("synthetic")] == ["first"]
+    restarted = TranscriptLog(JsonlTranscriptStore(tmp_path), session_id="restart")
+    await restarted.load()
+    repairs = await restarted.repair_dangling_tool_calls()
+    assert [r["metadata"]["call_id"] for r in repairs] == ["second"]
+    assert await restarted.repair_dangling_tool_calls() == []
+    for compact in (False, True):
+        rows = await restarted.read(compact=compact)
+        synthetic = [r for r in rows if r.get("metadata", {}).get("synthetic")]
+        assert [r["metadata"]["call_id"] for r in synthetic] == ["first", "second"]
+        assert all(r["tool_results"][0]["is_error"] for r in synthetic)
+
+
+@pytest.mark.asyncio
+async def test_repair_returns_own_receipts_with_interleaved_notice(tmp_path: Path, monkeypatch) -> None:
+    from harness.kernel.transcript import TranscriptLog
+    from harness.plugins.stores.jsonl_transcript.store import JsonlTranscriptStore
+
+    log = TranscriptLog(JsonlTranscriptStore(tmp_path))
+    await log.append({"role": "assistant", "tool_calls": [{"id": "c1", "name": "never_execute"}]})
+    append = log.append
+
+    async def interleaved(record):
+        step = await append(record)
+        await append({"role": "system", "kind": "system.notice", "content": "later notice"})
+        return step
+
+    monkeypatch.setattr(log, "append", interleaved)
+    repairs = await log.repair_dangling_tool_calls()
+    assert len(repairs) == 1
+    assert repairs[0]["step_index"] == 2
+    assert repairs[0]["metadata"]["call_id"] == "c1"
+    assert repairs[0]["kind"] == "tool.result"
 
 
 @pytest.mark.asyncio

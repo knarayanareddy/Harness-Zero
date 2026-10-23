@@ -2,7 +2,7 @@
 name = "search-tools"
 version = "1.0.0"
 api_version = "1"
-summary = "High-performance codebase regex search tool with ripgrep and Python fallback"
+summary = "Descriptor-confined workspace regex search without following discovered symlinks"
 provides = ["tool"]
-capabilities = ["fs:read", "exec"]
+capabilities = ["fs:read"]
 entry = "harness.plugins.tools.search.plugin:SearchToolsPlugin"
