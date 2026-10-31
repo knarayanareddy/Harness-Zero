@@ -2653,8 +2653,7 @@
     },
     {
       "capabilities": [
-        "fs:read",
-        "exec"
+        "fs:read"
       ],
       "entry": "harness.plugins.tools.search.plugin:SearchToolsPlugin",
       "family": "tools",
@@ -2668,7 +2667,7 @@
       "readme_sections": [],
       "requires": [],
       "settings_schema": null,
-      "summary": "High-performance codebase regex search tool with ripgrep and Python fallback",
+      "summary": "Descriptor-confined workspace regex search without following discovered symlinks",
       "tier": "builtin",
       "version": "1.0.0"
     },
@@ -4985,7 +4984,7 @@
         "read_only": false,
         "title": null
       },
-      "description": "Searches files across the workspace using regex pattern matching with ripgrep or Python fallback.",
+      "description": "Searches regular workspace files using regex matching without following symlinks.",
       "input_properties": [
         "Query",
         "case_sensitive",

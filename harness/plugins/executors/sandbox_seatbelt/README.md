@@ -18,8 +18,8 @@ The plugin implements the SDK `SandboxBackend` contract and registers it through
 
 ## Model experience
 
-The generated profile allows process creation, reads from system runtime paths and the workspace, writes only within the workspace plus the private temporary directory, and denies network access by default. An approved unconfined fallback is reported as `enforcement: none`; the kernel never substitutes the host executor when `required` confinement is unavailable.
+The generated profile allows process creation, reads from system runtime paths and the workspace, writes within the workspace plus the allowed `/private/tmp` path, and denies network access by default. It preserves the validated requested working directory, including nested paths; outside cwd and outward symlink targets are rejected. An approved unconfined fallback is reported as `enforcement: none`; the kernel never substitutes the host executor when `required` confinement is unavailable.
 
 ## Known limitations
 
-Apple has deprecated `sandbox-exec`, so availability is based on a live profile probe and may change across macOS releases. This backend is not independently exercised on the current Linux host, and the repository's automated integration test currently covers real bubblewrap confinement only; a successful profile probe alone does not prove every filesystem rule on macOS. Adding broad extra-readable paths exposes those files to the child process and changes the reported enforcement to `partial`.
+Apple has deprecated `sandbox-exec`, so availability is based on a live profile probe and may change across macOS releases. Seatbelt does not create a private filesystem namespace. Loader bootstrap may read the exact root directory, not its descendants. Native nested-cwd/relative-write and outside-file denial tests pass on the current Mac; these do not prove every filesystem or network rule on all macOS versions. Adding broad extra-readable paths exposes those files to the child process; enforcement remains `partial`. See `docs/testing/T11_CONFINED_CWD.md` for scoped native evidence and remaining qualification limits.

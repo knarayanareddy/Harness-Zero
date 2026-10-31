@@ -16,6 +16,7 @@ from harness.kernel.registry import PluginRegistry
 from harness.kernel.secrets import Secrets
 from harness.kernel.settings import SettingsStore
 from harness.plugins.providers.ollama.provider import DEFAULT_OLLAMA_MODELS, OllamaProvider
+from harness.plugins.providers.ollama.xml_protocol import XmlStreamParser
 from harness.sdk.testing import ProviderKit
 from harness.sdk.types import (
     Done,
@@ -24,6 +25,7 @@ from harness.sdk.types import (
     ModelRequest,
     Role,
     TextBlock,
+    TextDelta,
     ThinkingDelta,
     ToolCallEnd,
     ToolSpec,
@@ -183,6 +185,124 @@ async def test_ollama_xml_fallback_on_http_400():
     assert len(tool_calls) == 1
     assert tool_calls[0].name == "run_command"
     assert tool_calls[0].arguments == {"command": "git status"}
+
+
+def test_ollama_xml_parser_handles_split_tool_closing_tag():
+    source = 'before<tool_call>{"name":"echo","arguments":{"text":"hi"}}</tool_call>after'
+    closing_tag = "</tool_call>"
+    split_at = source.index(closing_tag) + 5
+    parser = XmlStreamParser()
+
+    events = parser.feed(source[:split_at])
+    events.extend(parser.feed(source[split_at:]))
+    events.extend(parser.flush())
+
+    assert any(isinstance(event, ToolCallEnd) and event.name == "echo" for event in events)
+    assert "".join(event.text for event in events if isinstance(event, TextDelta)) == "beforeafter"
+
+
+def test_ollama_xml_parser_is_independent_of_every_byte_split():
+    source = (
+        'before<think>reasoning</think>between'
+        '<tool_call>{"name":"echo","arguments":{"text":"ok"}}</tool_call>after'
+    )
+
+    def parse(chunks: list[str]) -> list[tuple[object, ...]]:
+        parser = XmlStreamParser()
+        events = []
+        for chunk in chunks:
+            events.extend(parser.feed(chunk))
+        events.extend(parser.flush())
+        normalized: list[tuple[object, ...]] = []
+        for event in events:
+            if isinstance(event, (TextDelta, ThinkingDelta)):
+                kind = "text" if isinstance(event, TextDelta) else "thinking"
+                if normalized and normalized[-1][0] == kind:
+                    normalized[-1] = (kind, normalized[-1][1] + event.text)
+                else:
+                    normalized.append((kind, event.text))
+            elif isinstance(event, ToolCallEnd):
+                normalized.append(("tool", event.id, event.name, event.arguments))
+        return normalized
+
+    expected = parse([source])
+    assert expected == [
+        ("text", "before"),
+        ("thinking", "reasoning"),
+        ("text", "between"),
+        ("tool", "xml_call_1", "echo", {"text": "ok"}),
+        ("text", "after"),
+    ]
+    for split in range(1, len(source.encode("utf-8"))):
+        assert parse([source[:split], source[split:]]) == expected, f"split at byte {split}"
+    assert parse(list(source)) == expected
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        '<tool_call>{not-json}</tool_call>',
+        '<tool_call>{"name":"echo","arguments":[]}</tool_call>',
+        '<tool_call>{"name":"echo","arguments":"not-json"}</tool_call>',
+        '<tool_call>{"name":"echo","arguments":{}}',
+        "<tool_call>[]</tool_call>",
+        "<tool_call>",
+        "<tool_cal",
+    ],
+)
+def test_ollama_xml_parser_rejects_malformed_or_incomplete_tool_markup(source: str):
+    parser = XmlStreamParser()
+
+    with pytest.raises(ValueError, match="tool_call"):
+        parser.feed(source)
+        parser.flush()
+
+
+def test_ollama_xml_parser_bounds_unterminated_tool_call_buffer():
+    parser = XmlStreamParser()
+    oversized_call = "<tool_call>" + ("x" * (64 * 1024 + 1))
+
+    with pytest.raises(ValueError, match="too large"):
+        parser.feed(oversized_call)
+
+    assert parser.buffer == ""
+    assert parser.tool_buffer == ""
+
+
+@pytest.mark.parametrize("source", ["comparison: 2 <", "literal <t", "plain <"])
+def test_ollama_xml_parser_preserves_plain_text_angle_brackets_at_eof(source):
+    parser = XmlStreamParser()
+    events = parser.feed(source) + parser.flush()
+    assert "".join(event.text for event in events if isinstance(event, TextDelta)) == source
+    assert not [event for event in events if isinstance(event, ToolCallEnd)]
+
+
+def test_ollama_xml_parser_accepts_json_object_encoded_arguments_without_coercion():
+    parser = XmlStreamParser()
+    body = json.dumps({"name": "echo", "arguments": json.dumps({"text": "ok"})})
+    events = parser.feed("<tool_call>" + body + "</tool_call>") + parser.flush()
+    assert len(events) == 1 and isinstance(events[0], ToolCallEnd)
+    assert events[0].arguments == {"text": "ok"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("markup", ['<tool_call>{bad}</tool_call>', '<tool_call>{"name":"echo","arguments":{}}'])
+async def test_ollama_xml_failure_propagates_through_adapter_without_success(markup):
+    chunks = ["data: " + json.dumps({"choices": [{"delta": {"content": markup}}]}),
+              'data: {"choices": [{"delta": {}, "finish_reason": "stop"}]}', "data: [DONE]"]
+    transport, captured = make_mock_ollama_transport([
+        (400, '{"error":"tools are not supported"}'), (200, chunks)])
+    async with httpx.AsyncClient(transport=transport) as client:
+        provider = OllamaProvider(client=client)
+        request = ModelRequest(model="fixture", system=[], params=ModelParams(),
+            tools=[ToolSpec(name="echo", description="fixture", input_schema={"type": "object"})],
+            messages=[Message(role=Role.USER, content=[TextBlock("test")])])
+        observed = []
+        with pytest.raises(ValueError, match="tool_call"):
+            async for event in provider.generate(request):
+                observed.append(event)
+    assert len(captured) == 2
+    assert not any(isinstance(event, (Done, ToolCallEnd)) for event in observed)
 
 
 @pytest.mark.asyncio

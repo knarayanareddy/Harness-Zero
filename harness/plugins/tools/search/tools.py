@@ -5,20 +5,19 @@ Absorbs HYG-03.
 from __future__ import annotations
 
 import fnmatch
-import logging
+import os
 import re
-import shutil
+import stat
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
 from harness.sdk.context import ToolContext
-from harness.sdk.types import Capability, ExecRequest, RiskClass, ToolResult, ToolSpec
-
-logger = logging.getLogger(__name__)
+from harness.sdk.types import RiskClass, ToolResult, ToolSpec
 
 SEARCH_CODEBASE_SPEC = ToolSpec(
     name="search_codebase",
-    description="Searches files across the workspace using regex pattern matching with ripgrep or Python fallback.",
+    description="Searches regular workspace files using regex matching without following symlinks.",
     input_schema={
         "type": "object",
         "properties": {
@@ -82,39 +81,65 @@ def _search_python(
     glob_pattern: str | None,
     limit: int,
 ) -> list[tuple[str, int, str]]:
-    """Pure-Python regex search fallback with identical semantics to ripgrep."""
+    """Walk and open relative to pinned directory descriptors, never following links.
+
+    A resolve/check followed by a pathname open is insufficient: the repository
+    can swap a leaf or parent between them. Each child is opened relative to its
+    already-open parent with O_NOFOLLOW. Directory replacement cannot redirect
+    an acquired descriptor. Search deliberately skips even inside-workspace
+    symlinks; other filesystem tools retain their own policies.
+    """
+    if os.open not in os.supports_dir_fd or os.scandir not in os.supports_fd or not hasattr(os, "O_NOFOLLOW"):
+        raise OSError("This platform does not support descriptor-confined search")
     results: list[tuple[str, int, str]] = []
+    relative_root = root.relative_to(workspace)
+    if ".." in relative_root.parts:
+        raise ValueError("Search root must not traverse parent directories")
+    if any(part in IGNORE_DIRS for part in relative_root.parts):
+        return results  # An explicit subdirectory must not bypass ignored trees.
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    child_flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
 
-    for file_path in root.rglob("*"):
-        if not file_path.is_file():
-            continue
-        # Skip ignored directories
-        if any(part in IGNORE_DIRS for part in file_path.parts):
-            continue
-        # Apply glob pattern if present
-        if glob_pattern:
-            if glob_pattern.startswith("!"):
-                if fnmatch.fnmatch(file_path.name, glob_pattern[1:]):
+    def visit(directory_fd: int, relative_dir: Path) -> bool:
+        with os.scandir(directory_fd) as entries:
+            for entry in entries:
+                if entry.name in IGNORE_DIRS:
                     continue
-            else:
-                if not fnmatch.fnmatch(file_path.name, glob_pattern):
+                try:
+                    fd = os.open(entry.name, child_flags, dir_fd=directory_fd)
+                except OSError:
+                    continue  # Links, vanished entries and unreadable files are not searched.
+                try:
+                    relative_file = relative_dir / entry.name
+                    mode = os.fstat(fd).st_mode
+                    if stat.S_ISDIR(mode):
+                        if visit(fd, relative_file):
+                            return True
+                    elif stat.S_ISREG(mode):
+                        if glob_pattern:
+                            excluded = glob_pattern.startswith("!")
+                            pattern = glob_pattern[1:] if excluded else glob_pattern
+                            if fnmatch.fnmatch(entry.name, pattern) == excluded:
+                                continue
+                        with os.fdopen(fd, encoding="utf-8", errors="replace", closefd=False) as file:
+                            for idx, line in enumerate(file, 1):
+                                if query_pattern.search(line):
+                                    results.append((str(relative_file), idx, line.rstrip("\r\n")))
+                                    if len(results) >= limit:
+                                        return True
+                except OSError:
                     continue
+                finally:
+                    os.close(fd)
+        return False
 
-        try:
-            rel_path = str(file_path.relative_to(workspace))
-        except ValueError:
-            rel_path = str(file_path)
-
-        try:
-            with open(file_path, encoding="utf-8", errors="replace") as f:
-                for idx, line in enumerate(f, 1):
-                    if query_pattern.search(line):
-                        results.append((rel_path, idx, line.rstrip("\r\n")))
-                        if len(results) >= limit:
-                            return results
-        except (OSError, PermissionError):
-            continue
-
+    with ExitStack() as stack:
+        directory_fd = os.open(workspace, directory_flags)
+        stack.callback(os.close, directory_fd)
+        for part in relative_root.parts:
+            directory_fd = os.open(part, directory_flags, dir_fd=directory_fd)
+            stack.callback(os.close, directory_fd)
+        visit(directory_fd, relative_root)
     return results
 
 
@@ -133,12 +158,9 @@ async def handle_search_codebase(args: dict[str, Any], ctx: ToolContext) -> Tool
 
     subpath = args.get("path")
     if subpath:
-        search_root = (ctx.workspace / subpath).resolve()
+        search_root = ctx.workspace / subpath
     else:
         search_root = ctx.workspace
-
-    if not search_root.exists() or not search_root.is_dir():
-        return ToolResult.error(f"Error: search path does not exist or is not a directory: {subpath}")
 
     glob_filter = args.get("glob_filter")
     max_results = min(500, max(1, int(args.get("max_results", 50))))
@@ -146,56 +168,9 @@ async def handle_search_codebase(args: dict[str, Any], ctx: ToolContext) -> Tool
     total_needed = offset + max_results
     fetch_limit = min(1000, total_needed + 1)
 
-    matches: list[tuple[str, int, str]] | None = None
-    rg_bin = shutil.which("rg")
-
-    # Attempt ripgrep via ctx.executor if executor and exec capability are available
-    if rg_bin and Capability.EXEC in ctx.capabilities and hasattr(ctx, "executor"):
-        try:
-            cmd = [
-                rg_bin,
-                "--line-number",
-                "--no-heading",
-                "--color", "never",
-                "--glob", "!.git/*",
-                "--glob", "!node_modules/*",
-                "--glob", "!.venv/*",
-                "--glob", "!dist/*",
-                "--glob", "!build/*",
-                "--glob", "!__pycache__/*",
-                "--glob", "!.harness/*",
-            ]
-            if not case_sensitive:
-                cmd.append("-i")
-            if glob_filter:
-                cmd.extend(["-g", glob_filter])
-            cmd.extend(["-m", str(fetch_limit), query, str(search_root)])
-
-            req = ExecRequest(command=cmd, cwd=search_root, timeout_s=30.0)
-            proc = await ctx.executor.start(req)
-            res = await proc.wait()
-            # ripgrep returns 0 if matches found, 1 if no matches found
-            if res.exit_code in (0, 1):
-                matches = []
-                for line in res.stdout.splitlines():
-                    parts = line.split(":", 2)
-                    if len(parts) == 3:
-                        fpath, line_no, content = parts
-                        try:
-                            rel_path = str(Path(fpath).relative_to(ctx.workspace))
-                        except ValueError:
-                            rel_path = fpath
-                        try:
-                            l_num = int(line_no)
-                        except ValueError:
-                            continue
-                        matches.append((rel_path, l_num, content.rstrip("\r\n")))
-        except Exception as err:
-            logger.debug(f"Ripgrep execution failed, falling back to Python search: {err}")
-            matches = None
-
-    # Fallback to pure-Python regex search if rg was not run or failed
-    if matches is None:
+    # The read-only tool always uses the same confined reader. An executor/ripgrep
+    # path would reopen mutable pathnames outside this descriptor boundary.
+    try:
         matches = _search_python(
             workspace=ctx.workspace,
             root=search_root,
@@ -203,6 +178,8 @@ async def handle_search_codebase(args: dict[str, Any], ctx: ToolContext) -> Tool
             glob_pattern=glob_filter,
             limit=fetch_limit,
         )
+    except (OSError, ValueError) as err:
+        return ToolResult.error(f"Error: search path is not an accessible confined directory: {err}")
 
     has_more = len(matches) > total_needed
     paginated = matches[offset : total_needed]

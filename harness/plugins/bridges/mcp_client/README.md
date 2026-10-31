@@ -58,7 +58,13 @@ namespace.
 ## Model experience
 
 Tool names remain `mcp__<server>__<tool>` and schemas come from the server's `tools/list`. Text content
-blocks are returned to the model and image content is passed through as media. Risk class is derived
+blocks and supported base64 images retain their order; image-only tool results remain images.
+The handler validates MIME/base64 fields and caps aggregate encoded image data at 48 KiB before
+copying/decoding it. This is a post-parse bound, not a transport memory ceiling. Empty or unsupported
+content fails explicitly. Anthropic serialization is locally verified; currently unsupported tool-image
+modes in the other adapters fail explicitly rather than silently dropping images. No live vendor
+compatibility or image-content/OCR redaction is implied. See
+[T22 evidence](../../../../docs/testing/T22_MCP_MEDIA.md). Risk class is derived
 from the server's `ToolAnnotations`: `readOnlyHint` → `read`, `destructiveHint` → `destructive`,
 `openWorldHint` → `network`, and an unannotated tool → `write` (which means approval is required in
 `ask` mode — an unlabelled tool is not trusted, it is treated as a mutation).

@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import Collection
 
 from harness.sdk.events import Event
 
@@ -17,6 +18,7 @@ DELTA_EVENT_TYPES = frozenset({
     "model.thinking.delta",
     "tool.output.delta",
 })
+INTERACTION_KINDS = frozenset({"approval", "question"})
 
 
 class Subscriber:
@@ -27,15 +29,33 @@ class Subscriber:
         interactive: bool = True,
         max_queue_size: int = 1000,
         session_id: str | None = None,
+        interaction_kinds: Collection[str] | None = None,
     ):
         self.id = sub_id
         self.types = types
         self.interactive = interactive
         self.session_id = session_id
+        self.interaction_kinds = self._copy_interaction_kinds(interaction_kinds)
         self.max_queue_size = max_queue_size
         self.queue: asyncio.Queue[Event] = asyncio.Queue(maxsize=max_queue_size)
         self.lagging = False
         self._last_delta: Event | None = None
+
+    @staticmethod
+    def _copy_interaction_kinds(
+        interaction_kinds: Collection[str] | None,
+    ) -> frozenset[str] | None:
+        if interaction_kinds is None:
+            return None
+        if isinstance(interaction_kinds, (str, bytes)) or not isinstance(interaction_kinds, Collection):
+            raise TypeError("interaction_kinds must be a collection of interaction kind strings or None")
+        copied = frozenset(interaction_kinds)
+        if any(not isinstance(kind, str) for kind in copied):
+            raise TypeError("interaction_kinds must contain only strings")
+        unsupported = copied - INTERACTION_KINDS
+        if unsupported:
+            raise ValueError(f"unsupported interaction kinds: {sorted(unsupported)!r}")
+        return copied
 
     def matches(self, event_type: str) -> bool:
         if self.types is None:
@@ -74,6 +94,7 @@ class EventBus:
         interactive: bool = True,
         max_queue_size: int | None = None,
         session_id: str | None = None,
+        interaction_kinds: Collection[str] | None = None,
     ) -> Subscriber:
         """Creates and registers a new subscriber with a bounded event queue."""
         sub_id = f"sub_{uuid.uuid4().hex[:8]}"
@@ -85,6 +106,7 @@ class EventBus:
             interactive=interactive,
             max_queue_size=qsize,
             session_id=session_id,
+            interaction_kinds=interaction_kinds,
         )
         self._subscribers[sub_id] = sub
         return sub
@@ -94,21 +116,39 @@ class EventBus:
         sub_id = sub.id if isinstance(sub, Subscriber) else sub
         self._subscribers.pop(sub_id, None)
 
-    def has_interactive_subscribers(self, session_id: str | None = None) -> bool:
+    def has_interactive_subscribers(
+        self,
+        session_id: str | None = None,
+        *,
+        interaction_kind: str | None = None,
+    ) -> bool:
         """Checks for an interactive client, optionally scoped to a session.
 
         A subscriber with no session id is a workspace-wide client (the current web event stream and CLI
         REPL), so it can answer questions in any session. Session-aware frontends may opt into a narrower
         subscription without changing the behavior of existing callers.
         """
+        if interaction_kind is not None and interaction_kind not in INTERACTION_KINDS:
+            raise ValueError(f"unsupported interaction kind: {interaction_kind!r}")
         return any(
-            s.interactive and (session_id is None or s.session_id is None or s.session_id == session_id)
+            s.interactive
+            and (session_id is None or s.session_id is None or s.session_id == session_id)
+            and (
+                interaction_kind is None
+                or s.interaction_kinds is None
+                or interaction_kind in s.interaction_kinds
+            )
             for s in self._subscribers.values()
         )
 
-    def has_interactive_subscriber(self, session_id: str | None = None) -> bool:
+    def has_interactive_subscriber(
+        self,
+        session_id: str | None = None,
+        *,
+        interaction_kind: str | None = None,
+    ) -> bool:
         """Singular spelling used by interaction brokers; kept alongside the original plural API."""
-        return self.has_interactive_subscribers(session_id)
+        return self.has_interactive_subscribers(session_id, interaction_kind=interaction_kind)
 
     def publish(self, event: Event) -> None:
         """
@@ -123,6 +163,10 @@ class EventBus:
             if not sub.matches(event.type):
                 continue
 
+            if not is_delta:
+                # A delivered non-delta separates the queued delta runs around it.
+                sub._last_delta = None
+
             # Delta coalescing logic:
             # If the incoming event is a delta and can coalesce with sub._last_delta,
             # merge the text payload in place to conserve queue slots.
@@ -131,7 +175,8 @@ class EventBus:
                 same_call = sub._last_delta.data.get("call_id") == event.data.get("call_id")
                 same_stream = sub._last_delta.data.get("stream") == event.data.get("stream")
                 same_turn = sub._last_delta.turn_id == event.turn_id
-                if same_call and same_stream and same_turn:
+                same_session = sub._last_delta.session_id == event.session_id
+                if same_call and same_stream and same_turn and same_session:
                     prev_text = sub._last_delta.data.get("text", "")
                     new_text = event.data.get("text", "")
                     # `_last_delta` is this subscriber's private copy (see below), so the

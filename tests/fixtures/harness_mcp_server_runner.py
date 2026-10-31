@@ -45,7 +45,7 @@ async def execute_sample_tool(call: ToolCall) -> ToolResult:
 
 async def main():
     # If "--filter-math" in argv, only expose math_add
-    expose_list = ["math_add"] if "--filter-math" in sys.argv else None
+    expose_list = ["math_add"] if "--filter-math" in sys.argv else ["math_add", "secret_admin_tool"]
 
     server = MCPServer(
         tools_provider=sample_tools,

@@ -32,7 +32,8 @@ class PermissionModesPolicy:
             sandbox_mode = self.settings.get("kernel.sandbox.mode", "off")
             exec_in_sandbox = self.settings.get("kernel.security.exec_in_sandbox", "ask")
 
-        sandbox_status: dict[str, Any] = self.sandbox.status() if self.sandbox is not None else {
+        uses_executor = spec.risk_class == RiskClass.EXEC or "exec" in spec.capabilities
+        sandbox_status: dict[str, Any] = self.sandbox.status() if uses_executor and self.sandbox is not None else {
             "mode": sandbox_mode,
             "backend": "none",
             "available": False,
@@ -40,7 +41,6 @@ class PermissionModesPolicy:
             "reason": "No sandbox service is registered.",
             "network": False,
         }
-        uses_executor = spec.risk_class == RiskClass.EXEC or "exec" in spec.capabilities
         decision_metadata = {"sandbox": sandbox_status} if uses_executor else {}
         capability_bypass = Capability.APPROVAL_BYPASS in getattr(ctx, "capabilities", frozenset())
 

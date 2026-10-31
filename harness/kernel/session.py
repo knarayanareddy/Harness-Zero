@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -105,6 +106,32 @@ def _summarize_transcript(path: Path, title_chars: int = 60) -> dict[str, Any]:
     return out
 
 
+def _read_session_metadata(session_dir: Path) -> tuple[dict[str, Any], float]:
+    """Read metadata without persisting repairs; use the directory mtime when it is unusable."""
+    created_at = float(session_dir.stat().st_mtime)
+    try:
+        data = json.loads((session_dir / "session.json").read_text(encoding="utf-8"))
+    except Exception:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+
+    saved_created_at = data.get("created_at")
+    if isinstance(saved_created_at, (int, float)) and not isinstance(saved_created_at, bool):
+        try:
+            saved_created_at = float(saved_created_at)
+        except (OverflowError, ValueError):
+            pass
+        else:
+            if math.isfinite(saved_created_at):
+                created_at = saved_created_at
+
+    metadata = data.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    return metadata, created_at
+
+
 class Session:
     """
     Session instance representing an isolated conversation context within a workspace.
@@ -119,6 +146,8 @@ class Session:
         settings: SettingsStore | None = None,
         bus: EventBus | None = None,
         metadata: dict[str, Any] | None = None,
+        created_at: float | None = None,
+        persist_metadata: bool = True,
     ) -> None:
         validate_session_id(session_id)
         self.session_id = session_id
@@ -127,7 +156,9 @@ class Session:
         self.settings = settings
         self.bus = bus
         self.metadata = metadata or {}
-        self.created_at = float(self.metadata.get("created_at", time.time()))
+        self.created_at = float(
+            self.metadata.get("created_at", time.time()) if created_at is None else created_at
+        )
 
         self.session_dir = self.workspace / ".harness" / "sessions" / self.session_id
         self.session_dir.mkdir(parents=True, exist_ok=True)
@@ -154,7 +185,8 @@ class Session:
         self._lock = asyncio.Lock()
         self._busy: bool = False
 
-        self._save_metadata()
+        if persist_metadata:
+            self._save_metadata()
 
     def _save_metadata(self) -> None:
         meta_file = self.session_dir / "session.json"
@@ -320,20 +352,16 @@ class SessionManager:
 
         target_dir = self.sessions_dir / session_id
         if target_dir.is_dir():
-            meta_file = target_dir / "session.json"
-            meta = {}
-            if meta_file.exists():
-                try:
-                    meta = json.loads(meta_file.read_text(encoding="utf-8"))
-                except Exception:
-                    pass
+            metadata, created_at = _read_session_metadata(target_dir)
             session = Session(
                 session_id=session_id,
                 workspace=self.workspace,
                 registry=self.registry,
                 settings=self.settings,
                 bus=self.bus,
-                metadata=meta.get("metadata", {}),
+                metadata=metadata,
+                created_at=created_at,
+                persist_metadata=False,
             )
             self._sessions[session_id] = session
             return session
@@ -358,15 +386,7 @@ class SessionManager:
             except Exception:
                 continue
 
-            meta_file = child / "session.json"
-            meta_data = {}
-            if meta_file.exists():
-                try:
-                    meta_data = json.loads(meta_file.read_text(encoding="utf-8"))
-                except Exception:
-                    pass
-
-            created_at = float(meta_data.get("created_at", child.stat().st_mtime))
+            _, created_at = _read_session_metadata(child)
             t_file = child / "transcript.jsonl"
             summary = _summarize_transcript(t_file)
             updated_at = t_file.stat().st_mtime if t_file.exists() else created_at

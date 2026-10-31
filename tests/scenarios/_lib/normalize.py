@@ -86,10 +86,9 @@ class Normalizer:
             self._paths.append((str(Path(workspace).parent), "<ws-parent>"))
         for raw, token in (extra_paths or {}).items():
             self._paths.append((raw, token))
-        self._paths.append(("/tmp/", "<tmp>/"))
-        self._paths.append(("/private/tmp/", "<tmp>/"))
         # macOS resolves its temp root through /var (a symlink), while error messages may report
-        # the canonical /private/var path. Normalize both spellings of the active root, not just /tmp.
+        # the canonical /private/var path. Normalize both spellings of the active root, not just /tmp,
+        # before the generic /tmp aliases so a nested active root ending in `/tmp` is not truncated.
         temp_root = tempfile.gettempdir()
         roots = {temp_root, str(Path(temp_root).resolve())}
         # The alias may be a suffix of the canonical /private/var path; replace the longer spelling first
@@ -98,6 +97,8 @@ class Normalizer:
             for separator in {"/", os.sep}:
                 prefix = root.rstrip("/\\") + separator
                 self._paths.append((prefix, "<tmp>/"))
+        self._paths.append(("/tmp/", "<tmp>/"))
+        self._paths.append(("/private/tmp/", "<tmp>/"))
         self.session_id = session_id
 
     def ordinal(self, kind: str, value: str) -> str:

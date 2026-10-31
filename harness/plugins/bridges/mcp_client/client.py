@@ -123,6 +123,9 @@ class MCPClient:
         self._supervisor_task: asyncio.Task[None] | None = None
         self._tool_refresh_lock = asyncio.Lock()
         self._background_tasks: set[asyncio.Task[Any]] = set()
+        self._cancel_cleanup_tasks: dict[
+            int, tuple[Transport, asyncio.Task[Any] | None, asyncio.Task[None]]
+        ] = {}
 
     @property
     def tools(self) -> list[dict[str, Any]]:
@@ -218,7 +221,7 @@ class MCPClient:
             # A server may implement another MCP feature without advertising tools.
             current_tools = []
 
-        if initial or self._tools is None:
+        if initial:
             self._tools = copy.deepcopy(current_tools)
             await self._set_status("connected", error=None)
             return
@@ -228,13 +231,56 @@ class MCPClient:
         await self._apply_tool_list(current_tools)
 
     async def _close_transport(self) -> None:
-        transport, self._transport = self._transport, None
+        transport = self._transport
         self._proc = None
         if transport is not None:
+            cancelled: asyncio.CancelledError | None = None
             try:
-                await transport.close()
-            except Exception as err:
-                logger.debug("Error closing MCP transport '%s': %s", self.name, err)
+                await self._settle_cancel_cleanup_tasks(transport)
+            except asyncio.CancelledError as err:
+                # A stopping supervisor must not close this generation before its owned cancellation send settles.
+                cancelled = err
+                await self._settle_cancel_cleanup_tasks(transport)
+            finally:
+                if self._transport is transport:
+                    self._transport = None
+                try:
+                    await transport.close()
+                except Exception as err:
+                    logger.debug("Error closing MCP transport '%s': %s", self.name, err)
+            if cancelled is not None:
+                raise cancelled
+        else:
+            self._transport = None
+
+    async def _settle_cancel_cleanup_tasks(self, transport: Transport | None = None) -> None:
+        """Gives owned cancellation sends a shared bounded grace, then cancels and joins leftovers."""
+        entries = [
+            (request_id, entry)
+            for request_id, entry in self._cancel_cleanup_tasks.items()
+            if transport is None or entry[0] is transport
+        ]
+        cleanup_tasks = [entry[2] for _, entry in entries if not entry[2].done()]
+        if cleanup_tasks:
+            notification_budget = min(1.0, self.connect_timeout_s)
+            await asyncio.wait(
+                cleanup_tasks,
+                timeout=min(0.1, notification_budget),
+            )
+        pending: list[asyncio.Task[Any]] = []
+        for _request_id, (_owner, send_task, cleanup_task) in entries:
+            if send_task is not None:
+                if not send_task.done():
+                    send_task.cancel()
+                pending.append(send_task)
+            if not cleanup_task.done():
+                cleanup_task.cancel()
+            pending.append(cleanup_task)
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        for request_id, entry in entries:
+            if entry[2].done() and self._cancel_cleanup_tasks.get(request_id) is entry:
+                self._cancel_cleanup_tasks.pop(request_id, None)
 
     async def _set_status(self, status: str, *, error: str | None = None) -> None:
         self.status = status
@@ -458,7 +504,7 @@ class MCPClient:
                 if future in done:
                     return future.result()
                 if cancel_task is not None and cancel_task in done and cancel_event and cancel_event.is_set():
-                    await self._cancel_request(request_id, future, send_task, "cancelled by harness")
+                    self._cancel_request(request_id, future, send_task, transport, "cancelled by harness")
                     cancel_sent = True
                     raise asyncio.CancelledError
                 if send_task is not None and send_task in done:
@@ -475,12 +521,12 @@ class MCPClient:
                         raise
                     send_task = None
         except TimeoutError:
-            await self._cancel_request(request_id, future, send_task, "MCP call timed out")
+            self._cancel_request(request_id, future, send_task, transport, "MCP call timed out")
             raise
         except asyncio.CancelledError:
             # Covers direct task cancellation as well as the explicit cancel_event above.
             if not cancel_sent:
-                await self._cancel_request(request_id, future, send_task, "cancelled by harness")
+                self._cancel_request(request_id, future, send_task, transport, "cancelled by harness")
             raise
         finally:
             self._pending_requests.pop(request_id, None)
@@ -488,11 +534,12 @@ class MCPClient:
                 cancel_task.cancel()
                 await asyncio.gather(cancel_task, return_exceptions=True)
 
-    async def _cancel_request(
+    def _cancel_request(
         self,
         request_id: int,
         future: asyncio.Future[Any],
         send_task: asyncio.Task[Any] | None,
+        transport: Transport,
         reason: str,
     ) -> None:
         self._pending_requests.pop(request_id, None)
@@ -500,13 +547,42 @@ class MCPClient:
             future.cancel()
         if send_task is not None and not send_task.done():
             send_task.cancel()
-            await asyncio.gather(send_task, return_exceptions=True)
-        # Best effort: the server may already have completed, but any later result is now uncorrelated.
+        if request_id in self._cancel_cleanup_tasks:
+            return
+        cleanup_task = asyncio.create_task(
+            self._finish_cancel_request(request_id, send_task, transport, reason),
+            name=f"mcp-cancel-cleanup-{self.name}-{request_id}",
+        )
+        entry = (transport, send_task, cleanup_task)
+        self._cancel_cleanup_tasks[request_id] = entry
+
+        def release_cleanup(completed: asyncio.Task[None]) -> None:
+            if self._cancel_cleanup_tasks.get(request_id) is entry:
+                self._cancel_cleanup_tasks.pop(request_id, None)
+
+        cleanup_task.add_done_callback(release_cleanup)
+
+    async def _finish_cancel_request(
+        self,
+        request_id: int,
+        send_task: asyncio.Task[Any] | None,
+        transport: Transport,
+        reason: str,
+    ) -> None:
+        # Cancellation is best effort: the server may already have completed, but any later result is uncorrelated.
         try:
+            if send_task is not None:
+                await asyncio.gather(send_task, return_exceptions=True)
+            # Transport identity is this connection's generation; never route late work through a replacement.
+            if self._transport is not transport or not transport.alive or self.status != "connected":
+                return
             await asyncio.wait_for(
-                self._send_notification(
-                    "notifications/cancelled",
-                    {"requestId": request_id, "reason": reason},
+                transport.send(
+                    {
+                        "jsonrpc": "2.0",
+                        "method": "notifications/cancelled",
+                        "params": {"requestId": request_id, "reason": reason},
+                    }
                 ),
                 timeout=min(1.0, self.connect_timeout_s),
             )
@@ -591,6 +667,7 @@ class MCPClient:
         if self._background_tasks:
             await asyncio.gather(*self._background_tasks, return_exceptions=True)
         self._background_tasks.clear()
+        await self._settle_cancel_cleanup_tasks()
         failure = ConnectionError(f"MCP server '{self.name}' was stopped")
         for future in self._pending_requests.values():
             if not future.done():

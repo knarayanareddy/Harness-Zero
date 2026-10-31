@@ -16,7 +16,7 @@ from harness.kernel.bus import EventBus
 from harness.kernel.compaction import estimate_request_tokens, estimate_tokens
 from harness.kernel.registry import PluginRegistry
 from harness.kernel.settings import SettingsStore
-from harness.kernel.transcript import upgrade_record_v1
+from harness.kernel.transcript import record_at_step, upgrade_record_v1
 from harness.sdk.contracts import ContextSource
 from harness.sdk.events import ContextAssembled, Event, EventPayload
 from harness.sdk.types import (
@@ -60,8 +60,8 @@ async def append_and_publish_record(
         raise ValueError(f"{type(payload).__name__} is not a durable event payload")
     record = None
     if log is not None:
-        await log.append(TranscriptRecord(kind=kind, role="system", content=content, metadata=dict(metadata)))
-        record = log.records[-1]
+        step = await log.append(TranscriptRecord(kind=kind, role="system", content=content, metadata=dict(metadata)))
+        record = record_at_step(log.records, step)
     if bus is not None:
         bus.publish(
             Event(
@@ -167,7 +167,17 @@ def slice_at_last_compaction(records: list[dict[str, Any]]) -> list[dict[str, An
     for idx, rec in enumerate(records):
         if rec.get("kind") == "compaction.summary" or rec.get("metadata", {}).get("compaction_summary"):
             last = idx
-    return records[last:] if last >= 0 else records
+    if last < 0:
+        return records
+    summary = records[last]
+    covered = summary.get("metadata", {}).get("covers_through_step")
+    if type(covered) is int and covered > 0:
+        # New summaries cover a persisted prefix, not the current prompt and
+        # tool suffix that preceded the summary's own append. Legacy summaries
+        # retain their original physical-boundary meaning.
+        return [summary] + [r for r in records if r.get("step_index", 0) > covered
+                            and r.get("kind") != "compaction.summary"]
+    return records[last:]
 
 
 def repair_dangling_tool_calls(messages: list[Message]) -> list[Message]:
@@ -463,6 +473,14 @@ class ContextAssembler:
 
         # 7. Latest user prompt message (only if not already in history)
         has_prompt_in_history = False
+        raw_records = history_records or []
+        latest_prompt = next((r for r in reversed(raw_records) if r.get("kind") == "user.message"), None)
+        latest_summary = next((r for r in reversed(raw_records) if r.get("kind") == "compaction.summary"), None)
+        if latest_prompt is not None and latest_summary is not None:
+            summarized = latest_summary.get("metadata", {}).get("summarized_prompt_step")
+            if (type(summarized) is int and summarized == latest_prompt.get("step_index")
+                    and latest_prompt.get("content") == actual_prompt and not media):
+                has_prompt_in_history = True
         if history_messages:
             last_msg = history_messages[-1]
             if last_msg.role == Role.USER and last_msg.text() == actual_prompt:

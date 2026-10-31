@@ -351,9 +351,11 @@ async def test_compactor_threshold_and_compaction_flow(assembler_setup):
 
     class PreCompactHook(Hook):
         name = "test_pre_compact"
-        event = HookEvent.PRE_COMPACT
+        events = frozenset({HookEvent.PRE_COMPACT})
+        timeout_s = 1.0
+        matcher = None
 
-        async def execute(self, a, b, ctx):
+        async def on(self, event, payload, ctx):
             nonlocal hook_called
             hook_called = True
             return HookOutcome(action="continue")
@@ -370,10 +372,20 @@ async def test_compactor_threshold_and_compaction_flow(assembler_setup):
             "## Open items\nKRN-08"
         )
 
+    from harness.kernel.transcript import TranscriptLog, record_at_step
+    from harness.plugins.stores.jsonl_transcript.store import JsonlTranscriptStore
+
+    log = TranscriptLog(JsonlTranscriptStore(assembler_setup["workspace"] / "session"))
+
+    async def persist_summary(text):
+        step = await log.append({"role": "system", "kind": "compaction.summary", "content": text})
+        return record_at_step(log.records, step)
+
     summary = await compactor.compact(
         session_id="session_test",
         messages=long_msg,
         summarize_fn=mock_summarize,
+        on_summary=persist_summary,
     )
 
     assert hook_called is True

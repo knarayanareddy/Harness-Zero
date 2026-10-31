@@ -86,7 +86,7 @@
 | Plugin | Version | Provides | Capabilities | Settings namespace | README sections | Loaded |
 |---|---|---|---|---|---|---|
 | `fs-tools` | 1.0.0 | `tool` | fs:read, fs:write | — | 0/5 | ✓ |
-| `search-tools` | 1.0.0 | `tool` | fs:read, exec | — | 0/5 | ✓ |
+| `search-tools` | 1.0.0 | `tool` | fs:read | — | 0/5 | ✓ |
 | `shell-tools` | 1.0.0 | `tool` | exec | — | 0/5 | ✓ |
 | `tool-artifacts` | 1.0.0 | `tool` | fs:write | — | 0/5 | ✓ |
 | `tool-ask-user` | 1.0.0 | `tool` | — | — | 0/5 | ✓ |

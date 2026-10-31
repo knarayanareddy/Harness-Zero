@@ -17,6 +17,9 @@ from harness.sdk.types import ExecRequest, SandboxAvailability, SandboxPolicy
 
 _SYSTEM_READ = ("/System", "/usr", "/bin", "/sbin", "/Library", "/etc", "/dev")
 _DEFAULT_PATH = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+# Current macOS dyld needs to open the root directory during bootstrap. Grant
+# only that directory, never its subtree or general host file contents.
+_ROOT_DIRECTORY_READ = '(allow file-read-data (literal "/"))'
 
 
 def _quote(value: str | Path) -> str:
@@ -87,6 +90,7 @@ class SeatbeltBackend:
         self._executable = executable
         profile = (
             "(version 1) (deny default) (allow process*) (allow sysctl-read) "
+            f"{_ROOT_DIRECTORY_READ} "
             '(allow file-read* (subpath "/System") (subpath "/usr") (subpath "/bin") '
             '(subpath "/sbin") (subpath "/Library") (subpath "/etc") (subpath "/dev"))'
         )
@@ -139,6 +143,7 @@ class SeatbeltBackend:
                 "(deny default)",
                 "(allow process*)",
                 "(allow sysctl-read)",
+                _ROOT_DIRECTORY_READ,
                 f"(allow file-read* {' '.join(read_rules)})",
                 f"(allow file-write* {write_rules} (subpath \"/private/tmp\"))",
                 network_rule,
@@ -171,7 +176,7 @@ class SeatbeltBackend:
         argv = [executable, "-p", profile, "/usr/bin/env", "-i", *env_args, *inner]
         return ExecRequest(
             command=argv,
-            cwd=workspace,
+            cwd=cwd,
             env_overlay={},
             timeout_s=req.timeout_s,
             interactive=req.interactive,

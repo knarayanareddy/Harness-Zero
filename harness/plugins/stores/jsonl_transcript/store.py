@@ -34,20 +34,29 @@ class JsonlTranscriptStore:
         self._init_counter()
 
     def _init_counter(self) -> None:
-        """Counts existing records, tolerating trailing corrupted lines."""
-        if not self.compact_path.exists():
-            self._step_counter = 0
-            return
+        """Reserve valid persisted indices from BOTH logs; never count corrupt tails.
 
-        count = 0
-        try:
-            with open(self.compact_path, encoding="utf-8", errors="replace") as f:
-                for line in f:
-                    if line.strip():
-                        count += 1
-        except Exception as err:
-            logger.warning(f"Error reading transcript index for {self.session_dir}: {err}")
-        self._step_counter = count
+        A full-only write may be the residue of a failed dual-log append. Keep
+        that index reserved, even though the append was never acknowledged.
+        Unreadable existing files fail closed rather than resetting the counter.
+        """
+        for path in (self.full_path, self.compact_path):
+            if not path.exists():
+                continue
+            valid_ordinal = 0
+            with path.open("rb") as stream:
+                for line in stream:
+                    try:
+                        record = json.loads(line)
+                    except (ValueError, RecursionError):
+                        continue
+                    if not isinstance(record, dict):
+                        continue
+                    index = record.get("step_index")
+                    if "step_index" in record and (type(index) is not int or index < 1):
+                        continue
+                    valid_ordinal += 1
+                    self._step_counter = max(self._step_counter, index or valid_ordinal)
 
     def for_session(self, session_dir: Path | str) -> JsonlTranscriptStore:
         """Returns a JsonlTranscriptStore scoped to the specified session directory."""
@@ -98,23 +107,40 @@ class JsonlTranscriptStore:
                 compact_rec["truncated_fields"] = truncated_fields
 
             def _write():
-                # Append to full log and track byte offset
-                offset = 0
-                if self.full_path.exists():
-                    offset = self.full_path.stat().st_size
+                # Open both before mutation. Seal any incomplete physical tail
+                # IN PLACE: preserve every old byte, only append a delimiter.
+                with self.full_path.open("a+b") as full, self.compact_path.open("a+b") as compact:
+                    for path, stream in ((self.full_path, full), (self.compact_path, compact)):
+                        stream.seek(0, 2)
+                        if stream.tell():
+                            stream.seek(-1, 2)
+                            if stream.read(1) != b"\n":
+                                stream.seek(0, 2)
+                                stream.write(b"\n")
+                                stream.flush()
+                                logger.warning("Sealed unterminated transcript tail without discarding bytes: %s", path)
+                        stream.seek(0, 2)
+                    offset = full.tell()
+                    full.write(full_line.encode("utf-8"))
+                    full.flush()
+                    compact_rec["full_offset"] = offset
+                    compact.write((json.dumps(compact_rec) + "\n").encode("utf-8"))
+                    compact.flush()
 
-                with open(self.full_path, "a", encoding="utf-8") as f:
-                    f.write(full_line)
-                    f.flush()
-
-                compact_rec["full_offset"] = offset
-                updated_compact_line = json.dumps(compact_rec) + "\n"
-
-                with open(self.compact_path, "a", encoding="utf-8") as f:
-                    f.write(updated_compact_line)
-                    f.flush()
-
-            await asyncio.to_thread(_write)
+            writer = asyncio.create_task(asyncio.to_thread(_write))
+            try:
+                await asyncio.shield(writer)
+            except asyncio.CancelledError:
+                # Cancelling an await cannot stop its filesystem thread. Keep
+                # the serialization lock until that commit/failure is known.
+                while not writer.done():
+                    try:
+                        await asyncio.shield(writer)
+                    except asyncio.CancelledError:
+                        continue
+                if not writer.cancelled():
+                    writer.exception()
+                raise
             return step_idx
 
     async def read(self, since_step: int = 0, compact: bool = True) -> list[dict[str, Any]]:
@@ -125,16 +151,23 @@ class JsonlTranscriptStore:
 
         def _read():
             records = []
-            with open(target_path, encoding="utf-8", errors="replace") as f:
+            with open(target_path, "rb") as f:
                 for line in f:
                     line_str = line.strip()
                     if not line_str:
                         continue
                     try:
                         rec = json.loads(line_str)
-                        if rec.get("step_index", 0) >= since_step:
+                        if not isinstance(rec, dict):
+                            logger.warning("Skipping non-record transcript JSON in %s", target_path)
+                            continue
+                        index = rec.get("step_index", 0)
+                        if "step_index" in rec and (type(index) is not int or index < 1):
+                            logger.warning("Skipping invalid transcript index in %s", target_path)
+                            continue
+                        if index >= since_step:
                             records.append(rec)
-                    except json.JSONDecodeError:
+                    except (ValueError, RecursionError):
                         logger.warning(f"Skipping corrupt transcript line in {target_path}")
             return records
 

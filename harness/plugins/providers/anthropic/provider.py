@@ -4,11 +4,14 @@ Absorbs MDL-03 and MDL-04.
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import logging
 import time
 from collections.abc import AsyncIterator
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -91,20 +94,26 @@ class AnthropicProvider:
         self.timeout_s = timeout_s
         self.extra_headers = extra_headers or {}
         self._external_client = client is not None
-        self._client: httpx.AsyncClient = client or httpx.AsyncClient(
-            timeout=httpx.Timeout(
-                connect=10.0,
-                read=timeout_s,
-                write=30.0,
-                pool=10.0,
-            )
+        self._client: httpx.AsyncClient | None = client
+        self._owned_client_closed = False
+        self._client_timeout = httpx.Timeout(
+            connect=10.0, read=timeout_s, write=30.0, pool=10.0,
         )
         self._cached_models: list[ModelInfo] | None = None
         self._cached_models_ts: float = 0.0
 
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._owned_client_closed:
+            raise RuntimeError("Provider is closed")
+        if self._client is None:
+            self._client = httpx.AsyncClient(timeout=self._client_timeout)
+        return self._client
+
     async def aclose(self) -> None:
-        if not self._external_client and not self._client.is_closed:
-            await self._client.aclose()
+        if not self._external_client:
+            self._owned_client_closed = True
+            if self._client is not None and not self._client.is_closed:
+                await self._client.aclose()
 
     def is_configured(self) -> bool:
         """An API key is required (an injected client counts as configured for tests)."""
@@ -154,11 +163,61 @@ class AnthropicProvider:
 
         return out
 
-    def _build_messages(self, messages: list[Any]) -> list[dict[str, Any]]:
+    def _image_content(self, block: ImageBlock, model: str) -> dict[str, Any]:
+        media_type = block.media_type.lower()
+        if media_type not in {"image/jpeg", "image/png", "image/gif", "image/webp"}:
+            raise ProviderError(
+                provider=self.name, model=model, kind="bad_request",
+                message=f"Anthropic does not support image media type {block.media_type!r}",
+            )
+        if (block.data_b64 is None) == (block.url is None):
+            raise ProviderError(
+                provider=self.name, model=model, kind="bad_request",
+                message="Anthropic image requires exactly one of data_b64 or url",
+            )
+        if block.data_b64 is not None:
+            try:
+                if not block.data_b64:
+                    raise ValueError("empty base64 image")
+                base64.b64decode(block.data_b64, validate=True)
+            except (binascii.Error, ValueError) as err:
+                raise ProviderError(
+                    provider=self.name, model=model, kind="bad_request",
+                    message="Anthropic image data_b64 must be valid standard base64",
+                ) from err
+            source = {"type": "base64", "media_type": media_type, "data": block.data_b64}
+        else:
+            try:
+                parsed_url = urlsplit(block.url or "")
+                hostname = parsed_url.hostname
+                if parsed_url.netloc.endswith(":"):
+                    raise ValueError("empty URL port")
+                port = parsed_url.port
+                if port is not None and not 0 <= port <= 65535:
+                    raise ValueError("URL port is out of range")
+            except ValueError as err:
+                raise ProviderError(
+                    provider=self.name, model=model, kind="bad_request", retryable=False,
+                    message="Anthropic image url must have a valid authority",
+                ) from err
+            if parsed_url.scheme != "https" or not hostname:
+                raise ProviderError(
+                    provider=self.name, model=model, kind="bad_request", retryable=False,
+                    message="Anthropic image url must be an absolute HTTPS URL with a hostname",
+                )
+            source = {"type": "url", "url": block.url}
+        return {"type": "image", "source": source}
+
+    def _build_messages(self, messages: list[Any], model: str = "") -> list[dict[str, Any]]:
         """Converts universal Message objects into Anthropic message schemas."""
         out: list[dict[str, Any]] = []
 
         for msg in messages:
+            if msg.role != Role.USER and any(isinstance(block, ImageBlock) for block in msg.content):
+                raise ProviderError(
+                    provider=self.name, model=model, kind="bad_request",
+                    message="Anthropic image blocks are supported only in user messages or nested tool results",
+                )
             role = "user" if msg.role == Role.USER else "assistant"
             content_blocks: list[dict[str, Any]] = []
 
@@ -166,16 +225,7 @@ class AnthropicProvider:
                 if isinstance(block, TextBlock):
                     content_blocks.append({"type": "text", "text": block.text})
                 elif isinstance(block, ImageBlock):
-                    import base64
-                    b64 = base64.b64encode(block.data).decode("utf-8")
-                    content_blocks.append({
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": block.media_type,
-                            "data": b64,
-                        },
-                    })
+                    content_blocks.append(self._image_content(block, model))
                 elif isinstance(block, ToolUseBlock):
                     content_blocks.append({
                         "type": "tool_use",
@@ -189,10 +239,13 @@ class AnthropicProvider:
                     for c in block.content:
                         if isinstance(c, TextBlock):
                             res_parts.append({"type": "text", "text": c.text})
+                        elif isinstance(c, ImageBlock):
+                            res_parts.append(self._image_content(c, model))
                     content_blocks.append({
                         "type": "tool_result",
                         "tool_use_id": block.tool_use_id,
-                        "content": res_parts if len(res_parts) > 1 else (res_parts[0]["text"] if res_parts else ""),
+                        "content": (res_parts if len(res_parts) > 1 or any(isinstance(c, ImageBlock) for c in block.content)
+                                    else (res_parts[0]["text"] if res_parts else "")),
                         "is_error": block.is_error,
                     })
                 elif isinstance(block, ThinkingBlock):
@@ -225,7 +278,7 @@ class AnthropicProvider:
         """Streams model events for request using Anthropic SSE streaming."""
         headers = self._build_headers()
         system_payload = self._build_system(req.system)
-        messages_payload = self._build_messages(req.messages)
+        messages_payload = self._build_messages(req.messages, req.model)
 
         is_thinking = bool(
             req.params.extra.get("thinking")
@@ -259,7 +312,7 @@ class AnthropicProvider:
         url = f"{self.base_url}/messages"
 
         try:
-            async with self._client.stream("POST", url, headers=headers, json=payload) as resp:
+            async with self._get_client().stream("POST", url, headers=headers, json=payload) as resp:
                 if resp.status_code != 200:
                     err_body = await resp.aread()
                     err_text = err_body.decode("utf-8", errors="replace")
@@ -293,6 +346,32 @@ class AnthropicProvider:
                         continue
 
                     event_type = event.get("type")
+
+                    if event_type == "error":
+                        error_data = event.get("error") or {}
+                        if not isinstance(error_data, dict):
+                            error_data = {}
+                        error_type = str(error_data.get("type", ""))
+                        error_message = str(error_data.get("message") or "Anthropic stream reported an error")
+                        if error_type == "rate_limit_error":
+                            kind: ProviderErrorKind = "rate_limit"
+                            retryable = True
+                        elif error_type in ("authentication_error", "permission_error"):
+                            kind = "auth"
+                            retryable = False
+                        elif error_type == "invalid_request_error":
+                            kind = "bad_request"
+                            retryable = False
+                        else:
+                            kind = "server"
+                            retryable = error_type in ("api_error", "overloaded_error")
+                        raise ProviderError(
+                            provider=self.name,
+                            model=req.model,
+                            retryable=retryable,
+                            kind=kind,
+                            message=f"Anthropic stream error ({error_type or 'unknown'}): {error_message}",
+                        )
 
                     if event_type == "message_start":
                         msg_data = event.get("message", {})
@@ -357,7 +436,8 @@ class AnthropicProvider:
                                 stop_reason = "end_turn"
 
                         usage_delta = event.get("usage", {})
-                        output_tokens += usage_delta.get("output_tokens", 0)
+                        # Anthropic sends cumulative usage snapshots in message_delta events.
+                        output_tokens = usage_delta.get("output_tokens", output_tokens)
 
                     elif event_type == "message_stop":
                         total_usage = Usage(
@@ -370,15 +450,13 @@ class AnthropicProvider:
                         yield Done(stop_reason=stop_reason)
                         return
 
-                # If loop ends without explicit message_stop
-                total_usage = Usage(
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    cache_read_tokens=cache_read_tokens,
-                    cache_write_tokens=cache_write_tokens,
+                raise ProviderError(
+                    provider=self.name,
+                    model=req.model,
+                    retryable=True,
+                    kind="server",
+                    message="Anthropic stream ended before message_stop",
                 )
-                yield UsageEvent(usage=total_usage)
-                yield Done(stop_reason=stop_reason)
 
         except httpx.TimeoutException as err:
             raise ProviderError(

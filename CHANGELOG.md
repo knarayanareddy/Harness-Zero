@@ -9,6 +9,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed locally — MCP cancellation and bounded shutdown
+- Process cancellation controls while a real tool call is active, reject reused IDs, retain short half-close read replies and abort stalled response drains before owned cleanup. Source-reviewed local tests; whole T18 audit and broader release qualification remain pending. See [T18b evidence](docs/testing/T18B_MCP_CANCELLATION.md).
+
+### Fixed locally — wheel resources
+- Bundle the four original builtin skills under the installed package and exercise direct/sdist-rebuilt wheels outside the checkout, retaining confined resource reads. Declare the default artifact test's build tools in the dev extra. Frozen/native/full-product qualification remains pending. See [T25 evidence](docs/testing/T25_WHEEL_RESOURCES.md).
+
+### Fixed locally — MCP tool-result media
+- Preserve image-only/mixed MCP tool results through canonical storage and a supported Anthropic adapter request; reject empty, unsupported or oversized content before avoidable image copies. Source-reviewed local checks, not live vendor/artifact qualification. See [T22 evidence](docs/testing/T22_MCP_MEDIA.md).
+
+### Fixed locally — skill-file confinement
+- Confine skill viewing and catalogue metadata to descriptor-pinned builtin/workspace roots, rejecting traversal, symlinks and nonregular or oversized files while preserving valid aliases. Source-reviewed local repair; wheel/frozen qualification remains pending. See [R20 evidence](docs/testing/R20_SKILL_CONFINEMENT.md).
+
+### Fixed locally — MCP late recovery and CLI read mediation
+- Register tools through the existing kernel callback after an initially absent MCP peer recovers; verify invocation, unchanged recovery and definition replacement/removal. See [T21 evidence](docs/testing/T21_MCP_LATE_START.md).
+- Route explicitly exported CLI text reads through the actual policy gate and dedicated session, preserving validation, redaction and headless/locked denial. This is partial T18; protocol cancellation and complete audit/read-ledger behavior remain pending. See [scope and limits](docs/testing/T18_MCP_CLI_GATE.md).
+
+### Fixed locally — T17 MCP export authorization
+- Default to no exposed tools; honor explicit canonical lists over legacy aliases in both CLI and plugin setup, including empty lists. Reject malformed allowlists and deny unlisted calls before execution. See [scoped evidence](docs/testing/T17_MCP_EXPORTS.md); actual allowed execution is a separate T18 repair.
+
+### Fixed locally — T13 media and T16 XML contracts
+- Serialize actual SDK image fields without double base64 encoding; validate endpoint-specific image/URL modes against the effective model and reject unsupported adapter modes explicitly. See [media evidence](docs/testing/T13_PROVIDER_MEDIA.md).
+- Preserve XML fallback calls across closing-tag splits and trailing text, reject malformed arguments and bound retained tool payloads without treating ordinary trailing angle brackets as calls. See [XML evidence](docs/testing/T16_XML_FRAGMENTATION.md).
+
+### Added — documented Zide-derived development workflow
+- Added cited recommendations and owned, still-pending runtime acceptance for task/worktree launch, exact-change independent review, truthful session attention and stale Git approval rejection. Root AGENTS.md loads [the development workflow](tasks/WORKFLOW.md); existing release gates and authority limits are unchanged. This is process/documentation adoption, not delivery of those product features.
+
+### Fixed locally — T14/T15 provider failure contracts
+- Anthropic SSE errors and premature EOF no longer become successful Done; cumulative output-token snapshots are not double counted. Fragmented local streams and runner/breaker controls pass.
+- Gemini connection and mid-stream transport failures now use valid SDK timeout/unavailable errors without converting cancellation. See [Anthropic evidence](docs/testing/T14_ANTHROPIC_STREAMS.md) and [Gemini evidence](docs/testing/T15_GEMINI_TRANSPORT.md); global/live qualification remains incomplete.
+
+### Fixed locally — T12 OpenAI-compatible tool continuations
+- Preserve canonical USER-carried text tool results as matching OpenAI tool messages, including explicit failure text; avoid fake empty user turns and retain mixed ordinary user content. Real local-peer/reload controls pass; live vendor and tool-media qualification remain pending. See [evidence](docs/testing/T12_OPENAI_CONTINUATIONS.md).
+
+### Fixed locally — G1 checkpoint follow-ups
+- Validate unchanged checkpoint endpoints without redundant diff subprocesses; retain completed output without calling a reaped supervisor uncertain solely because reader completion is delayed.
+- Cache static event type declarations while validating every payload, reducing high-volume output stalls. Two failing scenarios pass in targeted follow-ups; full qualification and strict headless latency remain non-green. See [checkpoint evidence](docs/testing/G1_SAFETY_RECOVERY.md).
+
+### Fixed locally — T11 Seatbelt working directory and loader bootstrap
+- Retain the validated requested cwd instead of resetting confined commands to the workspace root. Allow the loader to read the exact root directory, never its descendants. Actual native nested pwd/relative-write and outside-file denial checks now pass on this Mac, as does R08; Linux/global qualification remains incomplete. See [evidence](docs/testing/T11_CONFINED_CWD.md).
+
+### Fixed — T09/T10 durable context compaction
+- Use current hook/provider contracts, persist validated summaries before announcing completion, and consume covered history correctly after restart. Keep normal prompts and unresolved calls; explicitly mark summarized oversized text prompts without deleting raw history.
+- Cancellation, malformed summaries and failed writes cannot announce completion. Summary usage shares the turn ledger and post-call spend cap; queued background completions remain consumable after asynchronous record commits. See [scoped evidence and qualification limits](docs/testing/T10_DURABLE_COMPACTION.md).
+
+### Fixed — T08 durable dangling-call recovery
+- Repair every unanswered call with an explicit synthetic error, return its actual append receipt, and leave completed repairs intact across restart. No tool is re-executed. See [evidence](docs/testing/T08_DANGLING_CALL_REPAIR.md).
+
+### Fixed — T07 crash-tail recovery and append receipts
+- Preserve unfinished JSONL tails in place without swallowing subsequent appends; recover indices from both logs, tolerate malformed rows, and keep cancellation-owned disk/cache commits consistent. Durable events select their own appended record. See [evidence](docs/testing/T07_CRASH_RECOVERY.md).
+
+### Fixed — T06 supervised active-process cancellation
+- Use a live, privately controlled supervisor to retain process-group identity, stop inherited foreground descendants and preserve signed payload exit statuses. Installed-wheel and actual one-file smoke checks pass locally; native/global qualification remains incomplete. See [evidence](docs/testing/T06_SUPERVISED_CANCELLATION.md).
+
+### Fixed — T05 pending interaction cancellation
+- Pending approvals/questions honor turn cancellation, refuse late answers, retain cancellation facts and remove pending state. Unknown/already settled approvals cannot append fake resolution records.
+- Queued handlers recheck cancellation immediately before starting, including after auto-approval. Claimed resolution persistence survives caller cancellation; earlier user decisions are not rewritten as later denials.
+- [Scoped evidence and limits](docs/testing/T05_PENDING_CANCELLATION.md): active-process termination remains T06/R3, and T01/global qualification stays non-green. No golden or timeout was relaxed.
+
+### Fixed — T04 workspace code-search confinement
+- Code search opens regular files through acquired directory descriptors with no-follow/non-blocking semantics, rejects outside targets and deterministic path-swap redirects, and preserves ignore/glob/pagination behavior. Discovered symlinks are skipped; explicitly requested inside aliases may still be canonicalized by the gate.
+- Removed the unsafe/unreachable ripgrep path and unused search-plugin exec capability. Updated generated [plugin](docs/catalog/PLUGINS.md) and [tool](docs/catalog/TOOLS.md) catalogues.
+- Added real locked-gate and open-time race regressions; the original leak probe is red against baseline and green after repair. See [T04 evidence](docs/testing/T04_SEARCH_CONFINEMENT.md). T01 qualification remains non-green; this does not repair unrelated findings.
+
 ### Added — WS-10a durable background jobs
 - Added the session-scoped `tools-jobs` registry, durable `job.started/output/exited` records, bounded output ring and spill file, lost-process recovery, and a model-visible next-turn completion notice. Detached `job_start` jobs no longer hold up the turn; legacy reactive `run_command` tasks retain their wait behavior and `manage_task` alias.
 - Added `job_start`, `job_output`, `job_list`, and `job_kill`, plus the plugin-owned Jobs panel. Panel stop uses the existing approval broker and destructive-action policy.

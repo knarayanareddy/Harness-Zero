@@ -4,6 +4,7 @@ Conforms to ProviderKit with recorded SSE fixtures and transport mocks.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -313,6 +314,197 @@ async def test_gemini_error_status_mapping():
             pass
     assert exc_info.value.kind == "rate_limit"
     assert exc_info.value.retryable is True
+
+
+@pytest.mark.asyncio
+async def test_gemini_connect_timeout_is_retryable_provider_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("connect timed out", request=request)
+
+    provider = GeminiProvider(
+        api_key="key",
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    req = ModelRequest(model="gemini-2.0-flash", system=[], messages=[], tools=[], params=ModelParams())
+
+    with pytest.raises(ProviderError) as exc_info:
+        async for _ in provider.generate(req):
+            pass
+
+    assert exc_info.value.kind == "timeout"
+    assert exc_info.value.retryable is True
+
+
+@pytest.mark.asyncio
+async def test_gemini_connect_error_is_retryable_unavailable_provider_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    provider = GeminiProvider(
+        api_key="key",
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    req = ModelRequest(model="gemini-2.0-flash", system=[], messages=[], tools=[], params=ModelParams())
+
+    with pytest.raises(ProviderError) as exc_info:
+        async for _ in provider.generate(req):
+            pass
+
+    assert exc_info.value.kind == "unavailable"
+    assert exc_info.value.retryable is True
+
+
+@pytest.mark.asyncio
+async def test_gemini_read_timeout_is_retryable_provider_error():
+    class ReadTimeoutStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b""
+            raise httpx.ReadTimeout("read timed out")
+
+        async def aclose(self) -> None:
+            pass
+
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            stream=ReadTimeoutStream(),
+        )
+    )
+    provider = GeminiProvider(api_key="key", client=httpx.AsyncClient(transport=transport))
+    req = ModelRequest(model="gemini-2.0-flash", system=[], messages=[], tools=[], params=ModelParams())
+
+    with pytest.raises(ProviderError) as exc_info:
+        async for _ in provider.generate(req):
+            pass
+
+    assert exc_info.value.kind == "timeout"
+    assert exc_info.value.retryable is True
+
+
+@pytest.mark.asyncio
+async def test_gemini_interrupted_tcp_stream_is_retryable_provider_error():
+    partial_event = json.dumps({"candidates": [{"content": {"parts": [{"text": "partial"}]}}]})
+    body = f"data: {partial_event}\n\n".encode()
+
+    async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        try:
+            await reader.readuntil(b"\r\n\r\n")
+            writer.write(
+                b"HTTP/1.1 200 OK\r\n"
+                b"Content-Type: text/event-stream\r\n"
+                b"Content-Length: 1024\r\n"
+                b"Connection: close\r\n\r\n"
+                + body
+            )
+            await writer.drain()
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    server = await asyncio.start_server(handle_connection, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    provider = GeminiProvider(
+        api_key="key",
+        base_url=f"http://127.0.0.1:{port}/v1beta",
+    )
+    req = ModelRequest(model="gemini-2.0-flash", system=[], messages=[], tools=[], params=ModelParams())
+    observed_text: list[str] = []
+
+    try:
+        with pytest.raises(ProviderError) as exc_info:
+            async for event in provider.generate(req):
+                if isinstance(event, TextDelta):
+                    observed_text.append(event.text)
+
+        assert observed_text == ["partial"]
+        assert exc_info.value.kind == "unavailable"
+        assert exc_info.value.retryable is True
+    finally:
+        await provider.aclose()
+        server.close()
+        await server.wait_closed()
+
+
+@pytest.mark.asyncio
+async def test_gemini_stream_cancellation_is_not_rewritten():
+    waiting_for_cancel = asyncio.Event()
+
+    class BlockingStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b'data: {"candidates": [{"content": {"parts": [{"text": "first"}]}}]}\n\n'
+            waiting_for_cancel.set()
+            await asyncio.Event().wait()
+
+        async def aclose(self) -> None:
+            pass
+
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            stream=BlockingStream(),
+        )
+    )
+    provider = GeminiProvider(api_key="key", client=httpx.AsyncClient(transport=transport))
+    req = ModelRequest(model="gemini-2.0-flash", system=[], messages=[], tools=[], params=ModelParams())
+
+    async def consume() -> None:
+        async for _ in provider.generate(req):
+            pass
+
+    task = asyncio.create_task(consume())
+    try:
+        await asyncio.wait_for(waiting_for_cancel.wait(), timeout=1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("phase,kind", [("connect", "timeout"), ("read", "unavailable")])
+async def test_gemini_transport_failure_reaches_real_runner_as_typed_error(tmp_path, phase, kind):
+    from harness.kernel.bootstrap import bootstrap_kernel
+
+    class FailedRead(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b'data: {"candidates": [{"content": {"parts": [{"text": "partial"}]}}]}\n\n'
+            raise httpx.ReadError("synthetic interrupted read")
+
+        async def aclose(self):
+            pass
+
+    def respond(request):
+        if phase == "connect":
+            raise httpx.ConnectTimeout("synthetic connection timeout", request=request)
+        return httpx.Response(200, headers={"Content-Type": "text/event-stream"}, stream=FailedRead())
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    runtime = await bootstrap_kernel(workspace=workspace, config_dir=tmp_path / "config", resume_session=False)
+    client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    provider = GeminiProvider(name="test-gemini", api_key="synthetic", client=client)
+    runtime.registry.register_provider(provider, plugin_name="test_gemini")
+    subscriber = runtime.bus.subscribe()
+    try:
+        session = await runtime.session_manager.create_session()
+        result = await runtime.commands.submit_turn(session_id=session.session_id, prompt="test failure",
+            options={"provider": "test-gemini", "model": "gemini-2.0-flash"})
+        assert result.stop_reason == "error" and result.error
+        seen = []
+        while not subscriber.empty():
+            seen.append(subscriber.get_nowait())
+        assert not [event for event in seen if event.type == "turn.completed"]
+        errors = [event for event in seen if event.type == "turn.error"]
+        assert len(errors) == 1 and errors[0].data["kind"] == kind
+    finally:
+        runtime.bus.unsubscribe(subscriber)
+        await runtime.registry.unload_all()
+        await client.aclose()
 
 
 @pytest.mark.asyncio

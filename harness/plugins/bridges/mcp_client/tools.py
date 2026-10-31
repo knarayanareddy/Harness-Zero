@@ -3,17 +3,23 @@ Tool generation and execution mapping for MCP tools and resources (§10, BRG-02)
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import logging
 from collections.abc import Callable
 from typing import Any
 
 from harness.sdk.context import ToolContext
 from harness.sdk.contracts import ToolSpec
-from harness.sdk.types import Capability, RiskClass, TextBlock, ToolResult
+from harness.sdk.types import Capability, ImageBlock, RiskClass, TextBlock, ToolResult
 
 from .client import MCPClient
 
 logger = logging.getLogger(__name__)
+# ToolContext exposes no result-size setting. This post-parse cap bounds aggregate
+# encoded image data, not the MCP transport's response buffering.
+MCP_IMAGE_DATA_B64_LIMIT = 48 * 1024
+_MCP_IMAGE_MEDIA_TYPES = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"})
 
 
 def _flag(annotations: dict[str, Any], *names: str) -> bool:
@@ -91,21 +97,54 @@ def create_mcp_tool_handler(
                 cancel_event=getattr(ctx, "cancel_event", None),
             )
             content_items = res.get("content", [])
-            text_blocks: list[TextBlock] = []
-
+            if not isinstance(content_items, list):
+                return ToolResult.error("MCP tool response content must be a list")
+            content: list[TextBlock | ImageBlock] = []
+            image_data_b64_bytes = 0
             for item in content_items:
                 if isinstance(item, dict):
-                    t = item.get("text", "")
-                    if t:
-                        text_blocks.append(TextBlock(text=t))
-                elif isinstance(item, str) and item:
-                    text_blocks.append(TextBlock(text=item))
-
-            if not text_blocks:
-                text_blocks.append(TextBlock(text="Success"))
-
+                    content_type = item.get("type")
+                    if content_type == "text":
+                        text = item.get("text")
+                        if not isinstance(text, str):
+                            return ToolResult.error("MCP text content must contain a string text field")
+                        if text:
+                            content.append(TextBlock(text=text))
+                    elif content_type == "image":
+                        media_type = item.get("mimeType")
+                        data_b64 = item.get("data")
+                        if not isinstance(media_type, str) or media_type.lower() not in _MCP_IMAGE_MEDIA_TYPES:
+                            return ToolResult.error("MCP image content has an unsupported media type")
+                        if not isinstance(data_b64, str) or not data_b64:
+                            return ToolResult.error("MCP image content must contain base64 data")
+                        # Standard base64 is ASCII: its character count equals
+                        # its byte count. Refuse excess before allocating a copy.
+                        if len(data_b64) > MCP_IMAGE_DATA_B64_LIMIT - image_data_b64_bytes:
+                            return ToolResult.error(
+                                f"MCP image content exceeds the aggregate size limit of "
+                                f"{MCP_IMAGE_DATA_B64_LIMIT} base64 bytes"
+                            )
+                        try:
+                            encoded = data_b64.encode("ascii")
+                        except UnicodeEncodeError:
+                            return ToolResult.error("MCP image data must be standard base64 ASCII")
+                        try:
+                            base64.b64decode(encoded, validate=True)
+                        except (binascii.Error, ValueError):
+                            return ToolResult.error("MCP image data must be valid standard base64")
+                        image_data_b64_bytes += len(encoded)
+                        content.append(ImageBlock(media_type=media_type.lower(), data_b64=data_b64))
+                    else:
+                        return ToolResult.error("Unsupported MCP tool result content type")
+                elif isinstance(item, str):
+                    if item:
+                        content.append(TextBlock(text=item))
+                else:
+                    return ToolResult.error("Unsupported MCP tool result content item")
+            if not content:
+                return ToolResult.error("MCP tool response contained no supported content")
             is_error = bool(res.get("isError", False))
-            return ToolResult(content=text_blocks, is_error=is_error)
+            return ToolResult(content=content, is_error=is_error)
         except Exception as err:
             logger.exception(f"Error executing MCP tool '{original_tool_name}': {err}")
             return ToolResult.error(f"MCP tool error: {err}")

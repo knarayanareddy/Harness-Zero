@@ -28,6 +28,7 @@ class MockToolContext:
         self.workspace = workspace
         self.data_dir = workspace
         self.capabilities = frozenset()
+        self.cancel_event = asyncio.Event()
 
 
 class MockPluginContext:
@@ -41,6 +42,59 @@ class MockPluginContext:
 
     def emit_event(self, payload: object) -> None:
         self.events.append(payload)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prior_bytes", [0, 4])
+async def test_oversized_mcp_image_is_rejected_before_encoding_copy(tmp_path, prior_bytes):
+    from harness.plugins.bridges.mcp_client.tools import MCP_IMAGE_DATA_B64_LIMIT
+
+    copied = False
+
+    class ObservedString(str):
+        def encode(self, *args, **kwargs):
+            nonlocal copied
+            copied = True
+            return super().encode(*args, **kwargs)
+
+    # Observe the allocation boundary without allocating an enormous fixture or
+    # pretending that this handler-level check bounds transport buffering.
+    data = ObservedString("A" * (MCP_IMAGE_DATA_B64_LIMIT + (4 if not prior_bytes else 0)))
+    content = ([{"type": "image", "mimeType": "image/png", "data": "AAAA"}] if prior_bytes else [])
+    content.append({"type": "image", "mimeType": "image/png", "data": data})
+
+    class Client:
+        async def call_tool(self, name, arguments, *, cancel_event):
+            return {"content": content, "isError": False}
+
+    result = await create_mcp_tool_handler(Client(), "fixture")({}, MockToolContext(tmp_path))
+    assert not copied, "Oversized input must be refused before making an ASCII copy"
+    assert result.is_error
+    assert "size limit" in result.output
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("content", [[{"type": "text", "text": ""}], [""], ["", {"type": "text", "text": ""}]])
+async def test_empty_mcp_text_is_not_reported_as_success(tmp_path, content):
+    class Client:
+        async def call_tool(self, name, arguments, *, cancel_event):
+            return {"content": content, "isError": False}
+
+    result = await create_mcp_tool_handler(Client(), "fixture")({}, MockToolContext(tmp_path))
+    assert result.is_error
+    assert "no supported content" in result.output
+
+
+@pytest.mark.asyncio
+async def test_empty_mcp_text_does_not_hide_real_text_or_change_its_whitespace(tmp_path):
+    class Client:
+        async def call_tool(self, name, arguments, *, cancel_event):
+            return {"content": ["", {"type": "text", "text": ""}, {"type": "text", "text": " \n "}], "isError": False}
+
+    result = await create_mcp_tool_handler(Client(), "fixture")({}, MockToolContext(tmp_path))
+    assert not result.is_error
+    assert len(result.content) == 1
+    assert result.content[0].text == " \n "
 
 
 def test_derive_risk_class():

@@ -5,15 +5,20 @@
  * app keeps only the cross-cutting part (adopting the active id and updating the header, via `ctx.select` /
  * `ctx.app.noteSessionRows`).
  */
+const renderGenerations = new WeakMap();
+
 export default {
   host: 'session-list',
   async render(ctx) {
     const list = ctx.host;
     if (!list) return;
+    const generation = (renderGenerations.get(ctx.app) || 0) + 1;
+    renderGenerations.set(ctx.app, generation);
     try {
       // Rows are SessionRow (harness/sdk/types.py): {session_id, workspace, created_at, updated_at, title,
       // turns, message_count, active, busy}; the kernel marks the active one.
       const sessions = await ctx.api.getSessions();
+      if (renderGenerations.get(ctx.app) !== generation) return;
       ctx.app.noteSessionRows?.(sessions || []);
       list.innerHTML = '';
       if (!sessions || sessions.length === 0) {

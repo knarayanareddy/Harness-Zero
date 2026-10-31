@@ -211,4 +211,49 @@ Automated AST tests enforce four strict architectural boundaries:
 3. **Kernel Boundary** (`test_import_boundaries.py:69`):
    `harness/kernel/**` must never import from `harness.plugins.*`. All plugins are loaded dynamically through manifests and discovery.
 4. **Subprocess Boundary** (`test_no_direct_subprocess.py`):
-   Tools and plugins must never import `subprocess` directly. Execution must route through `Executor` contracts to guarantee audit logging and sandboxing.
+    Tools and plugins must never import `subprocess` directly. Execution must route through `Executor` contracts to guarantee audit logging and sandboxing.
+
+## 5. Baseline boundary contract v1
+
+Added by T03. The sections above describe the SDK's existing structural surface;
+the following behavioral requirements are acceptance targets. Their known
+violations are tracked in `../testing/review_regressions.json`, not implied fixed
+by this document. `CONSTRAINTS.md` at the repository root owns numerical gates.
+
+| ID | Required behavior | Live owner | Current evidence / repair owner |
+|---|---|---|---|
+| BC-01 | Every filesystem target opened by a tool remains inside the resolved workspace, including discovered paths and symlinks; processes additionally obey configured native confinement | jail, search/fs tools, gate | R1; T04; `test_R01_locked_search_cannot_read_outside_symlink` |
+| BC-02 | The canonical request preserves typed text, media, tool calls and results. Adapters normalize ToolResultBlock independently of its carrier role. ImageBlock has `media_type`, `data_b64`, `url`, never invented `.data`. Unsupported media fails visibly; it is never replaced by Success | SDK types, context derivation, providers, MCP handler | R2/R6/R12; T12/T13/T22; named probes R02/R06/R12 |
+| BC-03 | Turn cancellation reaches pending interactions and active owned work; cancellation is rechecked before starting a handler. Tool timeout remains separate and cannot cancel another session. Unknown external outcomes are not represented as rollback | Commands.cancel_turn, runner, gate, interactions, executors | R3; T05/T06; R03 process probe; pending-approval proof required |
+| BC-04 | Bridges invoke actual Commands/PolicyGate signatures; headless approval is fail-closed. MCP empty allow-list exports nothing, canonical settings govern both discovery AND invocation. ACP conformance is pinned to an actually tested external version | CLI, MCP/ACP bridges, gate | R4/R5/R13; T17–T20; actual CLI probes R04/R05/R13 |
+| BC-05 | All session-scoped events/actions carry and enforce session identity; history replies must still belong to the active generation. Reload reconciles pending/busy state from the kernel, not stale UI assumptions | Studio app/events and Commands session state | R7; T23/T24; R07 jsdom probe; browser proof required |
+| BC-06 | Sandbox wrapping preserves validated requested cwd and reports probed enforcement. Required + unavailable never runs unconfined. Approval cannot turn unavailable confinement into full confinement | sandbox service/backends, executor | R8; T11; R08 wrapper probe; native proof required |
+| BC-07 | A valid provider terminal sequence precedes successful Done. SSE errors, premature EOF and transport errors are typed failures; arbitrary chunk boundaries preserve valid calls. Error kinds use SDK literals, not nonexistent enum members | providers/parsers, runner/breaker | R9/R10/R14; T14–T16; probes R09/R10/R14 |
+| BC-08 | A successful initial/background MCP handshake publishes its discovered catalogue to the kernel exactly once per change; connected status alone is not registration | MCP client/plugin registry callback | R11; T21; R11 late-start stdio probe |
+| BC-09 | Real compaction uses Hook.events/on with current timeout semantics and a complete ModelRequest including params; summary is appended before completion, then consumed by actual request derivation; original log retained | compactor, runner, context, transcript | R15; T09/T10; real threshold probe R15; later layers also require tests |
+| BC-10 | Acknowledged records remain readable after process restart, partial dual-log failure cannot swallow a later append, every dangling call repairs durably and idempotently without re-execution | transcript/store/session | R16/R17; T07/T08; probes R16/R17; session-log addendum |
+| BC-11 | Declared resources exist in the delivered package and can be discovered without the checkout. Wheel skills and frozen Studio manifest are part of the product | package config/resource loaders/PyInstaller | R18/R19; T25/T26; recipe and wheel-inventory probes, stronger install/native proof required |
+
+### Canonical and wire representations are distinct
+
+`derive_messages` currently emits USER-carried ToolResultBlock values. That is a
+canonical SDK representation, not an OpenAI wire requirement. Do not globally
+change it to TOOL to patch one adapter and break another. Each adapter owns its
+provider representation, matches every result's `tool_use_id` to the original
+call, and preserves advertised media. Provider request-body tests must cross the
+real adapter, not duplicate its conversion in a helper.
+
+Real kernel method names are `Commands.submit_turn`, `cancel_turn`,
+`sessions_create`, `sessions_list`, and `PolicyGate.execute`. A mock offering
+obsolete names does not prove compatibility. Hook contract is `events`/`on`,
+not singular `event`/`execute`. `ModelRequest.params` is required. Existing
+`KernelServices.spawn_child` declarations do not establish a live supported
+subagent execution path.
+
+### Capability support is a tested tuple
+
+Support is `(artifact, OS/runtime, provider/client version, capability, evidence)`.
+Native tools advertised on an unavailable platform, a vision capability whose
+payload builder fails, or an initialized bridge that cannot run a session are
+not supported combinations. Record unverified external versions rather than
+inventing a compatibility claim; see `../testing/VERIFICATION_MATRIX.md`.

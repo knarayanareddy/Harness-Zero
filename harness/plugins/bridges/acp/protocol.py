@@ -13,6 +13,14 @@ class ACPRequest:
     method: str
     params: dict[str, Any]
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "jsonrpc": "2.0",
+            "id": self.id,
+            "method": self.method,
+            "params": self.params,
+        }
+
 
 @dataclass(slots=True)
 class ACPResponse:

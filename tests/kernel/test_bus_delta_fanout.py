@@ -14,7 +14,7 @@ import asyncio
 import pytest
 
 from harness.kernel.bus import EventBus
-from harness.sdk.events import Event
+from harness.sdk.events import Event, ModelTextDelta, ModelThinkingDelta, ToolOutputDelta
 
 
 async def _drain(sub, n: int) -> list[Event]:
@@ -68,3 +68,52 @@ async def test_deltas_from_different_turns_are_not_merged():
     bus.publish(Event(type="model.text.delta", data={"text": "turn two"}, turn_id="t2"))
     got = await _drain(sub, 2)
     assert [e.data["text"] for e in got] == ["turn one", "turn two"]
+
+
+@pytest.mark.parametrize("payload_type", [ModelTextDelta, ModelThinkingDelta, ToolOutputDelta])
+@pytest.mark.parametrize("turn_id", [None, "shared-turn"])
+@pytest.mark.parametrize("other_session", ["B", None])
+@pytest.mark.parametrize("foreign_first", [False, True])
+def test_delta_coalescing_never_crosses_session_identity(payload_type, turn_id, other_session, foreign_first):
+    bus = EventBus()
+    subscribers = [bus.subscribe(interactive=False) for _ in range(2)]
+
+    def event(session, text):
+        args = {"text": text}
+        if payload_type is ToolOutputDelta:
+            args.update(call_id="repeated-call-id", stream="stdout")
+        payload = payload_type(**args)
+        return Event(type=payload.EVENT_TYPE, data=payload, session_id=session, turn_id=turn_id)
+
+    owned = event("A", "OWNED_TEXT")
+    foreign = event(other_session, "PRIVATE_FOREIGN_CANARY")
+    originals = [foreign, owned] if foreign_first else [owned, foreign]
+    for item in originals:
+        bus.publish(item)
+    for subscriber in subscribers:
+        received = []
+        while not subscriber.empty():
+            received.append(subscriber.get_nowait())
+        visible_to_a = "".join(item.data["text"] for item in received if item.session_id == "A")
+        assert "PRIVATE_FOREIGN_CANARY" not in visible_to_a
+        assert [(item.session_id, item.data["text"]) for item in received] == [
+            (item.session_id, item.data["text"]) for item in originals
+        ], "Both distinct session envelopes and their ordering must survive fanout"
+    assert owned.data["text"] == "OWNED_TEXT"
+    assert foreign.data["text"] == "PRIVATE_FOREIGN_CANARY"
+
+
+@pytest.mark.parametrize("payload_type", [ModelTextDelta, ModelThinkingDelta, ToolOutputDelta])
+def test_same_session_typed_deltas_still_coalesce(payload_type):
+    bus = EventBus()
+    subscriber = bus.subscribe(interactive=False)
+    for text in ("one", "two"):
+        args = {"text": text}
+        if payload_type is ToolOutputDelta:
+            args.update(call_id="same-call", stream="stdout")
+        payload = payload_type(**args)
+        bus.publish(Event(type=payload.EVENT_TYPE, data=payload, session_id="A", turn_id="same-turn"))
+    assert subscriber.qsize() == 1
+    result = subscriber.get_nowait()
+    assert result.session_id == "A"
+    assert result.data["text"] == "onetwo"

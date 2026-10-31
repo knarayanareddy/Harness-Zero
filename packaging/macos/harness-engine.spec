@@ -2,6 +2,9 @@
 from pathlib import Path
 
 repo_root = Path(SPECPATH).resolve().parent.parent if 'SPECPATH' in locals() else Path('.').resolve()
+ui_manifest = repo_root / 'harness/frontends/web/ui.toml'
+if not ui_manifest.is_file():
+    raise FileNotFoundError(f"Required frozen UI manifest is missing or not a regular file: {ui_manifest}")
 
 # Collect all plugin modules for hiddenimports dynamically
 plugin_dir = repo_root / "harness" / "plugins"
@@ -18,6 +21,7 @@ datas = [
 ]
 if (repo_root / "builtin").exists():
     datas.append((str(repo_root / 'builtin'), 'builtin'))
+datas.append((str(ui_manifest), 'harness/frontends/web'))
 
 a = Analysis(
     [str(repo_root / 'harness/engine_main.py')],

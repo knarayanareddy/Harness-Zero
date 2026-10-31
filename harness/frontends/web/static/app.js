@@ -75,7 +75,22 @@ export class HarnessStudioApp {
     this.currentTextElement = null;
     this.currentThinkingBlock = null;
     this.currentThinkingElement = null;
+    this._lastCompletedAssistantStep = null;
+    this._activeTurnUserStep = null;
+    this._toolCallAssistantBlocks = new Map();
+    this._pendingToolAssistantBlock = null;
     this.pendingQuestions = new Map();
+    this._viewEpoch = 0;
+    this._transcriptRequestGeneration = 0;
+    this._lifecycleRevision = 0;
+    this._sessionSelectionGeneration = 0;
+    this._eventStreamDisconnected = false;
+    this._renderedRecordKeys = new Set();
+    this._recordNodes = new Map();
+    this._toolCallOwners = new Map();
+    this._draftUserNodes = [];
+    this._resolvedApprovals = new Map();
+    this._resolvedQuestions = new Map();
   }
 
   async init() {
@@ -238,9 +253,21 @@ export class HarnessStudioApp {
   }
 
   setupEventHandlers() {
+    // Session-only facts require correlation. Only explicitly opted-in workspace
+    // notifications may omit session_id; a foreign session never paints this view.
+    const onSessionEvent = (type, handler, allowUnscoped = false) => this.events.on(type, (data, envelope) => {
+      const sessionId = envelope?.session_id;
+      if (sessionId == null ? !allowUnscoped : sessionId !== this.activeSessionId) return;
+      handler(data, envelope);
+    });
+
     // Connection status indicators
     this.events.on('$connected', () => {
       this.setStatusIndicator('online', 'Connected');
+      if (this._eventStreamDisconnected) {
+        this._eventStreamDisconnected = false;
+        if (this.activeSessionId) this.reloadTranscript();
+      }
     });
 
     this.events.on('$reconnecting', ({ attempt }) => {
@@ -248,84 +275,130 @@ export class HarnessStudioApp {
     });
 
     this.events.on('$disconnected', () => {
+      this._eventStreamDisconnected = true;
       this.setStatusIndicator('offline', 'Disconnected');
     });
 
     // Lifecycle events
-    this.events.on('turn.started', (data) => {
+    onSessionEvent('turn.started', (_data, envelope) => {
+      this._lifecycleRevision += 1;
+      this._activeTurnUserStep = envelope?.record?.kind === 'user.message'
+        && Number.isSafeInteger(envelope.record.step_index) ? envelope.record.step_index : null;
+      this._pendingToolAssistantBlock = null;
       this.setBusy(true);
+      if (envelope?.record) this.adoptLiveRecord(envelope.record, envelope);
       this.appendTurnBlock('assistant');
+      if (envelope?.turn_id && this.currentAssistantBlock) {
+        this.currentAssistantBlock.dataset.turnId = envelope.turn_id;
+      }
     });
 
-    this.events.on('turn.completed', () => {
+    onSessionEvent('turn.completed', () => {
+      this._lifecycleRevision += 1;
+      this._activeTurnUserStep = null;
       this.setBusy(false);
       this.finalizeStreamingBlock();
+      this._toolCallAssistantBlocks.clear();
+      this._pendingToolAssistantBlock = null;
     });
 
-    this.events.on('turn.cancelled', (data) => {
+    onSessionEvent('turn.cancelled', (data) => {
+      this._lifecycleRevision += 1;
+      this._activeTurnUserStep = null;
       this.setBusy(false);
       this.finalizeStreamingBlock();
+      this._toolCallAssistantBlocks.clear();
+      this._pendingToolAssistantBlock = null;
       this.appendNotice(data.reason || 'Turn cancelled.', 'warn');
     });
 
-    this.events.on('turn.error', (data) => {
+    onSessionEvent('turn.error', (data) => {
+      this._lifecycleRevision += 1;
+      this._activeTurnUserStep = null;
       this.setBusy(false);
       this.finalizeStreamingBlock();
+      this._toolCallAssistantBlocks.clear();
+      this._pendingToolAssistantBlock = null;
       this.appendNotice(data.message, 'error');
+    });
+
+    onSessionEvent('model.started', () => {
+      // A new provider request ends the previous tool-call grouping, but older exact call IDs
+      // remain available for their delayed canonical completion.
+      this._pendingToolAssistantBlock = null;
+      for (const [callId, block] of this._toolCallAssistantBlocks) {
+        if (!block.isConnected || block.dataset.recordKey) this._toolCallAssistantBlocks.delete(callId);
+      }
+    });
+
+    onSessionEvent('model.completed', (_data, envelope) => {
+      if (envelope?.record) {
+        if (envelope.record.kind === 'assistant.message' && Number.isSafeInteger(envelope.record.step_index)) {
+          this._lastCompletedAssistantStep = envelope.record.step_index;
+        }
+        this.adoptLiveRecord(envelope.record, envelope);
+        if (this.currentAssistantBlock?.dataset.recordKey === this.recordIdentity(envelope.record)) {
+          this.finalizeStreamingBlock();
+        }
+      }
     });
 
     // Durable plugin facts carry their transcript record in the named SSE envelope. These listeners are
     // registered before `connect()`, and events.js also subscribes to the SDK's complete event vocabulary.
     this.events.on('system.notice', (data, envelope) => {
-      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.session_id != null && envelope.session_id !== this.activeSessionId) return;
       if (envelope?.record) this.renderRecord(envelope.record);
       else this.appendNotice(data?.message || 'The workspace operation needs attention.', data?.level || 'info');
     });
 
     for (const type of ['job.started', 'job.output', 'job.exited']) {
       this.events.on(type, (_data, envelope) => {
-        if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+        if (envelope?.session_id != null && envelope.session_id !== this.activeSessionId) return;
         this.panels?.refresh('jobs');
       });
     }
 
     this.events.on('workspace.changes', (_data, envelope) => {
-      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.session_id != null && envelope.session_id !== this.activeSessionId) return;
       if (envelope?.record) this.renderRecord(envelope.record);
       this.panels?.refresh('diffs');
     });
 
     this.events.on('deliverable.presented', (_data, envelope) => {
-      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.session_id != null && envelope.session_id !== this.activeSessionId) return;
       if (envelope?.record) this.renderRecord(envelope.record);
     });
 
     this.events.on('checkpoint.restored', (_data, envelope) => {
-      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+      if (envelope?.session_id != null && envelope.session_id !== this.activeSessionId) return;
       if (envelope?.record) this.renderRecord(envelope.record);
       this.panels?.refresh('diffs');
     });
 
     // Streaming Deltas
-    this.events.on('model.text.delta', (data) => {
+    onSessionEvent('model.text.delta', (data, envelope) => {
       if (!this.currentAssistantBlock) {
+        this._pendingToolAssistantBlock = null;
         this.appendTurnBlock('assistant');
+        if (envelope?.turn_id) this.currentAssistantBlock.dataset.turnId = envelope.turn_id;
       }
       if (data.text) {
         this.streamAssistantText(data.text);
       }
     });
 
-    this.events.on('model.thinking.delta', (data) => {
+    onSessionEvent('model.thinking.delta', (data, envelope) => {
       if (!this.currentAssistantBlock) {
+        this._pendingToolAssistantBlock = null;
         this.appendTurnBlock('assistant');
+        if (envelope?.turn_id) this.currentAssistantBlock.dataset.turnId = envelope.turn_id;
       }
       if (data.text) {
         this.streamThinkingText(data.text);
       }
     });
 
-    this.events.on('tool.output.delta', (data) => {
+    onSessionEvent('tool.output.delta', (data) => {
       // {call_id, stream, text}: streamed into the tool card it belongs to (there is no separate terminal).
       if (data.text) {
         this.appendToolOutput(data.call_id, data.text, data.stream);
@@ -343,75 +416,88 @@ export class HarnessStudioApp {
     });
 
     // Tool execution & cards
-    this.events.on('tool.call', (data) => {
+    onSessionEvent('tool.call', (data, envelope) => {
       // Text streamed before this call stays above the card; text from the next model
       // call starts a fresh block below it (model.text.delta creates one on demand).
+      let assistantBlock = null;
       if (this.currentAssistantBlock) {
         const hasContent = (this.currentTextElement?.textContent || '') || this.currentThinkingElement;
-        if (hasContent) this.finalizeStreamingBlock();
+        if (hasContent) {
+          assistantBlock = this.currentAssistantBlock;
+          this.finalizeStreamingBlock();
+        }
         else { this.currentAssistantBlock.remove(); this.finalizeStreamingBlock(); }
+      } else if (this._pendingToolAssistantBlock?.isConnected
+        && !this._pendingToolAssistantBlock.dataset.recordKey
+        && (!envelope?.turn_id || !this._pendingToolAssistantBlock.dataset.turnId
+          || this._pendingToolAssistantBlock.dataset.turnId === envelope.turn_id)) {
+        assistantBlock = this._pendingToolAssistantBlock;
+      }
+      if (assistantBlock && !assistantBlock.dataset.recordKey && data.call_id != null) {
+        this._toolCallAssistantBlocks.set(String(data.call_id), assistantBlock);
+        this._pendingToolAssistantBlock = assistantBlock;
       }
       this.appendToolCall(data);
     });
 
-    this.events.on('tool.decision', (data) => {
+    onSessionEvent('tool.decision', (data, envelope) => {
       this.updateToolDecision(data);
+      if (envelope?.record) this.adoptLiveRecord(envelope.record, envelope, document.querySelector(`.harness-card-tool[data-call-id=${cssString(data.call_id)}]`));
     });
 
-    this.events.on('tool.result', (data) => {
+    onSessionEvent('tool.result', (data, envelope) => {
       this.updateToolResult(data);
+      if (envelope?.record) this.adoptLiveRecord(envelope.record, envelope, document.querySelector(`.harness-card-tool[data-call-id=${cssString(data.call_id)}]`));
     });
 
-    this.events.on('task.started', (data) => {
+    onSessionEvent('task.started', (data) => {
       this.appendTask(data);
     });
 
-    this.events.on('task.completed', (data) => {
+    onSessionEvent('task.completed', (data) => {
       this.completeTask(data);
     });
 
-    this.events.on('compaction.started', () => {
+    onSessionEvent('compaction.started', () => {
       this.appendNotice('Compacting context memory to optimize tokens...', 'info');
     });
 
-    this.events.on('compaction.completed', (data) => {
+    onSessionEvent('compaction.completed', (data) => {
       this.appendCard({ kind: 'compaction', data });
     });
 
-    this.events.on('ui.card', (data) => {
+    onSessionEvent('ui.card', (data) => {
       this.appendCard(data.card);
-    });
+    }, true);
 
     // Approvals
-    this.events.on('approval.required', (data) => {
+    onSessionEvent('approval.required', (data) => {
       this.showApproval(data);
     });
 
-    this.events.on('approval.resolved', (data) => {
+    onSessionEvent('approval.resolved', (data) => {
       this.resolveApprovalUI(data);
     });
 
     // A pending question and its answer are transcript records; paint the stored record so live and reload
     // share the same renderer and never invent a second client-side copy of the payload.
-    this.events.on('question.asked', (data, envelope) => {
-      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+    onSessionEvent('question.asked', (data, envelope) => {
       if (envelope?.record) this.renderRecord(envelope.record);
       else this.showQuestion(data);
     });
 
-    this.events.on('question.answered', (data, envelope) => {
-      if (envelope?.session_id && envelope.session_id !== this.activeSessionId) return;
+    onSessionEvent('question.answered', (data, envelope) => {
       if (envelope?.record) this.renderRecord(envelope.record);
       else this.resolveQuestionUI(data);
     });
 
     // Economics
-    this.events.on('cost.updated', (data) => {
+    onSessionEvent('cost.updated', (data) => {
       this.updateEconomics(data);
     });
 
     // Context Assembler Inspector
-    this.events.on('context.assembled', (data) => {
+    onSessionEvent('context.assembled', (data) => {
       this.updateContextInspector(data);
     });
 
@@ -427,6 +513,8 @@ export class HarnessStudioApp {
 
     this.events.on('session.switched', (data) => {
       if (data.session_id === this.activeSessionId) return;
+      this._sessionSelectionGeneration += 1;
+      this.resetSessionView();
       this.activeSessionId = data.session_id;
       this.loadSessions();
       this.reloadTranscript();
@@ -456,6 +544,8 @@ export class HarnessStudioApp {
 
         // Add user block to timeline immediately
         this.appendUserTurn(text);
+        const viewEpoch = this._viewEpoch;
+        const sessionId = this.activeSessionId;
 
         // Submit to API (no session yet → the kernel creates one and announces it via session.started)
         try {
@@ -473,11 +563,13 @@ export class HarnessStudioApp {
             options,
           });
 
+          if (!this.isCurrentView(viewEpoch, sessionId)) return;
           if (res?.result?.error) {
             this.appendNotice(res.result.error, 'error');
             this.setBusy(false);
           }
         } catch (err) {
+          if (!this.isCurrentView(viewEpoch, sessionId)) return;
           this.appendNotice(`Submit failed: ${err.message}`, 'error');
           this.setBusy(false);
         }
@@ -761,6 +853,7 @@ export class HarnessStudioApp {
       <div class="message-bubble whitespace-pre-wrap">${escapeHtml(text)}</div>
     `;
     timeline.appendChild(block);
+    this._draftUserNodes.push({ node: block, sessionId: this.activeSessionId, viewEpoch: this._viewEpoch });
     timeline.scrollTop = timeline.scrollHeight;
   }
 
@@ -808,14 +901,31 @@ export class HarnessStudioApp {
     this.currentThinkingElement.textContent += chunk;
   }
 
-  finalizeStreamingBlock() {
-    if (this.currentTextElement && window.marked && window.DOMPurify) {
+  renderAssistantContent(block, rawText) {
+    const content = block?.querySelector('.content-body');
+    if (!content) return false;
+    const text = String(rawText ?? '');
+    if (block._harnessRenderedSource === text && block._harnessRenderedSafeHtml) return true;
+    if (window.marked && window.DOMPurify) {
       try {
-        const rawText = this.currentTextElement.textContent || '';
-        this.currentTextElement.innerHTML = window.DOMPurify.sanitize(window.marked.parse(rawText));
+        content.innerHTML = window.DOMPurify.sanitize(window.marked.parse(text));
+        block._harnessRenderedSource = text;
+        block._harnessRenderedSafeHtml = true;
+        return true;
       } catch (err) {
         console.warn('Failed to parse markdown on finalize:', err);
       }
+    }
+    // If Markdown/sanitizer assets are unavailable (or fail), keep the transcript as inert text.
+    content.textContent = text;
+    block._harnessRenderedSource = text;
+    block._harnessRenderedSafeHtml = false;
+    return false;
+  }
+
+  finalizeStreamingBlock() {
+    if (this.currentTextElement && this.currentAssistantBlock && !this.currentAssistantBlock._harnessRenderedSafeHtml) {
+      this.renderAssistantContent(this.currentAssistantBlock, this.currentTextElement.textContent || '');
     }
     this.currentAssistantBlock = null;
     this.currentTextElement = null;
@@ -826,12 +936,21 @@ export class HarnessStudioApp {
   appendToolCall(data) {
     const timeline = document.getElementById('timeline');
     if (!timeline) return;
+    const existing = document.querySelector(`.harness-card-tool[data-call-id=${cssString(data.call_id)}]`);
+    if (existing) {
+      this.attachToolCallOwner(existing, data.call_id);
+      return existing;
+    }
 
     const cardHtml = cardRenderer.render({ kind: 'tool', id: data.call_id, data });
     const wrapper = document.createElement('div');
     wrapper.innerHTML = cardHtml;
-    timeline.appendChild(wrapper.firstElementChild);
+    const card = wrapper.firstElementChild;
+    timeline.appendChild(card);
+    this.attachToolCallOwner(card, data.call_id);
     timeline.scrollTop = timeline.scrollHeight;
+    this.sortCanonicalRecordNodes();
+    return card;
   }
 
   updateToolDecision(data) {
@@ -849,7 +968,10 @@ export class HarnessStudioApp {
         const metaEl = document.createElement('span');
         metaEl.className = 'card-meta text-xs';
         metaEl.textContent = metaText;
-        nameEl.parentElement.insertBefore(metaEl, nameEl.nextSibling);
+        // The template's whitespace-only text node sits after the title. Insert a semantic
+        // separator before this new subtitle so DOM text stays readable as well as the flex gap.
+        nameEl.insertAdjacentText('afterend', ' ');
+        nameEl.parentElement.insertBefore(metaEl, nameEl.nextSibling.nextSibling);
       }
       const badge = card.querySelector('.card-badge');
       if (badge) {
@@ -996,6 +1118,7 @@ export class HarnessStudioApp {
   showApproval(data) {
     // `approval.required` payload: {approval_id, call_id, kind, summary, details, timeout_s, options}
     const reqId = data.approval_id;
+    if (this._resolvedApprovals.has(reqId) || document.querySelector(`.harness-card-approval[data-request-id=${cssString(reqId)}]`)) return;
     // 1. Append approval card to timeline (SDK `approval` card shape; kind/timeout go in the title)
     const timeout = data.timeout_s ? ` · ${Math.round(data.timeout_s)}s to respond` : '';
     this.appendCard({
@@ -1016,6 +1139,7 @@ export class HarnessStudioApp {
   resolveApprovalUI(data) {
     // `approval.resolved` payload: {approval_id, approved, by, reason}
     const reqId = data.approval_id;
+    this._resolvedApprovals.set(reqId, data);
     // Hide top banner if matches
     const banner = document.getElementById('approval-banner');
     if (banner && banner.getAttribute('data-request-id') === reqId) {
@@ -1039,6 +1163,7 @@ export class HarnessStudioApp {
   showQuestion(data) {
     const interactionId = String(data.interaction_id || '');
     if (!interactionId) return;
+    if (this._resolvedQuestions.has(interactionId)) return;
     this.pendingQuestions.set(interactionId, Array.isArray(data.questions) ? data.questions : []);
     const selector = `.harness-card-question[data-interaction-id=${cssString(interactionId)}]`;
     if (!document.querySelector(selector)) {
@@ -1084,6 +1209,7 @@ export class HarnessStudioApp {
 
   resolveQuestionUI(data) {
     const interactionId = String(data.interaction_id || '');
+    this._resolvedQuestions.set(interactionId, data);
     const questions = this.pendingQuestions.get(interactionId) || [];
     const card = document.querySelector(`.harness-card-question[data-interaction-id=${cssString(interactionId)}]`);
     this.pendingQuestions.delete(interactionId);
@@ -1131,6 +1257,8 @@ export class HarnessStudioApp {
   }
 
   async submitQuestionForm(formElem) {
+    const viewEpoch = this._viewEpoch;
+    const sessionId = this.activeSessionId;
     const interactionId = formElem.getAttribute('data-form-id') || '';
     const questions = this.pendingQuestions.get(interactionId) || [];
     const radios = [...formElem.querySelectorAll('input[type="radio"][data-question-id]')];
@@ -1159,15 +1287,19 @@ export class HarnessStudioApp {
         throw new Error('This question is no longer pending.');
       }
     } catch (err) {
+      if (!this.isCurrentView(viewEpoch, sessionId)) return;
       if (submit) submit.disabled = false;
       this.appendNotice(`Failed to submit answer: ${err.message}`, 'error');
     }
   }
 
   async resolveApproval(requestId, decision, feedback = '') {
+    const viewEpoch = this._viewEpoch;
+    const sessionId = this.activeSessionId;
     try {
       await this.api.resolveApproval(requestId, decision, feedback);
     } catch (err) {
+      if (!this.isCurrentView(viewEpoch, sessionId)) return;
       this.appendNotice(`Failed to resolve approval: ${err.message}`, 'error');
     }
   }
@@ -1393,6 +1525,10 @@ export class HarnessStudioApp {
     await this.panels?.refresh('sessions');
   }
 
+  isCurrentView(viewEpoch, sessionId) {
+    return this._viewEpoch === viewEpoch && this.activeSessionId === sessionId;
+  }
+
   /** Called by the sessions panel with the rows it is about to paint (SessionRow dicts, harness/sdk/types.py). */
   noteSessionRows(rows) {
     rows = rows || [];
@@ -1423,23 +1559,34 @@ export class HarnessStudioApp {
       await this.reloadTranscript();
       return;
     }
+    const selectionGeneration = ++this._sessionSelectionGeneration;
+    const viewEpoch = this._viewEpoch;
     try {
       await this.api.switchSession(sessionId);
+      if (selectionGeneration !== this._sessionSelectionGeneration || viewEpoch !== this._viewEpoch) return;
+      if (sessionId === this.activeSessionId) return;
+      this.resetSessionView();
       this.activeSessionId = sessionId;
       await this.loadSessions();
       await this.reloadTranscript();
     } catch (err) {
+      if (selectionGeneration !== this._sessionSelectionGeneration || viewEpoch !== this._viewEpoch) return;
       this.appendNotice(`Failed to switch session: ${err.message}`, 'error');
     }
   }
 
   async createNewSession() {
+    const selectionGeneration = ++this._sessionSelectionGeneration;
+    const viewEpoch = this._viewEpoch;
     try {
       const s = await this.api.createSession();
+      if (selectionGeneration !== this._sessionSelectionGeneration || viewEpoch !== this._viewEpoch) return;
+      this.resetSessionView();
       this.activeSessionId = s.session_id;
       await this.loadSessions();
       await this.reloadTranscript();
     } catch (err) {
+      if (selectionGeneration !== this._sessionSelectionGeneration || viewEpoch !== this._viewEpoch) return;
       this.appendNotice(`Failed to create session: ${err.message}`, 'error');
     }
   }
@@ -1447,19 +1594,90 @@ export class HarnessStudioApp {
   async reloadTranscript() {
     const timeline = document.getElementById('timeline');
     if (!timeline) return;
-    timeline.innerHTML = '';
-    if (!this.activeSessionId) {
+    const sessionId = this.activeSessionId;
+    const viewEpoch = this._viewEpoch;
+    const requestGeneration = ++this._transcriptRequestGeneration;
+    const lifecycleRevision = this._lifecycleRevision;
+    if (!sessionId) {
       this.showEmptyTimelineHint();
       return;
     }
 
     try {
-      const sData = await this.api.command('sessions.get', { session_id: this.activeSessionId });
-      for (const rec of (sData.records || [])) this.renderRecord(rec);
+      const sData = await this.api.command('sessions.get', { session_id: sessionId });
+      if (!this.isCurrentView(viewEpoch, sessionId) || requestGeneration !== this._transcriptRequestGeneration) return;
+      const records = sData.records || [];
+      const activeStream = {
+        block: this.currentAssistantBlock,
+        text: this.currentTextElement,
+        thinkingBlock: this.currentThinkingBlock,
+        thinking: this.currentThinkingElement,
+      };
+      let latestAssistantIndex = -1;
+      for (let index = 0; index < records.length; index += 1) {
+        if (records[index]?.kind === 'assistant.message') latestAssistantIndex = index;
+      }
+      for (let index = 0; index < records.length; index += 1) {
+        const rec = records[index];
+        const toolBoundaryBlock = rec?.kind === 'assistant.message'
+          ? this.findToolBoundAssistantBlock(rec) : null;
+        const streamingBlock = index === latestAssistantIndex && sData.busy === true
+          && this.currentAssistantBlock?.isConnected && !this.currentAssistantBlock.dataset.recordKey
+          && this.recordIdentity(rec)
+          && Number.isSafeInteger(this._activeTurnUserStep) && rec.step_index > this._activeTurnUserStep
+          && this._lastCompletedAssistantStep !== rec.step_index
+          ? this.currentAssistantBlock : null;
+        if (toolBoundaryBlock) {
+          this.adoptLiveRecord(rec, null, toolBoundaryBlock);
+        } else if (streamingBlock && rec.kind === 'assistant.message') {
+          for (const call of rec.tool_calls || []) {
+            this.appendToolCall({ call_id: call.id, name: call.name, arguments: call.arguments || {}, status: 'running' });
+          }
+          this.adoptLiveRecord(rec, null, streamingBlock);
+        } else {
+          this.renderRecord(rec);
+        }
+      }
+      if (activeStream.block?.isConnected && !activeStream.block.dataset.recordKey) {
+        timeline.appendChild(activeStream.block);
+        this.currentAssistantBlock = activeStream.block;
+        this.currentTextElement = activeStream.text;
+        this.currentThinkingBlock = activeStream.thinkingBlock;
+        this.currentThinkingElement = activeStream.thinking;
+      }
       if (!timeline.children.length) this.showEmptyTimelineHint();
+      if (lifecycleRevision === this._lifecycleRevision && typeof sData.busy === 'boolean') {
+        this.setBusy(sData.busy);
+      }
     } catch (err) {
-      console.warn('Failed to reload transcript:', err);
+      if (this.isCurrentView(viewEpoch, sessionId) && requestGeneration === this._transcriptRequestGeneration) {
+        console.warn('Failed to reload transcript:', err);
+      }
     }
+  }
+
+  resetSessionView() {
+    this._viewEpoch += 1;
+    this._transcriptRequestGeneration += 1;
+    this._lifecycleRevision += 1;
+    this.finalizeStreamingBlock();
+    this._lastCompletedAssistantStep = null;
+    this._activeTurnUserStep = null;
+    this._toolCallAssistantBlocks.clear();
+    this._pendingToolAssistantBlock = null;
+    this.setBusy(false);
+    this.pendingQuestions.clear();
+    this._renderedRecordKeys.clear();
+    this._recordNodes.clear();
+    this._toolCallOwners.clear();
+    this._draftUserNodes = [];
+    this._resolvedApprovals.clear();
+    this._resolvedQuestions.clear();
+    document.getElementById('timeline')?.replaceChildren();
+    const approvalBanner = document.getElementById('approval-banner');
+    approvalBanner?.classList.add('hidden');
+    approvalBanner?.removeAttribute('data-request-id');
+    this.dismissProceedBanner();
   }
 
   // One renderer per fact (WS-04c). `sessions.get` returns the session log's records; each kind maps to
@@ -1476,7 +1694,163 @@ export class HarnessStudioApp {
    * no painter and no written excuse is visible in the console, not silently absent.
    */
   renderRecord(rec) {
+    const key = this.recordIdentity(rec);
+    if (key) this.registerToolCallOwners(rec, key);
+    if (key && this._renderedRecordKeys.has(key)) return;
+    if (key) this._renderedRecordKeys.add(key);
+    const timeline = document.getElementById('timeline');
+    const before = new Set(timeline ? [...timeline.children] : []);
     this.renderers.render(this, rec);
+    if (!key || !timeline) return;
+    const nodes = new Set([...timeline.children].filter((node) => !before.has(node)));
+    this._recordNodes.set(key, nodes);
+    for (const node of nodes) {
+      if (!node.dataset.recordKey) node.dataset.recordKey = key;
+    }
+    this._draftUserNodes = this._draftUserNodes.filter((draft) => !nodes.has(draft.node));
+    this.sortCanonicalRecordNodes();
+  }
+
+  recordIdentity(rec) {
+    if (!this.activeSessionId || !Number.isSafeInteger(rec?.step_index) || rec.step_index < 1) return null;
+    return JSON.stringify([this.activeSessionId, rec.step_index]);
+  }
+
+  findToolBoundAssistantBlock(rec, envelope = null) {
+    if (rec?.kind !== 'assistant.message' || !Number.isSafeInteger(rec.step_index)
+      || (Number.isSafeInteger(this._activeTurnUserStep) && rec.step_index <= this._activeTurnUserStep)) return null;
+    for (const call of rec.tool_calls || []) {
+      if (call?.id == null) continue;
+      const callId = String(call.id);
+      const block = this._toolCallAssistantBlocks.get(callId);
+      if (!block) continue;
+      if (!block.isConnected || block.dataset.recordKey
+        || (envelope?.turn_id && block.dataset.turnId && block.dataset.turnId !== envelope.turn_id)) {
+        this._toolCallAssistantBlocks.delete(callId);
+        if (this._pendingToolAssistantBlock === block) this._pendingToolAssistantBlock = null;
+        continue;
+      }
+      return block;
+    }
+    return null;
+  }
+
+  adoptLiveRecord(rec, envelope, node = null) {
+    const key = this.recordIdentity(rec);
+    if (!key) return false;
+    this.registerToolCallOwners(rec, key);
+    if (this._renderedRecordKeys.has(key)) return true;
+
+    if (rec.kind === 'assistant.message') {
+      node = this.findToolBoundAssistantBlock(rec, envelope) || node;
+    }
+
+    if (!node && rec.kind === 'user.message') {
+      const draftIndex = this._draftUserNodes.findIndex((draft) => draft.viewEpoch === this._viewEpoch
+        && (draft.sessionId == null || draft.sessionId === this.activeSessionId)
+        && draft.node.isConnected && !draft.node.dataset.recordKey);
+      if (draftIndex >= 0) {
+        node = this._draftUserNodes.splice(draftIndex, 1)[0].node;
+        // A preview is only a visual placeholder, never a content-based identity.
+        // Replace its text with the actual canonical record before assigning its key.
+        node.querySelector('.message-bubble').textContent = String(rec.content ?? '');
+      }
+    }
+    if (!node && rec.kind === 'assistant.message' && this.currentAssistantBlock?.isConnected
+      && !this.currentAssistantBlock.dataset.recordKey
+      && (!envelope?.turn_id || !this.currentAssistantBlock.dataset.turnId
+        || this.currentAssistantBlock.dataset.turnId === envelope.turn_id)) {
+      node = this.currentAssistantBlock;
+    }
+
+    if (!node) {
+      this.renderRecord(rec);
+      return true;
+    }
+    this._renderedRecordKeys.add(key);
+    const nodes = new Set([node]);
+    if (rec.kind === 'assistant.message') {
+      const content = String(rec.content ?? '');
+      if (node === this.currentAssistantBlock && !node.dataset.recordKey) {
+        // A live current stream may still receive deltas; keep its source text plain until close.
+        node.querySelector('.content-body').textContent = content;
+        delete node._harnessRenderedSource;
+        delete node._harnessRenderedSafeHtml;
+      } else {
+        this.renderAssistantContent(node, content);
+      }
+      for (const call of rec.tool_calls || []) {
+        const tool = document.querySelector(`.harness-card-tool[data-call-id=${cssString(call.id)}]`);
+        if (tool) {
+          this.attachToolCallOwner(tool, call.id);
+          nodes.add(tool);
+        }
+      }
+    }
+    this._recordNodes.set(key, nodes);
+    for (const recordNode of nodes) {
+      if (!recordNode.dataset.recordKey) recordNode.dataset.recordKey = key;
+    }
+    if (rec.kind === 'assistant.message') {
+      for (const [callId, block] of this._toolCallAssistantBlocks) {
+        if (block === node) this._toolCallAssistantBlocks.delete(callId);
+      }
+      if (this._pendingToolAssistantBlock === node) this._pendingToolAssistantBlock = null;
+    }
+    this.sortCanonicalRecordNodes();
+    return true;
+  }
+
+  registerToolCallOwners(rec, key) {
+    if (rec?.kind !== 'assistant.message' || !Number.isSafeInteger(rec.step_index)) return;
+    for (const [index, call] of (rec.tool_calls || []).entries()) {
+      if (call?.id == null) continue;
+      this._toolCallOwners.set(String(call.id), { key, step: rec.step_index, index });
+      const card = document.querySelector(`.harness-card-tool[data-call-id=${cssString(call.id)}]`);
+      if (card) this.attachToolCallOwner(card, call.id);
+    }
+  }
+
+  attachToolCallOwner(card, callId) {
+    const owner = this._toolCallOwners.get(String(callId));
+    if (!owner) return;
+    const previousKey = card.dataset.recordKey;
+    if (previousKey && previousKey !== owner.key) this._recordNodes.get(previousKey)?.delete(card);
+    card.dataset.recordKey = owner.key;
+    this._recordNodes.get(owner.key)?.add(card);
+  }
+
+  /** Reorder keyed timeline nodes by durable transcript step, keeping shared nodes at their first record position. */
+  sortCanonicalRecordNodes() {
+    const timeline = document.getElementById('timeline');
+    if (!timeline) return;
+    const keyed = [...timeline.children].map((node, position) => {
+      let step = null;
+      try {
+        const identity = JSON.parse(node.dataset.recordKey || 'null');
+        if (Array.isArray(identity) && identity[0] === this.activeSessionId
+          && Number.isSafeInteger(identity[1]) && identity[1] > 0) step = identity[1];
+      } catch (_err) { /* Noncanonical UI nodes are not part of transcript ordering. */ }
+      if (step == null) return null;
+      const callId = node.matches('.harness-card-tool') ? node.dataset.callId : null;
+      const owner = callId == null ? null : this._toolCallOwners.get(String(callId));
+      return {
+        node,
+        position,
+        step: owner?.step ?? step,
+        ownerRank: owner ? 1 : 0,
+        ownerIndex: owner?.index ?? -1,
+      };
+    }).filter(Boolean);
+    if (keyed.length < 2) return;
+    const ordered = [...keyed].sort((left, right) => left.step - right.step
+      || left.ownerRank - right.ownerRank || left.ownerIndex - right.ownerIndex || left.position - right.position);
+    const slots = keyed.map(({ node }) => {
+      const marker = document.createComment('canonical-record-slot');
+      node.replaceWith(marker);
+      return marker;
+    });
+    slots.forEach((marker, index) => marker.replaceWith(ordered[index].node));
   }
 
   async openSettings(initialGroup = null) {

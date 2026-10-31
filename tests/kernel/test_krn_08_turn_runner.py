@@ -271,6 +271,31 @@ async def test_wakeup_consumed_without_polling(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("plugin_strategy", [False, True])
+async def test_already_completed_background_wakeup_is_not_lost(
+    session_info, registry, gate, event_bus, plugin_strategy,
+):
+    inbox = BackgroundInbox(bus=event_bus, session_id=session_info.session_id)
+    task = inbox.register_task("already_done", DummyProcess(), label="finished_before_model")
+    await task.monitor_task
+    assert inbox.get_status("already_done")["completed"]
+    provider = ScriptedProvider(responses=[
+        [TextDelta("waiting"), Done(stop_reason="end_turn")],
+        [TextDelta("consumed queued completion"), Done(stop_reason="end_turn")],
+    ], strict_exhaustion=True)
+    registry.register_provider(provider)
+    if plugin_strategy:
+        from harness.plugins.strategies.single_loop.strategy import SingleLoopStrategy
+
+        registry.register_strategy(SingleLoopStrategy())
+    runner = TurnRunner(registry=registry, gate=gate, bus=event_bus, inbox=inbox)
+    result = await runner.execute_turn(session=session_info, prompt="finish the build")
+    assert "consumed queued completion" in result.output
+    assert len(provider.requests) == 2
+    assert any("already_done" in message.text() for message in provider.requests[-1].messages)
+
+
+@pytest.mark.asyncio
 async def test_cancel_mid_stream_records_notification(
     session_info: SessionInfo,
     registry: PluginRegistry,

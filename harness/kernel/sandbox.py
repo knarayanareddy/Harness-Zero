@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import platform
 from dataclasses import replace
+from functools import cached_property
 from pathlib import Path
 from typing import Any
 
@@ -286,8 +287,11 @@ class SandboxedExecutor:
         self._service = service
         self._allow_unconfined = allow_unconfined
         self.name = getattr(delegate, "name", "executor")
-        status = service.status()
-        self.isolation = "os-sandbox" if status["available"] else getattr(delegate, "isolation", "none")
+
+    @cached_property
+    def isolation(self) -> str:
+        status = self._service.status()
+        return "os-sandbox" if status["available"] else getattr(self._delegate, "isolation", "none")
 
     async def start(self, req: ExecRequest) -> Process:
         status = self._service.status()

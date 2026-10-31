@@ -14,6 +14,7 @@ the WS-03 read ledger — sees the same typed records.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from pathlib import Path
@@ -141,6 +142,14 @@ def is_v2(data: dict[str, Any]) -> bool:
 _LOG_BY_DIR: dict[str, TranscriptLog] = {}
 
 
+def record_at_step(records: list[dict[str, Any]], step: int) -> dict[str, Any]:
+    """Resolve an append receipt without assuming no other writer ran afterward."""
+    for record in reversed(records):
+        if record.get("step_index") == step:
+            return record
+    raise ValueError(f"Committed transcript step {step!r} is absent from the projection")
+
+
 class TranscriptLog:
     """Append-only view of one session's records, with a read-through cache.
 
@@ -227,6 +236,22 @@ class TranscriptLog:
     # ------------------------------------------------------------------ write
     async def append(self, record: TranscriptRecord | dict[str, Any]) -> int:
         """Appends one record and returns its step index. Raises `TranscriptAppendError` on failure."""
+        commit = asyncio.create_task(self._append_committed(record))
+        try:
+            return await asyncio.shield(commit)
+        except asyncio.CancelledError:
+            # Disk and its canonical projection are one owned commit boundary.
+            # Propagate cancellation only after the writer/cache reach agreement.
+            while not commit.done():
+                try:
+                    await asyncio.shield(commit)
+                except asyncio.CancelledError:
+                    continue
+            if not commit.cancelled():
+                commit.exception()
+            raise
+
+    async def _append_committed(self, record: TranscriptRecord | dict[str, Any]) -> int:
         data = record.to_dict() if isinstance(record, TranscriptRecord) else dict(record)
         data = upgrade_record_v1(data)
         if self._store is None:
@@ -240,6 +265,9 @@ class TranscriptLog:
         try:
             step = int(await self._store.append(data) or 0)
         except Exception as err:  # noqa: BLE001 — any failure to persist is fatal to the step
+            # A failed dual write may still have placed a valid full record on
+            # disk. The next turn must reload, not trust the old projection.
+            self._loaded = False
             raise TranscriptAppendError(session_id=self.session_id, reason=str(err)) from err
         data["step_index"] = step or len(self._cache) + 1
         self._cache.append(data)
@@ -308,8 +336,8 @@ class TranscriptLog:
                     }
                 ],
             )
-            await self.append(rec)
-            appended.append(self._records[-1])
+            step = await self.append(rec)
+            appended.append(record_at_step(self.records, step))
         return appended
 
     async def append_notice(self, text: str, *, metadata: dict[str, Any] | None = None) -> int:

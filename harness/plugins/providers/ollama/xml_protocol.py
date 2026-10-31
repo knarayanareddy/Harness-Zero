@@ -11,6 +11,7 @@ import re
 from harness.sdk.types import ModelEvent, TextDelta, ThinkingDelta, ToolCallEnd, ToolSpec
 
 logger = logging.getLogger(__name__)
+MAX_TOOL_CALL_CHARS = 64 * 1024
 
 
 def format_tool_guidance(tools: list[ToolSpec]) -> str:
@@ -110,10 +111,17 @@ class XmlStreamParser:
             elif self.in_tool:
                 close_idx = self.buffer.find("</tool_call>")
                 if close_idx == -1:
-                    self.tool_buffer += self.buffer
-                    self.buffer = ""
+                    partial = self._partial_tag_len(self.buffer, ("</tool_call>",))
+                    if partial:
+                        if partial == len(self.buffer):
+                            break
+                        self._append_tool_buffer(self.buffer[:-partial])
+                        self.buffer = self.buffer[-partial:]
+                    else:
+                        self._append_tool_buffer(self.buffer)
+                        self.buffer = ""
                 else:
-                    self.tool_buffer += self.buffer[:close_idx]
+                    self._append_tool_buffer(self.buffer[:close_idx])
                     self.buffer = self.buffer[close_idx + len("</tool_call>"):]
                     self.in_tool = False
 
@@ -128,13 +136,15 @@ class XmlStreamParser:
     def flush(self) -> list[ModelEvent]:
         """Flushes remaining buffer at end of stream."""
         events: list[ModelEvent] = []
-        if self.in_tool and self.tool_buffer:
-            tool_call = self._parse_json_tool_call(self.tool_buffer + self.buffer)
-            if tool_call is not None:
-                events.append(tool_call)
+        if self.in_tool:
+            raise ValueError("Incomplete <tool_call> markup")
         elif self.in_think and self.buffer:
             events.append(ThinkingDelta(text=self.buffer))
         elif self.buffer:
+            # Short ambiguous prefixes such as '<' or '<t' are ordinary text,
+            # not evidence that the model started an executable tool block.
+            if self.buffer.startswith("<tool_") and self._partial_tag_len(self.buffer, ("<tool_call>",)):
+                raise ValueError("Incomplete <tool_call> markup")
             # Check if any full <tool_call> tags exist in remaining buffer
             pattern = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
             m = pattern.search(self.buffer)
@@ -147,28 +157,41 @@ class XmlStreamParser:
         self.buffer = ""
         return events
 
-    def _parse_json_tool_call(self, text: str) -> ToolCallEnd | None:
+    def _append_tool_buffer(self, text: str) -> None:
+        if len(self.tool_buffer) + len(text) > MAX_TOOL_CALL_CHARS:
+            self.buffer = ""
+            self.tool_buffer = ""
+            self.in_tool = False
+            raise ValueError(f"<tool_call> payload too large (max {MAX_TOOL_CALL_CHARS} characters)")
+        self.tool_buffer += text
+
+    def _parse_json_tool_call(self, text: str) -> ToolCallEnd:
         text = text.strip()
         try:
             data = json.loads(text)
-            name = data.get("name", "")
-            args = data.get("arguments", {})
-            if isinstance(args, str):
-                try:
-                    args = json.loads(args)
-                except Exception:
-                    args = {"input": args}
-            if not isinstance(args, dict):
-                args = {}
-            self.call_counter += 1
-            return ToolCallEnd(
-                id=f"xml_call_{self.call_counter}",
-                name=name,
-                arguments=args,
-            )
-        except Exception as e:
-            logger.debug("Failed to parse tool call JSON: %s (%s)", text, e)
-            return None
+        except json.JSONDecodeError as exc:
+            logger.debug("Failed to parse tool call JSON: %s (%s)", text, exc)
+            raise ValueError("Malformed <tool_call> JSON") from exc
+        if not isinstance(data, dict):
+            raise ValueError("Malformed <tool_call>: expected a JSON object")
+
+        name = data.get("name", "")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("Malformed <tool_call>: missing tool name")
+        args = data.get("arguments", {})
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except json.JSONDecodeError as exc:
+                raise ValueError("Malformed <tool_call>: arguments must encode a JSON object") from exc
+        if not isinstance(args, dict):
+            raise ValueError("Malformed <tool_call>: arguments must be a JSON object")
+        self.call_counter += 1
+        return ToolCallEnd(
+            id=f"xml_call_{self.call_counter}",
+            name=name,
+            arguments=args,
+        )
 
     def _partial_tag_len(self, text: str, tags: tuple[str, ...]) -> int:
         max_len = 0

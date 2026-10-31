@@ -66,6 +66,7 @@ class ApprovalBroker:
         timeout_s: float | None = None,
         auto_approve: bool = False,
         session_id: str = "",
+        cancel_event: asyncio.Event | None = None,
     ) -> tuple[bool, str]:
         """Request approval and return ``(approved, reason)`` as before WS-08."""
         result = await self.interactions.ask(
@@ -79,6 +80,7 @@ class ApprovalBroker:
             timeout_s=timeout_s,
             auto_approve=auto_approve,
             session_id=session_id,
+            cancel_event=cancel_event,
         )
         return result
 

@@ -14,6 +14,7 @@ import types as _types
 import uuid
 from dataclasses import dataclass, field, fields, is_dataclass
 from datetime import UTC, datetime
+from functools import lru_cache
 from typing import Any, ClassVar, Literal, Union, get_args, get_origin, get_type_hints
 
 from harness.sdk.types import EconomicsSnapshot, Usage
@@ -467,7 +468,7 @@ class CompactionStarted(EventPayload):
 class CompactionCompleted(EventPayload):
     EVENT_TYPE: ClassVar[str] = "compaction.completed"
     record_kind: ClassVar[str | None] = "compaction.summary"
-    carries_record: ClassVar[bool] = False
+    carries_record: ClassVar[bool] = True
     summary_tokens: int
     duration_ms: float
 
@@ -832,9 +833,14 @@ def _check(value: Any, tp: Any, path: str, errors: list[str]) -> None:
         _check_dataclass(value, tp, path, errors)
 
 
+@lru_cache(maxsize=256)
+def _validation_metadata(cls: type) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Cache static declarations only; no event data or validation result is retained."""
+    return get_type_hints(cls), {f.name: f for f in fields(cls)}
+
+
 def _check_dataclass(data: dict[str, Any], cls: type, path: str, errors: list[str]) -> None:
-    hints = get_type_hints(cls)
-    declared = {f.name: f for f in fields(cls)}
+    hints, declared = _validation_metadata(cls)
     for name, f in declared.items():
         if name not in data:
             if f.default is dataclasses.MISSING and f.default_factory is dataclasses.MISSING:

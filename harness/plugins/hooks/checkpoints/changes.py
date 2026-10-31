@@ -111,8 +111,16 @@ async def compute_changes(
     base_sha = validate_checkpoint_sha(base)
     head_sha = validate_checkpoint_sha(head)
     limit = max(0, int(max_files))
-    if not await repo.has_commit(base_sha) or not await repo.has_commit(head_sha):
+    if not await repo.has_commit(base_sha) or (base_sha != head_sha and not await repo.has_commit(head_sha)):
         raise ValueError("Diff endpoints must be commits in this workspace's shadow repository")
+
+    if base_sha == head_sha:
+        # Commits are immutable. Preserve endpoint validation, but do not spend
+        # the terminal hook's deadline on a second validation and two empty diffs.
+        return {
+            "base": base_sha, "head": head_sha, "files": [], "added": 0,
+            "removed": 0, "truncated": False, "total_files": 0,
+        }
 
     git_prefix = ["--git-dir", str(repo.git_dir)]
     numstat_code, numstat_out, numstat_err = await _run_git(

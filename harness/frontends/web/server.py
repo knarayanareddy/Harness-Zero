@@ -83,6 +83,10 @@ class HarnessWebServer:
         self._replay_buffer: deque[Event] = deque(maxlen=500)
         self._replay_sub: Subscriber | None = None
         self._replay_task: asyncio.Task | None = None
+        self._sse_tasks: set[asyncio.Task] = set()
+        self._request_tasks: set[asyncio.Task] = set()
+        self._stopping = False
+        self._shutdown_task: asyncio.Task[None] | None = None
 
         # Short-lived single-use auth tickets for SSE/EventSource (§2.2)
         self._auth_tickets: dict[str, float] = {}
@@ -90,11 +94,11 @@ class HarnessWebServer:
 
         # Setup primary API and sandbox web apps
         self.app = web.Application(
-            middlewares=[self._host_guard, self._auth_guard],
+            middlewares=[self._track_request, self._host_guard, self._auth_guard],
             client_max_size=25 * 1024 * 1024,
         )
         self.sandbox_app = web.Application(
-            middlewares=[self._host_guard, self._sandbox_csp_middleware],
+            middlewares=[self._track_request, self._host_guard, self._sandbox_csp_middleware],
         )
 
         self._setup_api_routes()
@@ -108,6 +112,17 @@ class HarnessWebServer:
     # --------------------------------------------------------------------------
     # Middlewares
     # --------------------------------------------------------------------------
+
+    @web.middleware
+    async def _track_request(self, request: web.Request, handler: Callable) -> web.Response:
+        task = asyncio.current_task()
+        if task is not None:
+            self._request_tasks.add(task)
+        try:
+            return await handler(request)
+        finally:
+            if task is not None:
+                self._request_tasks.discard(task)
 
     @web.middleware
     async def _host_guard(self, request: web.Request, handler: Callable) -> web.Response:
@@ -234,7 +249,7 @@ class HarnessWebServer:
                 "img-src 'self' data: blob:; "
                 "style-src 'self' 'unsafe-inline'; "
                 "script-src 'self'; "
-                f"frame-src {sb_origin_127} {sb_origin_local}; "
+                f"frame-src 'self' {sb_origin_127} {sb_origin_local}; "
                 "frame-ancestors 'none'; "
                 "connect-src 'self' ws:;"
             )
@@ -475,6 +490,12 @@ class HarnessWebServer:
         Long-lived SSE stream of the EventBus with heartbeat and Last-Event-ID replay.
         Heartbeat: 15s. Replay buffer: up to 500 events.
         """
+        if self._stopping:
+            return web.Response(status=503, text="Server is shutting down")
+
+        task = asyncio.current_task()
+        if task is not None:
+            self._sse_tasks.add(task)
         response = web.StreamResponse(
             status=200,
             reason="OK",
@@ -485,44 +506,49 @@ class HarnessWebServer:
                 "X-Accel-Buffering": "no",
             },
         )
-        await response.prepare(request)
-
-        # Check Last-Event-ID for replay
-        last_event_id = request.headers.get("Last-Event-ID") or request.query.get("last_event_id")
-        if last_event_id:
-            # Replay buffered events strictly following the client's last seen ID
-            events_to_replay: list[Event] = []
-            found = False
-            for evt in list(self._replay_buffer):
-                if found:
-                    events_to_replay.append(evt)
-                elif evt.id == last_event_id:
-                    found = True
-
-            for evt in events_to_replay:
-                msg = f"id: {evt.id}\nevent: {evt.type}\ndata: {json.dumps(evt.to_dict())}\n\n"
-                await response.write(msg.encode("utf-8"))
-
-        subscriber = self.bus.subscribe(interactive=True)
+        subscriber: Subscriber | None = None
         try:
+            await response.prepare(request)
+
+            # Check Last-Event-ID for replay
+            last_event_id = request.headers.get("Last-Event-ID") or request.query.get("last_event_id")
+            if last_event_id:
+                # Replay buffered events strictly following the client's last seen ID
+                events_to_replay: list[Event] = []
+                found = False
+                for evt in list(self._replay_buffer):
+                    if found:
+                        events_to_replay.append(evt)
+                    elif evt.id == last_event_id:
+                        found = True
+
+                for evt in events_to_replay:
+                    msg = f"id: {evt.id}\nevent: {evt.type}\ndata: {json.dumps(evt.to_dict())}\n\n"
+                    await response.write(msg.encode("utf-8"))
+
+            subscriber = self.bus.subscribe(interactive=True)
             while True:
                 if request.transport is None or request.transport.is_closing():
                     break
                 try:
                     event = await asyncio.wait_for(subscriber.get(), timeout=15.0)
-                    if request.transport is None or request.transport.is_closing():
-                        break
-                    msg = f"id: {event.id}\nevent: {event.type}\ndata: {json.dumps(event.to_dict())}\n\n"
-                    await response.write(msg.encode("utf-8"))
                 except TimeoutError:
                     if request.transport is None or request.transport.is_closing():
                         break
                     # 15s Heartbeat ping to keep connection alive through proxies
                     await response.write(b": heartbeat\n\n")
-        except (asyncio.CancelledError, ConnectionResetError, ConnectionError, Exception):
+                    continue
+                if request.transport is None or request.transport.is_closing():
+                    break
+                msg = f"id: {event.id}\nevent: {event.type}\ndata: {json.dumps(event.to_dict())}\n\n"
+                await response.write(msg.encode("utf-8"))
+        except (asyncio.CancelledError, ConnectionError):
             pass
         finally:
-            self.bus.unsubscribe(subscriber)
+            if subscriber is not None:
+                self.bus.unsubscribe(subscriber)
+            if task is not None:
+                self._sse_tasks.discard(task)
 
         return response
 
@@ -595,16 +621,18 @@ class HarnessWebServer:
 
     async def _run_replay_consumer(self) -> None:
         """Background task buffering the last 500 events from the EventBus."""
-        self._replay_sub = self.bus.subscribe(interactive=False)
+        subscriber = self.bus.subscribe(interactive=False)
+        self._replay_sub = subscriber
         try:
             while True:
-                evt = await self._replay_sub.get()
+                evt = await subscriber.get()
                 self._replay_buffer.append(evt)
         except asyncio.CancelledError:
             pass
         finally:
-            if self._replay_sub:
-                self.bus.unsubscribe(self._replay_sub)
+            self.bus.unsubscribe(subscriber)
+            if self._replay_sub is subscriber:
+                self._replay_sub = None
 
     def _purge_workspace_secrets(self) -> None:
         """Purges any plaintext api_keys from workspace settings and enforces 0600 mode (§4.3 #1)."""
@@ -698,16 +726,71 @@ class HarnessWebServer:
 
     async def stop(self) -> None:
         """Shuts down both HTTP runners, cancels background tasks, and cleans up."""
+        if self._shutdown_task is None:
+            self._stopping = True
+            self._shutdown_task = asyncio.create_task(self._stop())
+        # Runner cleanup waits for active requests. If a request itself initiates
+        # shutdown, let it return so the shared cleanup task can drain it.
+        if asyncio.current_task() not in self._request_tasks:
+            await asyncio.shield(self._shutdown_task)
+
+    async def _stop(self) -> None:
+        """Run the one owned shutdown sequence shared by all stop() callers."""
+        cleanup_errors: list[Exception] = []
+
         if self._replay_task:
-            self._replay_task.cancel()
-            try:
-                await self._replay_task
-            except asyncio.CancelledError:
-                pass
+            if not self._replay_task.done():
+                self._replay_task.cancel()
+            replay_result = (await asyncio.gather(self._replay_task, return_exceptions=True))[0]
+            if isinstance(replay_result, Exception):
+                cleanup_errors.append(replay_result)
 
-        if self.api_runner:
-            await self.api_runner.cleanup()
-        if self.sandbox_runner:
-            await self.sandbox_runner.cleanup()
+        current = asyncio.current_task()
+        sse_tasks = [task for task in self._sse_tasks if task is not current and not task.done()]
+        for task in sse_tasks:
+            task.cancel()
+        if sse_tasks:
+            for result in await asyncio.gather(*sse_tasks, return_exceptions=True):
+                if isinstance(result, Exception):
+                    cleanup_errors.append(result)
 
-        self.cleanup_daemon_json()
+        # Stop both owned listeners before app cleanup: a failure in one runner's
+        # shutdown callback must not leave the other server accepting connections.
+        for runner, site in (
+            (self.api_runner, self.api_site),
+            (self.sandbox_runner, self.sandbox_site),
+        ):
+            if runner is not None and site is not None and site in runner.sites:
+                try:
+                    await site.stop()
+                except Exception as error:
+                    cleanup_errors.append(error)
+
+        # Attempt each runner independently so one cleanup failure cannot skip the
+        # other app's cleanup hooks or owned resources.
+        for runner in (self.api_runner, self.sandbox_runner):
+            if runner is not None:
+                try:
+                    await runner.cleanup()
+                except Exception as error:
+                    cleanup_errors.append(error)
+
+        listeners_closed = all(
+            runner is None or site is None or site not in runner.sites
+            for runner, site in (
+                (self.api_runner, self.api_site),
+                (self.sandbox_runner, self.sandbox_site),
+            )
+        )
+        if listeners_closed:
+            self.cleanup_daemon_json()
+            if (self.workspace / ".harness" / "daemon.json").exists():
+                cleanup_errors.append(RuntimeError("daemon.json remains after listener shutdown"))
+        else:
+            cleanup_errors.append(RuntimeError("a web listener remains registered after shutdown"))
+
+        if cleanup_errors:
+            primary_error = cleanup_errors[0]
+            for error in cleanup_errors[1:]:
+                primary_error.add_note(f"Additional shutdown failure: {error!r}")
+            raise primary_error

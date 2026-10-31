@@ -111,11 +111,12 @@ Declared on the payload classes (`harness/sdk/events.py`), exported to
 `harness catalog gen`. `durable` is *derived* from `record_kind`, so a doc cannot claim durability the
 payload does not:
 
-* **durable and carried** — the event's `record` field *is* the stored dict: `turn.started` →
+* **durable and carried** — the event's `record` field *is* the stored dict: `compaction.completed` →
+  `compaction.summary`, `turn.started` →
   `user.message`, `model.completed` → `assistant.message`, `tool.decision`, `ui.card`, `approval.required` →
   `approval.requested`, `approval.resolved`, `turn.completed` / `turn.error` / `turn.cancelled`.
-* **durable, paired by id** — `tool.result` and `compaction.completed`: the record exists and is written in
-  the same commit as the event, but the payload carries ids (`call_id`, summary step) rather than a copy,
+* **durable, paired by id** — `tool.result`: the record is written before its paired event, but
+  the payload carries a call ID rather than a copy,
   because the tool output is too large to mirror on the bus.
 * **transient** — `model.text.delta`, `model.thinking.delta`, `tool.output.delta`, `tool.result.pruned`,
   `tool.repeat_detected`, `cost.updated`, `context.assembled`, `compaction.started`, `model.started`,
@@ -125,6 +126,17 @@ payload does not:
 ---
 
 ## 6. Versioning and upgrade
+
+New compaction records use `metadata.covers_through_step` to identify the exact
+summarized prefix. The summary's physical append may follow the current user
+prompt: `derive_messages` retains uncovered records in their original order, so
+that prompt and outstanding calls are not lost. Legacy summaries without the
+coverage field retain their physical-boundary slicing behavior. Raw history is
+never truncated. When a text prompt itself exceeds the available budget,
+`metadata.summarized_prompt_step` explicitly identifies its preserved raw record;
+assembly uses the summary rather than appending the huge prompt a second time.
+Unresolved calls and current image attachments cannot use that text-only fallback.
+See [T10 evidence](../testing/T10_DURABLE_COMPACTION.md).
 
 `RECORD_VERSION = 2`. A line without `kind` (or with `v: 1`) is upgraded on read by `upgrade_record_v1`:
 
@@ -223,3 +235,58 @@ Adding a record kind means, in this order: `RECORD_KINDS` and (if it is a messag
 painter case in `renderRecord`; a row in §7; a durable event whose payload declares `record_kind`, or an
 explicit note that it stays live-only; and a scenario that reloads it. The catalogue table and the
 model-visible flag follow from the code — do not hand-edit `docs/catalog/RECORD_KINDS.md`.
+
+## 11. T03 acceptance addendum: durability and recovery limits
+
+This addendum qualifies earlier implementation claims. The reviewed baseline
+does **not** satisfy every listed invariant: R15 blocks compaction, R16 loses a
+post-crash append, and R17 aborts multi-call durable repair. Tests and source
+anchors are recorded in `../testing/REVIEW_REGRESSIONS.md`. “Durable” in the
+event catalogue identifies intended persisted facts; it is not a certificate
+that all runtime paths or power-loss handling have been verified.
+
+### Acknowledgement boundary (BC-10)
+
+The initial release target is process-crash/restart durability on the same
+filesystem. After store append returns successfully, the record must be readable
+after reconstructing store/log objects; both full and compact writes must have
+succeeded. Existing buffered writes use `flush()` without `fsync()`, so sudden
+power loss, device failure and multi-process atomicity are **not guaranteed**.
+No documentation may claim those guarantees without a separate design and fault
+test. A partial dual-log write must fail closed, preserve damaged bytes and not
+consume the first subsequently acknowledged record during recovery.
+
+Store step indices remain monotonic within one session, recovered from valid
+persisted indices, not the number of nonempty/corrupt physical lines. Corrupt
+tails are preserved/quarantined explicitly; normal committed history is not
+rewritten. The repair operation itself needs a recoverable interruption boundary.
+
+### Interrupted tool calls
+
+Repair every unanswered call, including multiple calls in one assistant record.
+Append synthetic error results, return the actual appended records and make a
+second repair pass a no-op. The record must say **outcome uncertain** where the
+process may have acted before crashing. Never retry/re-execute such work merely
+to fill a missing result. Pure `derive_messages` may repair a request view, but
+that does not close an on-disk recovery defect.
+
+### Compaction (BC-09)
+
+Build a valid summarizer request; invoke actual hooks; append the summary before
+announcing successful completion; rebuild the next request from the persisted
+summary and retained suffix. Keep current objective/constraints and unanswered
+tool dependencies, do not duplicate the newest prompt, and do not delete raw
+history. Failed/cancelled summarization must not announce compaction success or
+discard usable context. Required proof crosses the real threshold, inspects the
+next actual request, restarts, and repeats compaction.
+
+### Reload and session state (BC-05)
+
+Record equality is not enough to establish correct session ownership. Every
+history response/live event must still belong to the selected session/generation.
+Pending approvals, questions, active turns and uncertain completion must be
+reconciled after refresh/reconnect. The live-only caret is disposable; an active
+turn's cancellability or an unanswered approval is not merely cosmetic chrome.
+
+Numerical fault/cancellation/soak gates are in root `CONSTRAINTS.md`; their
+acceptance owners are T05–T10 and T23/T24/T29, not marked passed by this addendum.

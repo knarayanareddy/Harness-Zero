@@ -2,21 +2,205 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
+import shutil
+import sys
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_IS_DARWIN = sys.platform == "darwin"
+_XCRUN_PATH = "/usr/bin/xcrun"
+_GIT_DISCOVERY_TIMEOUT = 1.0
+_GIT_DISCOVERY_CLEANUP_TIMEOUT = 0.5
+_GIT_EXECUTABLE_CACHE_LIMIT = 8
+_GIT_EXECUTABLE_CACHE: OrderedDict[tuple[str, str | None], str] = OrderedDict()
+
+
+def _capture_git_environment() -> dict[str, str]:
+    """Snapshot the inherited environment without exposing it to diagnostics."""
+    return os.environ.copy()
+
+
+def _git_route_key(environment: dict[str, str]) -> tuple[str | None, str | None]:
+    return environment.get("PATH"), environment.get("DEVELOPER_DIR")
+
+
+def _path_selects_system_git(environment: dict[str, str]) -> bool:
+    path = environment.get("PATH")
+    if not path or any(
+        not entry or not os.path.isabs(entry) for entry in path.split(os.pathsep)
+    ):
+        return False
+    return shutil.which("git", path=path) == "/usr/bin/git"
+
+
+def _is_executable_file(path: str) -> bool:
+    try:
+        return Path(path).is_file() and os.access(path, os.X_OK)
+    except (OSError, ValueError):
+        return False
+
+
+async def _stop_discovery_process(
+    proc: asyncio.subprocess.Process, communication: asyncio.Task[tuple[bytes, bytes]]
+) -> None:
+    """Reap a timed-out/cancelled xcrun child and stop its pipe readers."""
+    if proc.returncode is None:
+        try:
+            proc.terminate()
+        except ProcessLookupError:
+            pass
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=_GIT_DISCOVERY_CLEANUP_TIMEOUT)
+    except TimeoutError:
+        if proc.returncode is None:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+        try:
+            await asyncio.wait_for(
+                proc.wait(), timeout=_GIT_DISCOVERY_CLEANUP_TIMEOUT
+            )
+        except TimeoutError as error:
+            raise RuntimeError(
+                "Could not reap checkpoint Git discovery process after kill"
+            ) from error
+    if proc.returncode is None:
+        raise RuntimeError("Checkpoint Git discovery process was not reaped")
+
+    try:
+        await asyncio.wait_for(
+            asyncio.shield(communication), timeout=_GIT_DISCOVERY_CLEANUP_TIMEOUT
+        )
+    except TimeoutError:
+        communication.cancel()
+        await asyncio.gather(communication, return_exceptions=True)
+
+
+async def _finish_owned_discovery_cleanup(
+    proc: asyncio.subprocess.Process,
+    communication: asyncio.Task[tuple[bytes, bytes]],
+) -> None:
+    """Keep cleanup strongly owned and shield it from repeated caller cancels."""
+    cleanup = asyncio.create_task(
+        _stop_discovery_process(proc, communication),
+        name="checkpoint-git-discovery-cleanup",
+    )
+    repeated_cancel: asyncio.CancelledError | None = None
+    while True:
+        try:
+            await asyncio.shield(cleanup)
+            break
+        except asyncio.CancelledError as error:
+            repeated_cancel = error
+            if cleanup.cancelled():
+                raise RuntimeError(
+                    "Checkpoint Git discovery cleanup task was cancelled"
+                ) from error
+    if cleanup.cancelled():
+        raise RuntimeError("Checkpoint Git discovery cleanup task was cancelled")
+    cleanup.result()
+    if repeated_cancel is not None:
+        raise repeated_cancel
+
+
+async def _discover_git(cwd: Path, environment: dict[str, str]) -> str | None:
+    """Ask the active Apple developer directory for its actual Git executable."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            _XCRUN_PATH,
+            "--find",
+            "git",
+            cwd=cwd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=environment,
+        )
+    except OSError:
+        return None
+
+    communication = asyncio.create_task(proc.communicate())
+    try:
+        stdout, _ = await asyncio.wait_for(
+            asyncio.shield(communication), timeout=_GIT_DISCOVERY_TIMEOUT
+        )
+    except asyncio.CancelledError as cancelled:
+        await _finish_owned_discovery_cleanup(proc, communication)
+        raise cancelled
+    except Exception:
+        await _finish_owned_discovery_cleanup(proc, communication)
+        return None
+
+    if proc.returncode != 0:
+        return None
+    try:
+        output = stdout.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    lines = output.splitlines()
+    if len(lines) != 1 or not lines[0] or lines[0] != lines[0].strip():
+        return None
+    executable = lines[0]
+    if not os.path.isabs(executable) or not _is_executable_file(executable):
+        return None
+    return executable
+
+
+async def _git_executable(cwd: Path, environment: dict[str, str]) -> str | None:
+    """Resolve Git only when PATH selects Apple's system launcher exactly."""
+    if not _IS_DARWIN or not _path_selects_system_git(environment):
+        return None
+    path, developer_dir = _git_route_key(environment)
+    if path is None:
+        return None
+    key = (path, developer_dir)
+    if _git_route_key(_capture_git_environment()) != key:
+        return None
+    cached = _GIT_EXECUTABLE_CACHE.get(key)
+    if cached is not None:
+        if _is_executable_file(cached):
+            _GIT_EXECUTABLE_CACHE.move_to_end(key)
+            return cached
+        del _GIT_EXECUTABLE_CACHE[key]
+
+    executable = await _discover_git(cwd, environment)
+    if executable is None:
+        return None
+    if _git_route_key(_capture_git_environment()) != key:
+        return None
+    _GIT_EXECUTABLE_CACHE[key] = executable
+    _GIT_EXECUTABLE_CACHE.move_to_end(key)
+    while len(_GIT_EXECUTABLE_CACHE) > _GIT_EXECUTABLE_CACHE_LIMIT:
+        _GIT_EXECUTABLE_CACHE.popitem(last=False)
+    return executable
 
 
 async def _run_git(args: list[str], cwd: Path) -> tuple[int, str, str]:
     """Run Git without a shell and decode diagnostics for callers."""
+    environment = _capture_git_environment()
+    executable = await _git_executable(cwd, environment)
+    if executable is not None:
+        spawn_environment = _capture_git_environment()
+        if _git_route_key(spawn_environment) == _git_route_key(environment):
+            command = executable
+            child_environment: dict[str, str] | None = spawn_environment
+        else:
+            command = "git"
+            child_environment = None
+    else:
+        command = "git"
+        child_environment = None
     proc = await asyncio.create_subprocess_exec(
-        "git",
+        command,
         *args,
         cwd=cwd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        env=child_environment,
     )
     stdout, stderr = await proc.communicate()
     return (
