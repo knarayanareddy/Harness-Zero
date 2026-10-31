@@ -1,5 +1,19 @@
 # Active task status
 
+- **2026-10-31 local coding-only checkpoint committed; no push:** `677d5a0`
+  preserves 216 pending files. The seven filmmaking-skill files remain original,
+  uncommitted and excluded from verified 867-file snapshot `8e30fadb…3aefc`.
+  Independent 125-file source review is clear within its stated limits. Fresh
+  default pytest: Py312 1319 pass/5 skip; Py311 1318 pass/1 fail/5 skip, with the lone
+  packaging failure reporting missing `hatchling.build` in that venv. No retry.
+  Plugin tests: 447 pass each; Ruff/doctor/strict UI audit pass each. Environment
+  readiness still reports false for the explicit verification PYTHONPATH. The
+  earlier five-skill candidate's 39 failures per lane remain retained evidence.
+  All owned one-shot jobs/children were cleaned up with absence verified.
+  This entry supersedes older current-run/pending statements below, not their
+  historical failures or remaining recovery/endurance/native/artifact gates.
+  **G1 remains non-green.** See [checkpoint](../docs/testing/CHECKPOINT_2026-10-31.md).
+
 - **Remaining source CI is mixed:** Ruff, import boundaries,44 plugin doctor
   reports and strict UI audit pass per baseline. Plugin suite Py312446pass;
   Py311444pass/2fail in Git-discovery/child-ready fixtures. No retries; retained
