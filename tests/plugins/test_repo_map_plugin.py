@@ -6,6 +6,7 @@ token budgeting, file threshold guard, and fingerprint caching.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -132,6 +133,56 @@ async def test_repo_map_fingerprint_cache(sample_workspace: Path):
     (sample_workspace / "new.py").write_text("def new(): pass\n", encoding="utf-8")
     fp3 = calculate_workspace_fingerprint(sample_workspace)
     assert fp1 != fp3
+
+
+@pytest.mark.parametrize(
+    ("ancestor_name", "workspace_name"),
+    [
+        (".venv", "workspace"),
+        ("build", "workspace"),
+        ("brain", "workspace"),
+        ("projects", "brain"),
+    ],
+)
+def test_repo_map_ignores_paths_relative_to_workspace(
+    tmp_path: Path, ancestor_name: str, workspace_name: str
+):
+    """Ignored ancestors do not hide source inside the workspace."""
+    workspace = tmp_path / ancestor_name / workspace_name
+    workspace.mkdir(parents=True)
+    visible_file = workspace / "visible.py"
+    visible_file.write_text("def original(): pass\n", encoding="utf-8")
+
+    generator = RepoMapGenerator()
+    original_map = generator.generate(workspace)
+    assert "visible.py:" in original_map
+    assert "def original()" in original_map
+
+    original_fingerprint = calculate_workspace_fingerprint(workspace)
+    original_stat = visible_file.stat()
+    visible_file.write_text("def updated(): pass\n", encoding="utf-8")
+    os.utime(
+        visible_file,
+        ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns + 1_000_000_000),
+    )
+    updated_map = generator.generate(workspace)
+    updated_fingerprint = calculate_workspace_fingerprint(workspace)
+    assert "def updated()" in updated_map
+    assert original_fingerprint != updated_fingerprint
+
+    ignored_file = workspace / "build" / "ignored.py"
+    ignored_file.parent.mkdir()
+    ignored_file.write_text("def hidden(): pass\n", encoding="utf-8")
+    before_ignored_mutation = calculate_workspace_fingerprint(workspace)
+    ignored_stat = ignored_file.stat()
+    ignored_file.write_text("def still_hidden(): pass\n", encoding="utf-8")
+    os.utime(
+        ignored_file,
+        ns=(ignored_stat.st_atime_ns, ignored_stat.st_mtime_ns + 1_000_000_000),
+    )
+
+    assert "ignored.py:" not in generator.generate(workspace)
+    assert before_ignored_mutation == calculate_workspace_fingerprint(workspace)
 
 
 @pytest.mark.asyncio

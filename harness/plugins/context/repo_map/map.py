@@ -29,7 +29,9 @@ def calculate_workspace_fingerprint(workspace: Path, max_files: int = 500) -> st
     hasher = hashlib.sha256()
     count = 0
     for p in sorted(workspace.rglob("*")):
-        if p.is_file() and not any(part in IGNORE_DIRS for part in p.parts):
+        if p.is_file() and not any(
+            part in IGNORE_DIRS for part in p.relative_to(workspace).parts
+        ):
             hasher.update(str(p.relative_to(workspace)).encode("utf-8"))
             try:
                 hasher.update(str(p.stat().st_mtime_ns).encode("utf-8"))
@@ -55,7 +57,9 @@ class RepoMapGenerator:
         # Check total file count
         all_source_files: list[Path] = []
         for file_path in sorted(workspace.rglob("*")):
-            if file_path.is_file() and not any(part in IGNORE_DIRS for part in file_path.parts):
+            if file_path.is_file() and not any(
+                part in IGNORE_DIRS for part in file_path.relative_to(workspace).parts
+            ):
                 all_source_files.append(file_path)
 
         if len(all_source_files) > self.max_files_threshold and not force:
