@@ -1,5 +1,100 @@
 # Active task status
 
+- **2026-11-01 final-source Q03 cancellation passes 100/100:** source
+  `2866c968…95e30f` and unchanged carrier complete one fixed-count run, exit zero,
+  max accepted-cancel-to-reap 39.291 ms against 2000 ms. All 300 observed owned
+  identities are reaped; all delayed markers remain absent after the barrier.
+  Canonical termination results are confirmed; no per-trial kernel signal audit
+  or TERM/KILL breakdown is claimed. Exact launchd service absence and source
+  integrity are verified. Evidence: `.venv/evidence/qa31-q03-full100-20261101/`.
+  This supersedes older Q03 pending statements below. Endurance remains open.
+
+- **2026-11-01 GitHub checkpoint scope:** the owner requested committing and
+  publishing the coding work. The reviewed RepoMap repair is committed as
+  `29c123a`; the earlier accumulated checkpoint commits are included. Current
+  results and remaining gates are summarized in
+  [the November 1 checkpoint](../docs/testing/CHECKPOINT_2026-11-01.md).
+  Publication is a development checkpoint, not release certification. Seven
+  filmmaking files and ignored private verification artifacts remain excluded.
+
+- **2026-11-01 Q05 locally qualifies on the final reviewed source:** one
+  controlled full run accepts 100/100 pairs (200 crash/restart transitions) on
+  source `2866c968…95e30f` with the reviewed observer. Parent independently
+  validates all 100 closed repair traces, checks 401 complete worker cleanup
+  receipts and confirms the exact one-shot launchd service is absent. No retry,
+  top-up, missing record or output overflow is reported. Runtime evidence is
+  retained. The shell-selector warning remains a native-shell caveat; this is
+  same-filesystem process-restart qualification, not power-loss durability or
+  native/artifact/release support. Older 14/100 and 9/100 failure causes remain
+  unknown; this pass does not erase or explain them.
+  Receipt: `.venv/evidence/qa31-q05-controlled-full100-20261101/attempt-01/parent-independent-acceptance-20261101.json`.
+  Final-source Q03 cancellation and uninterrupted endurance remain next.
+
+- **2026-11-01 QA31-B2 complete instrument acceptance passes 20/20:** the
+  owner-approved whole-contract rework reserves the truncation marker budget,
+  preserves all ten controls and adds two stronger marker assertions. Exact
+  candidate `8e98cb8db98b1098c0653c50e3d163587ef6f0b2c4e9342ff1f854d637564b23`
+  is independently reviewed, Ruff-clean per baseline, and passes ten controls
+  each on Python 3.11.17/3.12.15 in fresh per-case interpreters. All earlier
+  failed candidates and control logs are retained. This qualifies the private
+  measuring instrument only; it does not identify the recovery stall's cause.
+  One source-bound synthetic recovery smoke is authorized next, with unchanged
+  deadlines and no automatic corpus/retry/top-up. No Q05 or endurance pass yet.
+  Evidence: `.venv/evidence/qa31-observer-b2-controls-20261101/controls-receipt.json`.
+
+- **2026-11-01 local source gates pass on the reviewed RepoMap composition:**
+  candidate `2866c9684977a71042e4910e3c04e25dd0c17eb5c593793f4d9825114895e30f`
+  (868 tracked files) completes one serial default run per baseline: 1323 pass,
+  5 skip, zero failures/errors each. Ruff, import boundaries, plugin doctor,
+  plugin tests and strict UI audit pass each. Static inputs retain the earlier
+  verified CSS-freshness evidence. Parent independently checked JUnit hashes,
+  counts and exact launchd-service absence. The supervisor summary's metadata
+  `KeyError: manifest_file_count` is retained separately; actual controller and
+  launchd exit zero, with one run and verified cleanup. No suite was relaunched.
+  Receipt: `.venv/evidence/qa31-repomap-composed-qualification-20261031/terminal-reconciliation-20261101.json`.
+  This subsequent task-status edit is documentation only, not a new matrix run.
+  Overall G1/release, Q03/Q05 and endurance remain separate open gates.
+
+- **QA31-B instrument controls exposed a private format mismatch:** three old
+  Python 3.11 controls pass, then the nested-await control fails because frame
+  names are qualified instead of the original expected short name. The run
+  stops immediately; no remaining cases or Python 3.12 controls execute. The
+  captured stack does contain the actual inner function's file and line.
+  Private observer candidate `ad07f1be…d3b6d5` changes only frame labels to
+  bounded `co_name`, preserves the assertion and awaits independent review.
+  No recovery diagnostic, corpus, soak or new production change has run.
+
+- **2026-10-31 qualification closure requested:** QA31-A prepares corrected,
+  isolated CI-baseline environments; QA31-B first investigates retained Q05 boot
+  evidence without another corpus attempt. QA31-C final-source/corpus gates and
+  QA31-D uninterrupted endurance follow only after prerequisites and a controlled
+  execution window. See the current section of `plan.md`. No new qualification
+  pass is claimed; seven untracked filmmaking files remain excluded and untouched.
+
+- **QA31-A repaired; QA31-C found a reproducible RepoMap path defect:** both
+  fresh baseline environments pass readiness with real editable imports and no
+  interpreter override; the missing-backend packaging case passes once. The
+  fresh full-source lanes each report 1312 pass/7 fail/5 skip, and plugin lanes
+  443 pass/4 fail. Absolute ancestor `.venv` incorrectly excludes every fixture
+  file in RepoMap. A two-file fail-first relative-path repair is isolated and
+  not integrated yet. Three associated scenario request differences remain
+  subject to confirmation. Other source gates including CSS freshness pass;
+  no default-matrix retry or new recovery/endurance result is claimed.
+
+- **QA31-C RepoMap repair reviewed and integrated:** exact two-file candidate
+  `2278395db3e2fb00aedfad67690915e082f58aa97976dd7467058be2f0704133`
+  matches parent bytes and modes after independent source/base verification.
+  Four ancestor-path regression cases fail first and pass after the repair;
+  the focused module passes 10 tests per baseline. A correctly source-bound
+  canonical Python 3.11 scenario group passes all three unchanged goldens and
+  retains actual prompt captures containing the workspace Codebase Map.
+  Earlier standalone scenario results imported the old editable checkout and
+  do not test this candidate; that source-binding error is explicitly retained.
+  The worker's test preimage receipt also used its postimage hash; corrected
+  actual Git-base preimages are retained separately without replacing it.
+  Parent-focused and composed full-source qualification are next, not passed.
+  No new commit, push, recovery corpus or endurance result is claimed.
+
 - **2026-10-31 local coding-only checkpoint committed; no push:** `677d5a0`
   preserves 216 pending files. The seven filmmaking-skill files remain original,
   uncommitted and excluded from verified 867-file snapshot `8e30fadb…3aefc`.

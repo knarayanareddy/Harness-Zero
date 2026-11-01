@@ -1,5 +1,84 @@
 # Active increments: T01–T21 with isolated Luna repair lanes
 
+## 2026-10-31 qualification closure — current owner request
+
+On 2026-11-01 the owner additionally authorized committing and publishing the
+reviewed coding work to GitHub. Publication uses a qualification checkpoint
+branch, not a release or promotion to `main`. Earlier no-commit/no-push notes
+describe their original task boundaries, not this subsequent explicit request.
+The seven filmmaking files remain excluded under the earlier coding-only choice.
+
+The owner now requests repair of the non-green G1, recovery and endurance gates.
+This section supersedes older paused-work statements for the bounded work below;
+it does not authorize release, push, new provider spend, unrelated process stops,
+OS security changes, weaker assertions or automatic qualification retries.
+Starting base: `a2b0dd8fe0eb308129ed9ac25e2ef47362621158`. The seven untracked
+filmmaking-skill files remain excluded and untouched. Retain all failed evidence.
+
+### QA31-A: repair verification prerequisites
+
+- Scope: new ignored qualification environment/worktree and evidence only; parent
+  owns this plan and task status. No runtime, assertions or goldens may change.
+- Diagnose the actual missing Python 3.11 build backend and interpreter overrides.
+  Prepare isolated Python 3.11.17/3.12.15 environments matching CI's editable dev
+  installation, pytest 9.1.1, ACP SDK 0.12.1 and locked Node 22 dependencies.
+- Acceptance: readiness succeeds with no PYTHONPATH/PYTHONHOME/DYLD override;
+  interpreter, child Python, source imports and dependencies match the selected
+  four-skill checkout. Run the previously failed packaging case once after the
+  evidenced prerequisite repair. A subsequent full CI-source lane requires a
+  frozen reviewed source and recorded invocation; preserve every failure.
+- Checkpoint: toolchain readiness is not G1 or artifact qualification.
+
+### QA31-B: localize recovery before proposing a repair
+
+- Scope: read-only runtime/source and retained Q05 traces initially; new private
+  diagnostic/control files only after a bounded design is reviewed. No corpus
+  retry, assertion/deadline change or production patch during investigation.
+- Separate the 14/100 boot stall from the older 9/100 second-turn failure.
+  Identify the actual boot call chain and the unobserved blocking seams. Compare
+  retained successful/failed traces and the nonreproducing watchdog diagnostic.
+- Acceptance: a causal reproducer or a documented evidence gap, then a bounded
+  observation plan whose negative controls prove it captures the relevant stall
+  within the original deadline. Any runtime fix needs fail-first regression,
+  positive control, independent exact-candidate review and affected parent tests.
+- Checkpoint: passing diagnostics alone never clears Q05.
+
+### QA31-C: qualify the final reviewed source
+
+- First clean-environment source attempt is retained as failed: each Python
+  baseline reports 1,312 passed, 7 failed, 5 skipped; plugin tests report
+  443 passed, 4 failed. All four RepoMap failures run below an absolute `.venv`
+  ancestor; the implementation incorrectly filters absolute rather than
+  workspace-relative path parts. Three scenario request mismatches may be
+  consequences and must be confirmed against their actual diffs.
+- Bounded repair allowlist: `harness/plugins/context/repo_map/map.py` and
+  `tests/plugins/test_repo_map_plugin.py`, in isolated worktree
+  `qa31-repomap-relative-20261031`. Require fail-first real ancestor/descendant
+  path controls, preserve existing ignore semantics inside the workspace, then
+  both baseline focused modules, unchanged affected scenario goldens, scoped
+  Ruff and independent exact-candidate review before parent integration.
+  No dependency, timing, AST extraction or unrelated confinement redesign.
+- Depends on QA31-A/B and an agreed controlled workload window. Heavy checks are
+  serial; never stop unrelated workloads to create the window.
+- Acceptance: both baseline default matrices and applicable source-CI commands
+  pass on the final source, then Q03 100/100 and Q05 100/100 with independent
+  acceptance/cleanup checks. Stop the fixed-count attempt on its first failure;
+  do not top up, blindly retry or combine partial runs. Unavailable Linux/native
+  evidence stays explicitly unverified rather than becoming a macOS pass.
+- Refresh affected installed/frozen artifacts against that source; keep exact
+  binary, source-only, native, external-editor and live-provider evidence separate.
+
+### QA31-D: uninterrupted endurance
+
+- Depends on QA31-C, the final reviewed source and a reserved execution window.
+- Acceptance: one uninterrupted >=7,200-second, >=100-turn offline mixed-session
+  run with durable one-shot supervision, no restarter, terminal/resource report,
+  transcript/interaction/job checks and verified owned cleanup. Resource growth
+  requires investigation, not an automatic pass. An interrupted run is incomplete.
+- Parent updates the ledger only from actual receipts. Full release qualification
+  still requires all applicable platform/artifact/editor/live gates and explicit
+  release authority; this work does not grant either.
+
 User-authorized scope: baseline diagnosis, preserved review reproductions,
 boundary/quality contracts, T04 search confinement, T05/T06 cancellation and
 sequential T07 crash recovery, T08 dangling-call repair and T09/T10 compaction. No commit, push or
