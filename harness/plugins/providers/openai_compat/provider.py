@@ -51,6 +51,10 @@ class OpenAICompatProvider:
         max_context_tokens=128000,
     )
 
+    # Exact native-API profiles verified by live wire tests. Do not apply these
+    # defaults to third-party OpenAI-compatible servers or guessed model aliases.
+    _NATIVE_CHAT_MODELS = frozenset({"gpt-6-luna", "gpt-6.1-terra"})
+
     def __init__(
         self,
         name: str = "openai",
@@ -328,6 +332,21 @@ class OpenAICompatProvider:
             if params.stop:
                 payload["stop"] = params.stop
             payload.update(params.extra)
+
+        origin = httpx.URL(self.base_url)
+        if (origin.scheme == "https" and origin.host == "api.openai.com"
+                and origin.port in (None, 443) and req.model in self._NATIVE_CHAT_MODELS):
+            if payload.get("reasoning_effort") is None:
+                payload["reasoning_effort"] = "none"
+            if payload.get("tools") and payload["reasoning_effort"] != "none":
+                raise ProviderError(provider=self.name, model=req.model, kind="bad_request", retryable=False,
+                    message="Chat Completions function tools require reasoning_effort='none' for this model; "
+                            "use that mode or a Responses-capable adapter. Explicit reasoning was not downgraded.")
+            if "max_tokens" in payload:
+                if "max_completion_tokens" in payload and payload["max_completion_tokens"] != payload["max_tokens"]:
+                    raise ProviderError(provider=self.name, model=req.model, kind="bad_request", retryable=False,
+                        message="Conflicting token limits: max_tokens and max_completion_tokens must agree.")
+                payload.setdefault("max_completion_tokens", payload.pop("max_tokens"))
 
         client = self._get_client()
 

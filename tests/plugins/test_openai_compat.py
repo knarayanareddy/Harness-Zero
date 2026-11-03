@@ -61,6 +61,116 @@ def make_mock_transport(sse_lines: list[str], status_code: int = 200) -> httpx.M
     return httpx.MockTransport(handler)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", ["gpt-6-luna", "gpt-6.1-terra"])
+async def test_native_openai_tool_request_defaults_to_supported_reasoning_mode(model):
+    captured = []
+
+    def reply(request):
+        captured.append(json.loads(request.content))
+        return httpx.Response(200, headers={"Content-Type": "text/event-stream"},
+            text='data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n')
+
+    req = ModelRequest(model=model, system=[], messages=[Message(role=Role.USER, content=[TextBlock("read")])],
+        tools=[ToolSpec(name="view_file", description="Read", input_schema={"type": "object"}, risk_class=RiskClass.READ)],
+        params=ModelParams())
+    original = req.to_dict()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(reply)) as client:
+        provider = OpenAICompatProvider(api_key="synthetic-key", client=client)
+        events = [event async for event in provider.generate(req)]
+    assert captured[0].get("reasoning_effort") == "none"
+    assert captured[0]["tools"][0]["function"]["name"] == "view_file"
+    assert any(isinstance(event, TextDelta) and event.text == "ok" for event in events)
+    assert req.to_dict() == original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", ["gpt-6-luna", "gpt-6.1-terra"])
+async def test_native_openai_completion_limit_uses_supported_wire_field(model):
+    captured = []
+
+    def reply(request):
+        captured.append(json.loads(request.content))
+        return httpx.Response(200, text="data: [DONE]\n\n")
+
+    req = ModelRequest(model=model, system=[], messages=[], tools=[], params=ModelParams(max_tokens=128))
+    original = req.to_dict()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(reply)) as client:
+        provider = OpenAICompatProvider(api_key="synthetic-key", client=client)
+        _ = [event async for event in provider.generate(req)]
+    assert captured[0].get("max_completion_tokens") == 128
+    assert "max_tokens" not in captured[0]
+    assert req.to_dict() == original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("params,reason", [
+    (ModelParams(reasoning_effort="high"), "reasoning_effort"),
+    (ModelParams(extra={"reasoning_effort": "medium"}), "reasoning_effort"),
+    (ModelParams(max_tokens=128, extra={"max_completion_tokens": 256}), "token limits"),
+])
+async def test_incompatible_explicit_native_chat_settings_fail_before_network(params, reason):
+    captured = []
+
+    def reply(request):
+        captured.append(request)
+        return httpx.Response(200, text="data: [DONE]\n\n")
+
+    req = ModelRequest(model="gpt-6-luna", system=[], messages=[],
+        tools=[ToolSpec(name="read", description="Read", input_schema={"type": "object"}, risk_class=RiskClass.READ)],
+        params=params)
+    original = req.to_dict()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(reply)) as client:
+        provider = OpenAICompatProvider(api_key="synthetic-key", client=client)
+        with pytest.raises(ProviderError, match=reason) as error:
+            _ = [event async for event in provider.generate(req)]
+    assert error.value.kind == "bad_request" and error.value.retryable is False
+    assert captured == []
+    assert req.to_dict() == original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("base_url,model", [
+    ("https://api.openai.com/v1", "gpt-4o"),
+    ("https://openrouter.ai/api/v1", "openai/gpt-6-luna"),
+    ("http://localhost:12345/v1", "gpt-6-luna"),
+    ("https://api.openai.com.proxy.invalid/v1", "gpt-6-luna"),
+    ("http://api.openai.com/v1", "gpt-6-luna"),
+    ("https://api.openai.com:8443/v1", "gpt-6.1-terra"),
+])
+async def test_native_chat_profile_does_not_change_other_provider_requests(base_url, model):
+    captured = []
+
+    def reply(request):
+        captured.append(json.loads(request.content))
+        return httpx.Response(200, text="data: [DONE]\n\n")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(reply)) as client:
+        provider = OpenAICompatProvider(base_url=base_url, api_key="synthetic-key", client=client)
+        req = ModelRequest(model=model, system=[], messages=[], tools=[], params=ModelParams(max_tokens=128))
+        _ = [event async for event in provider.generate(req)]
+    assert captured[0]["max_tokens"] == 128
+    assert "max_completion_tokens" not in captured[0]
+    assert "reasoning_effort" not in captured[0]
+
+
+@pytest.mark.asyncio
+async def test_explicit_text_reasoning_and_matching_native_limits_are_preserved():
+    captured = []
+
+    def reply(request):
+        captured.append(json.loads(request.content))
+        return httpx.Response(200, text="data: [DONE]\n\n")
+
+    params = ModelParams(max_tokens=128, reasoning_effort="high", extra={"max_completion_tokens": 128})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(reply)) as client:
+        provider = OpenAICompatProvider(api_key="synthetic-key", client=client)
+        req = ModelRequest(model="gpt-6-luna", system=[], messages=[], tools=[], params=params)
+        _ = [event async for event in provider.generate(req)]
+    assert captured[0]["reasoning_effort"] == "high"
+    assert captured[0]["max_completion_tokens"] == 128 and "max_tokens" not in captured[0]
+
+
 @pytest.mark.parametrize("role", [Role.USER, Role.TOOL])
 def test_tool_continuation_preserves_each_id_and_error_without_empty_user_message(role):
     provider = OpenAICompatProvider(name="local", base_url="http://127.0.0.1:1/v1")

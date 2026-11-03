@@ -129,3 +129,90 @@ async def test_commands_preserve_multiple_results_errors_and_reloaded_wire(tmp_p
     finally:
         await client.aclose()
         await rt.registry.unload_all()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("completed_tool", [False, True])
+async def test_partial_stream_timeout_closes_response_without_tools_or_automatic_replay(tmp_path, completed_tool):
+    requests, responses, handler_starts = [], [], []
+    release_stall = asyncio.Event()
+
+    async def completion(request):
+        requests.append(await request.json())
+        if completed_tool and len(requests) == 1:
+            choice = {"delta": {"tool_calls": [{"index": 0, "id": "completed", "function": {
+                "name": "fixture_forbidden", "arguments": "{}"}}]}, "finish_reason": "tool_calls"}
+            return web.Response(text="data: " + json.dumps({"choices": [choice]}) + "\n\ndata: [DONE]\n\n",
+                                content_type="text/event-stream")
+        if len(requests) != (2 if completed_tool else 1):
+            choice = {"delta": {"content": "RECOVERED"}, "finish_reason": "stop"}
+            return web.Response(text="data: " + json.dumps({"choices": [choice]}) + "\n\ndata: [DONE]\n\n",
+                                content_type="text/event-stream")
+        response = web.StreamResponse(headers={"Content-Type": "text/event-stream"})
+        await response.prepare(request)
+        chunk = {"choices": [{"delta": {"content": "unfinished output", "tool_calls": [
+            {"index": 0, "id": "uncertain", "function": {"name": "fixture_forbidden", "arguments": "{"}},
+        ]}}]}
+        await response.write(("data: " + json.dumps(chunk) + "\n\n").encode())
+        await release_stall.wait()
+        return response
+
+    async def models(request):
+        return web.json_response({"data": [{"id": "wire-model"}]})
+
+    async def observe_response(response):
+        if response.request.method == "POST":
+            responses.append(response)
+
+    app = web.Application()
+    app.router.add_post("/v1/chat/completions", completion)
+    app.router.add_get("/v1/models", models)
+    server = web.AppRunner(app)
+    await server.setup()
+    site = web.TCPSite(server, "127.0.0.1", 0)
+    await site.start()
+    client = httpx.AsyncClient(trust_env=False, timeout=httpx.Timeout(0.05), event_hooks={"response": [observe_response]})
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    rt = await bootstrap_kernel(workspace=workspace, config_dir=tmp_path / "config", resume_session=False)
+
+    async def forbidden(args, ctx):
+        handler_starts.append(True)
+        return ToolResult.text("must not execute")
+
+    rt.registry.register_provider(OpenAICompatProvider(name="wire", base_url=f"http://127.0.0.1:{server.addresses[0][1]}/v1",
+        timeout_s=0.05, client=client), plugin_name="test_wire")
+    rt.registry._register_tool(ToolSpec(name="fixture_forbidden", description="Must not execute a partial call",
+        input_schema={"type": "object"}, risk_class=RiskClass.READ), forbidden, "test_wire")
+    sub = rt.bus.subscribe()
+    try:
+        session = await rt.session_manager.create_session()
+        options = {"provider": "wire", "model": "wire-model"}
+        failed = await asyncio.wait_for(rt.commands.submit_turn(session_id=session.session_id, prompt="first", options=options), 5)
+        assert failed.error and "timed out" in failed.error and failed.stop_reason == "error"
+        assert len(requests) == (2 if completed_tool else 1), "A timeout must not trigger an unrequested model replay"
+        assert all(response.is_closed for response in responses)
+        assert len(handler_starts) == int(completed_tool), "Only the earlier completed call may execute"
+        assert not session.is_busy and await rt.commands.interactions_list() == []
+        assert not [r for r in session.log.records if r["kind"] == "turn.completed"]
+        if not completed_tool:
+            assert not [r for r in session.log.records if r["kind"] in {"assistant.message", "tool.call"}]
+        errors = []
+        while not sub.empty():
+            event = sub.get_nowait()
+            if event.type == "turn.error":
+                errors.append(event)
+        assert len(errors) == 1 and errors[0].data["kind"] == "timeout"
+        assert errors[0].data["retryable"] is (not completed_tool)
+
+        recovered = await asyncio.wait_for(rt.commands.submit_turn(session_id=session.session_id, prompt="recover", options=options), 5)
+        assert recovered.error is None and recovered.output == "RECOVERED"
+        assert len(requests) == (3 if completed_tool else 2) and len(handler_starts) == int(completed_tool)
+        assert [r["content"] for r in session.log.records if r["kind"] == "user.message"] == ["first", "recover"]
+        assert continuation_error(requests[-1]["messages"]) is None
+    finally:
+        release_stall.set()
+        rt.bus.unsubscribe(sub)
+        await rt.registry.unload_all()
+        await client.aclose()
+        await server.cleanup()

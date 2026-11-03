@@ -1149,12 +1149,20 @@ class TurnRunner:
             await run_stop_hooks(terminal="compaction_error")
             return TurnResult(output="", error=str(e), stop_reason="error")
         except ProviderError as e:
-            logger.warning(f"Provider configuration error: {e}")
+            logger.warning("Provider request error (%s): %s", e.kind, e)
+            # A transient inference failure is recoverable, but replaying a turn
+            # that already admitted tools can duplicate effects. Never retry it
+            # automatically; keep that whole-turn safety distinction on the wire.
+            admitted_tool_work = any(
+                record.get("step_index", 0) > prompt_step
+                and (record.get("kind") == "tool.call" or record.get("tool_calls"))
+                for record in services.log.records
+            )
             await self._announce(
                 services=services,
                 session_id=session.session_id,
                 turn_id=turn_id,
-                data=TurnError(message=str(e), kind=e.kind, retryable=False),
+                data=TurnError(message=str(e), kind=e.kind, retryable=bool(e.retryable and not admitted_tool_work)),
                 marker=True,
             )
             await run_stop_hooks(terminal="provider_error")

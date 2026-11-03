@@ -1,5 +1,75 @@
 # Active task status
 
+- **2026-11-03 QA33 repairs implemented and live-verified locally:** reviewed
+  native OpenAI defaults, structured compaction history, bounded active-request
+  retention and safe transient-error classification are integrated. Final source
+  suites pass 1,443/5 skips per baseline; all 13 CI-derived commands pass. New
+  wheel `0d116519…9bde8cf` passes 250 installed-artifact tests, default live ACP
+  chat/read/edit/permission flows on Luna and Terra, both compaction checkpoints,
+  all 12 coding milestones and 500 MCP tool requests. The raw task score stays
+  18/19 for a full-fact-versus-identifier reply-format mismatch; a separate clarified
+  probe retains exact equality and passes all three plugin lifecycle cases.
+  Original failures and QA32/user work remain preserved; no commit/push or new
+  official two-hour soak. Evidence:
+  `.venv/evidence/qa33-live-e2e-repair-20261102/verification-r3/REPORT.md`.
+
+- **QA32 reviewed diagnostic integrated; full source gates next:** independent
+  full-callpath review cleared candidate
+  `40b7c0e46d16150dc953ca43d9c14d13a74c380847045a58becbd415940dac73`.
+  Parent preimages matched the published base, the exact two-file patch was
+  integrated, and 152 affected controls pass on each baseline with Ruff clean.
+  The original resource evaluator and sampler remain unchanged. Freeze the
+  coding-only full source for serial baseline gates, then prepare a clean pinned
+  proposal. No new soak, commit or push is authorized by preparation.
+
+- **QA32 Slice 3 prepared; integrated-path review pending:** opt-in mode,
+  lifecycle collection, parent-observed worker launch receipt and the enabled
+  terminal evidence gate are implemented in the isolated candidate
+  `40b7c0e46d16150dc953ca43d9c14d13a74c380847045a58becbd415940dac73`.
+  Parent checked raw JUnit: 101 FD plus 51 unchanged soak controls pass on each
+  baseline, zero skips; old resource evaluator/sampler ASTs and soak-test bytes
+  are unchanged. Startup-only native collection is not endurance evidence.
+  Independent review, parent integration, full source gates and a clean pinned
+  proposal remain pending. No new soak, commit or push has occurred.
+
+- **QA32 preparation, Slice 3 assigned:** the collector and artifact primitives
+  are independently cleared, including the corrected kill-before-unconfirmed-
+  reap control. Exact two-file preimage:
+  `68c5f7057a9a405ee72939128936d9e7df0817c6aafcb2545cdf846c89be836f`.
+  The next isolated slice wires the explicit opt-in, actual collection phases,
+  parent-observed worker PID and mandatory terminal evidence gate. Preparation
+  remains incomplete; no new soak, source integration, commit or push yet.
+
+- **QA32 preparation, Slice 2 under review corrections:** the isolated
+  descriptor parser/codec foundation was independently cleared. Bounded
+  self-process collection and private artifact writing/readback are now prepared
+  in the same worktree, with 73 FD controls plus 51 unchanged soak controls
+  passing on each Python baseline and Ruff passing. Exact two-file candidate:
+  `5761477a319da02f2ad79ae595dda12f2bcb5ee965a2c8369886dd6c2d7ac40f`.
+  Independent review requires enforcing the ten-second ceiling before helper
+  launch, closing a child-directory FD on metadata-inspection failure, and
+  covering cleanup failure, stderr overflow and concurrent pipe draining.
+  These findings affect the new, unintegrated diagnostic, not the old soak.
+  Parent integration, CLI/worker/lifecycle wiring, fresh source gates and a new
+  soak are not done. No commit/push or new long-run execution is authorized.
+
+  Review corrections are implemented in candidate
+  `7f8ae38e633d2863d1696035e5b53e9f9173d27f696499197d67daccaf9d02f7`:
+  81 FD controls plus 51 unchanged soak controls pass on each baseline, including
+  the timeout ceiling, child-directory cleanup and pipe/error branches. The
+  prior candidate is archived. Independent review of the revised bytes is still
+  required before Slice 3; passing focused tests alone is not clearance.
+
+- **2026-11-02 QA32 preparation requested:** the owner chose stronger descriptor
+  evidence rather than accepting the bounded-SQLite explanation as closure.
+  The completed soak remains 120 turns / 7226.308 seconds, no integrity errors,
+  but `review-required` for one FD increase. Bounded probes reproduce a retained,
+  reused `memory.db` descriptor released at unload; the original FD identity is
+  still unproven. Prepare opt-in per-descriptor/lifecycle capture, negative
+  controls and a reviewed execution plan under the [QA32 spec](../docs/specs/2026-11-02-endurance-fd-evidence.md).
+  No new soak is launched or authorized by this preparation; no metrics or
+  acceptance limits may be relaxed. Earlier source/Q03/Q05 passes remain scoped.
+
 - **2026-11-01 final-source Q03 cancellation passes 100/100:** source
   `2866c968…95e30f` and unchanged carrier complete one fixed-count run, exit zero,
   max accepted-cancel-to-reap 39.291 ms against 2000 ms. All 300 observed owned

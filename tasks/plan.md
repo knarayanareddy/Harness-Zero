@@ -1,5 +1,56 @@
 # Active increments: T01–T21 with isolated Luna repair lanes
 
+## 2026-11-02 QA33 — fix live end-to-end failures
+
+**2026-11-03 scoped repair complete, local verification:** independently reviewed
+candidate `dcbc572a…99e4c87`; final source `590402c1…4402ddb`; rebuilt wheel
+`0d116519…9bde8cf`. Both full Python baselines pass 1,443 tests with five platform
+skips, and all 13 CI-derived gates pass. The installed wheel passes 250 tests and
+actual default ACP/tool/permission flows on both requested models. Hostile-history
+and active-request compaction, twelve coding milestones, persistent memory and
+MCP load are verified. The raw task score remains 18/19 for an identifier-format
+assertion; its separately clarified strict plugin probe passes 3/3. See the
+private `verification-r3/REPORT.md` and parent receipts for exact evidence and
+limits. This status-only update follows the frozen source gates; product/test
+bytes still match the reviewed candidate. No commit/push/release or official
+two-hour soak occurred.
+
+Owner requests proactive repair of the stress-test failures. Contract:
+[QA33 live repair](../docs/specs/2026-11-02-live-e2e-repair.md). Preserve all QA32
+work, failed live evidence and the excluded filmmaking files.
+
+1. Fail-first native OpenAI request-profile regression, then minimal model-default
+   and token-field repair with legacy/third-party controls.
+2. Fail-first structured compaction-history boundary, then actual hostile-history
+   live verification without weakening section validation or budget enforcement.
+3. Diagnose the original model-stream timeout; verify bounded partial-stream
+   failure, no uncertain tool execution and successful subsequent explicit turn.
+4. Run affected controls and final source gates serially; rebuild the coding-only
+   wheel and exercise the unmodified public ACP/model paths and task-driven stress.
+
+No commit/push/release, OS change or official two-hour soak is implied.
+
+## 2026-11-02 QA32 — prepare stronger descriptor evidence
+
+Owner selected preparation of a descriptor-instrumented endurance run, not manual
+acceptance of the limited SQLite explanation. The original completed 120-turn /
+7,226-second run remains `review-required` with its raw results preserved.
+
+Contract: [QA32 spec](../docs/specs/2026-11-02-endurance-fd-evidence.md).
+Base `f3129d00dfc2ca67cd95d425a45b627e66075edb`; excluded filmmaking files intact.
+Parent owns shared docs; isolated implementation owns only the qualification
+runner and a new FD-evidence test module. No new two-hour execution yet.
+
+1. Review the opt-in collection/identity/coverage contract against actual lsof
+   output and the existing runner's parent/worker path; resolve ambiguities first.
+2. Implement a fail-first parser and bounded private artifact collection, then
+   wire lifecycle captures and mandatory enabled-mode validation in thin slices.
+3. Independently review the exact candidate, run affected controls and serial
+   source gates, then prepare a clean pinned one-shot invocation for owner approval.
+
+Do not change existing duration, cadence, resource metrics, thresholds or old
+assertions. Capture failures cannot silently downgrade to aggregate-only mode.
+
 ## 2026-10-31 qualification closure — current owner request
 
 On 2026-11-01 the owner additionally authorized committing and publishing the

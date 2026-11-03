@@ -274,6 +274,11 @@ def derive_messages(records: list[dict[str, Any] | TranscriptRecord]) -> list[Me
                     metadata={"compaction_summary": True},
                 )
             )
+            excerpt = rec.metadata.get("summarized_prompt_excerpt")
+            if isinstance(excerpt, str) and excerpt:
+                messages.append(Message(role=Role.USER, content=[TextBlock(text=excerpt)],
+                    metadata={"summarized_prompt_excerpt": True,
+                              "source_prompt_step": rec.metadata.get("summarized_prompt_step")}))
             continue
 
         if kind == "system.notice":
