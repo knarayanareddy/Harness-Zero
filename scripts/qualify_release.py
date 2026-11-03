@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import hashlib
 import importlib
 import importlib.machinery
@@ -12,6 +13,7 @@ import logging
 import math
 import os
 import re
+import select
 import signal
 import stat
 import subprocess
@@ -34,6 +36,441 @@ TRANSIENT_FILES = {".git"}
 RUNTIME_INPUT_ROOTS = ("harness", "builtin", "packaging", "launcher")
 EXPECTED_VIEW_FILE_TEXT = "    1 | T29 offline source-soak fixture\n"
 PROCESS_METRIC_SCOPE = "direct child processes only; descendants are not fully enumerated"
+FD_RAW_BYTE_LIMIT = 1_048_576
+FD_RECORD_LIMIT = 4096
+FD_CAPTURE_BYTE_LIMIT = 4_194_304
+FD_LAUNCH_RECEIPT_BYTE_LIMIT = 65_536
+FD_EVIDENCE_SCHEMA = "t29.fd-evidence.v1"
+FD_HELPER_TIMEOUT_S = 10.0
+FD_HELPER_CLEANUP_RESERVE_S = 1.0
+FD_HELPER_CHUNK_BYTES = 65_536
+FD_LSOF_PATHS = ("/usr/sbin/lsof", "/usr/bin/lsof")
+
+
+def parse_fd_lsof(raw: bytes, *, expected_pid: int) -> dict[str, Any]:
+    """Parse the verified NUL-delimited lsof field format, never opening names."""
+    if type(expected_pid) is not int or expected_pid <= 0:
+        raise ValueError("expected worker PID must be a positive integer")
+    if type(raw) is not bytes or not raw or len(raw) > FD_RAW_BYTE_LIMIT:
+        raise ValueError("invalid or oversized FD capture bytes")
+    if not raw.endswith(b"\0\n"):
+        raise ValueError("truncated FD capture")
+    fields = raw.split(b"\0")
+    if fields[0] != f"p{expected_pid}".encode("ascii"):
+        raise ValueError("FD capture process header does not match worker PID")
+    records: list[dict[str, Any]] = []
+    numeric: set[int] = set()
+    current: dict[str, Any] | None = None
+    seen: set[bytes] = set()
+    names = {b"t": "type", b"n": "name", b"D": "device", b"i": "inode"}
+
+    def finish_record() -> None:
+        if current is None:
+            return
+        if not {b"t", b"n"} <= seen:
+            raise ValueError("FD record lacks type or name")
+        records.append(current)
+        if len(records) > FD_RECORD_LIMIT:
+            raise ValueError("FD capture exceeds record limit")
+
+    for field in fields[1:-1]:
+        if field.startswith(b"\n"):
+            field = field[1:]
+            if not field.startswith(b"f"):
+                raise ValueError("invalid FD record boundary")
+            finish_record()
+            descriptor = field[1:]
+            if not descriptor or len(descriptor) > 64 or any(byte < 33 or byte > 126 for byte in descriptor):
+                raise ValueError("invalid FD descriptor")
+            label = descriptor.decode("ascii")
+            if label.isdecimal():
+                number = int(label)
+                if number in numeric:
+                    raise ValueError("duplicate numeric FD")
+                numeric.add(number)
+            current = {"descriptor": label, "type": None, "name": None, "device": None, "inode": None}
+            seen = set()
+            continue
+        tag = field[:1]
+        if current is None or tag not in names or tag in seen:
+            raise ValueError("unknown, duplicate, or misplaced FD field")
+        if tag == b"t" and len(field) == 1:
+            raise ValueError("FD record has an empty type")
+        current[names[tag]] = field[1:].decode("utf-8", errors="replace")
+        seen.add(tag)
+    finish_record()
+    if not records or not numeric:
+        raise ValueError("FD capture lacks numeric descriptor evidence")
+    return {"pid": expected_pid, "records": records, "numeric_fd_count": len(numeric),
+            "pseudo_record_count": len(records) - len(numeric)}
+
+
+def _fd_json_bytes(value: Any) -> bytes:
+    return (json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"), allow_nan=False)
+            + "\n").encode("utf-8")
+
+
+def encode_fd_capture(
+    raw: bytes, *, expected_pid: int, phase: str, index: int | None,
+    started_monotonic_ns: int, finished_monotonic_ns: int,
+    observer_owned_fds: list[int],
+) -> bytes:
+    """Encode a bounded capture; this does not collect, write, or qualify it."""
+    if type(phase) is not str or phase not in {"cadence", "after_first_turn", "after_unload"}:
+        raise ValueError("unknown FD capture phase")
+    if phase == "cadence":
+        if type(index) is not int or not 0 <= index <= SCHEDULED_TURNS:
+            raise ValueError("invalid FD cadence index")
+    elif index is not None:
+        raise ValueError("FD lifecycle capture must not have a cadence index")
+    if (type(started_monotonic_ns) is not int or type(finished_monotonic_ns) is not int
+            or started_monotonic_ns < 0 or finished_monotonic_ns < started_monotonic_ns):
+        raise ValueError("invalid FD capture monotonic interval")
+    if (type(observer_owned_fds) is not list or len(observer_owned_fds) > FD_RECORD_LIMIT
+            or any(type(fd) is not int or fd < 0 for fd in observer_owned_fds)
+            or len(set(observer_owned_fds)) != len(observer_owned_fds)):
+        raise ValueError("invalid observer-owned FD identities")
+    table = parse_fd_lsof(raw, expected_pid=expected_pid)
+    envelope = {
+        "schema": FD_EVIDENCE_SCHEMA,
+        "worker_pid": expected_pid,
+        "phase": phase,
+        "index": index,
+        "started_monotonic_ns": started_monotonic_ns,
+        "finished_monotonic_ns": finished_monotonic_ns,
+        "observer_owned_fds": sorted(observer_owned_fds),
+        "raw_lsof_base64": base64.b64encode(raw).decode("ascii"),
+        "raw_byte_count": len(raw),
+        "raw_sha256": hashlib.sha256(raw).hexdigest(),
+        "table": table,
+    }
+    payload = _fd_json_bytes(envelope)
+    if len(payload) > FD_CAPTURE_BYTE_LIMIT:
+        raise ValueError("FD capture envelope exceeds byte limit")
+    return payload
+
+
+def _fd_unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate FD capture JSON key")
+        result[key] = value
+    return result
+
+
+def decode_fd_capture(payload: bytes, *, expected_pid: int) -> dict[str, Any]:
+    """Validate exact serialized bytes and rederive all table data from raw bytes."""
+    if type(payload) is not bytes or not payload or len(payload) > FD_CAPTURE_BYTE_LIMIT:
+        raise ValueError("invalid or oversized FD capture envelope")
+    try:
+        envelope = json.loads(payload.decode("ascii"), object_pairs_hook=_fd_unique_json_object)
+    except (UnicodeError, json.JSONDecodeError, RecursionError) as error:
+        raise ValueError("invalid FD capture JSON") from error
+    keys = {"schema", "worker_pid", "phase", "index", "started_monotonic_ns",
+            "finished_monotonic_ns", "observer_owned_fds", "raw_lsof_base64",
+            "raw_byte_count", "raw_sha256", "table"}
+    if type(envelope) is not dict or set(envelope) != keys or envelope["schema"] != FD_EVIDENCE_SCHEMA:
+        raise ValueError("invalid FD capture schema or fields")
+    encoded_raw = envelope["raw_lsof_base64"]
+    if type(encoded_raw) is not str or len(encoded_raw) > 4 * ((FD_RAW_BYTE_LIMIT + 2) // 3):
+        raise ValueError("invalid or oversized FD raw base64")
+    try:
+        raw = base64.b64decode(encoded_raw, validate=True)
+    except ValueError as error:
+        raise ValueError("invalid FD raw base64") from error
+    rebuilt = encode_fd_capture(
+        raw, expected_pid=expected_pid, phase=envelope["phase"], index=envelope["index"],
+        started_monotonic_ns=envelope["started_monotonic_ns"],
+        finished_monotonic_ns=envelope["finished_monotonic_ns"],
+        observer_owned_fds=envelope["observer_owned_fds"],
+    )
+    if rebuilt != payload:
+        raise ValueError("FD capture bytes, PID, raw hash, or parsed table are inconsistent")
+    return envelope
+
+
+def collect_fd_lsof(*, _command: list[str] | None = None, timeout: float = FD_HELPER_TIMEOUT_S) -> dict[str, Any]:
+    """Collect this process's lsof bytes with bounded reads and exact-child cleanup.
+
+    ``_command`` and ``timeout`` are private synthetic-producer controls for tests;
+    no CLI accepts arbitrary commands. Synchronous process creation itself cannot
+    be interrupted by this userspace deadline on every platform.
+    """
+    if (isinstance(timeout, bool) or not isinstance(timeout, (int, float))
+            or timeout <= 0 or timeout > FD_HELPER_TIMEOUT_S or not math.isfinite(timeout)):
+        raise ValueError(f"FD helper timeout must be a finite positive number no greater than {FD_HELPER_TIMEOUT_S:g} seconds")
+    pid = os.getpid()
+    if _command is None:
+        executable = next((path for path in FD_LSOF_PATHS if os.path.isfile(path) and os.access(path, os.X_OK)), None)
+        if executable is None:
+            raise RuntimeError("verified native lsof executable is unavailable")
+        command = [executable, "-nP", "-p", str(pid), "-F0ftnDi"]
+    else:
+        if type(_command) is not list or not _command or any(type(part) is not str or not part for part in _command):
+            raise ValueError("invalid private synthetic helper command")
+        command = list(_command)
+
+    started_ns = time.monotonic_ns()
+    deadline = time.monotonic() + float(timeout)
+    reserve = min(FD_HELPER_CLEANUP_RESERVE_S, float(timeout) / 5)
+    read_deadline = deadline - reserve
+    process: subprocess.Popen[bytes] | None = None
+    stdout = bytearray()
+    stderr = bytearray()
+    observer_fds: list[int] = []
+    failure: BaseException | None = None
+    try:
+        process = subprocess.Popen(
+            command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, close_fds=True,
+        )
+        assert process.stdout is not None and process.stderr is not None
+        streams = {process.stdout.fileno(): (stdout, FD_RAW_BYTE_LIMIT),
+                   process.stderr.fileno(): (stderr, 65_536)}
+        observer_fds = list(streams)
+        for fd in streams:
+            os.set_blocking(fd, False)
+        while streams:
+            remaining = read_deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("FD helper exceeded its collection budget")
+            readable, _, _ = select.select(list(streams), [], [], min(remaining, 0.1))
+            for fd in readable:
+                buffer, limit = streams[fd]
+                room = limit + 1 - len(buffer)
+                chunk = os.read(fd, min(FD_HELPER_CHUNK_BYTES, room))
+                if not chunk:
+                    del streams[fd]
+                else:
+                    buffer.extend(chunk)
+                    if len(buffer) > limit:
+                        label = "stdout" if buffer is stdout else "stderr"
+                        raise ValueError(f"FD helper {label} exceeds byte limit")
+        remaining = read_deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("FD helper exceeded its collection budget")
+        process.wait(timeout=remaining)
+        if process.returncode != 0:
+            raise RuntimeError(f"FD helper exited with status {process.returncode}")
+        if stderr:
+            raise RuntimeError("FD helper wrote warning or diagnostic stderr")
+        parse_fd_lsof(bytes(stdout), expected_pid=pid)
+    except BaseException as error:
+        failure = error
+
+    cleanup_status = "not_started"
+    if process is not None:
+        try:
+            if process.poll() is None:
+                process.kill()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(command, timeout)
+            process.wait(timeout=remaining)
+            cleanup_status = "reaped"
+        except BaseException as cleanup_error:
+            failure = RuntimeError(f"owned helper cleanup failed: {type(cleanup_error).__name__}")
+            cleanup_status = "failed"
+        finally:
+            for stream in (process.stdout, process.stderr):
+                if stream is not None:
+                    stream.close()
+    finished_ns = time.monotonic_ns()
+    if failure is not None:
+        message = f"FD helper failed: {failure}; owned_helper_cleanup={cleanup_status}"
+        if isinstance(failure, Exception):
+            raise RuntimeError(message) from failure
+        raise failure
+    return {"raw": bytes(stdout), "started_monotonic_ns": started_ns,
+            "finished_monotonic_ns": finished_ns, "observer_owned_fds": observer_fds}
+
+
+def _fd_capture_filename(phase: str, index: int | None) -> str:
+    if phase == "cadence" and type(index) is int and 0 <= index <= SCHEDULED_TURNS:
+        return f"cadence-{index:03d}.json"
+    if phase == "after_first_turn" and index is None:
+        return "after-first-turn.json"
+    if phase == "after_unload" and index is None:
+        return "after-unload.json"
+    raise ValueError("invalid FD capture phase or index")
+
+
+def _fd_open_capture_directory(output_root: Path, *, create: bool) -> tuple[int, int]:
+    root = Path(output_root)
+    if not root.is_absolute():
+        raise ValueError("FD evidence output root must be an absolute canonical path")
+    if not hasattr(os, "O_DIRECTORY") or not hasattr(os, "O_NOFOLLOW"):
+        raise ValueError("FD evidence requires directory and no-follow descriptor support")
+    try:
+        if root.resolve(strict=True) != root:
+            raise ValueError("FD evidence output root is not canonical")
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        root_fd = os.open(root, flags)
+    except (OSError, RuntimeError) as error:
+        raise ValueError("FD evidence output root is unavailable or noncanonical") from error
+    child_fd: int | None = None
+    try:
+        root_stat = os.fstat(root_fd)
+        if (not stat.S_ISDIR(root_stat.st_mode) or stat.S_IMODE(root_stat.st_mode) != 0o700
+                or root_stat.st_uid != os.getuid()):
+            raise ValueError("FD evidence output root must be an owned private 0700 directory")
+        if create:
+            try:
+                os.mkdir("fd-evidence", mode=0o700, dir_fd=root_fd)
+            except FileExistsError:
+                pass
+        child_fd = os.open("fd-evidence", flags, dir_fd=root_fd)
+        child_stat = os.fstat(child_fd)
+        if (not stat.S_ISDIR(child_stat.st_mode) or stat.S_IMODE(child_stat.st_mode) != 0o700
+                or child_stat.st_uid != os.getuid()):
+            raise ValueError("FD evidence child must be an owned private 0700 directory")
+        return root_fd, child_fd
+    except BaseException as original_error:
+        close_errors = []
+        if child_fd is not None:
+            try:
+                os.close(child_fd)
+            except OSError as error:
+                close_errors.append(error)
+        try:
+            os.close(root_fd)
+        except OSError as error:
+            close_errors.append(error)
+        if close_errors:
+            original_error.add_note(f"FD evidence directory descriptor cleanup failed: {close_errors!r}")
+        raise
+
+
+def _write_fd_capture(
+    output_root: Path, payload: bytes, *, expected_pid: int,
+    expected_phase: str, expected_index: int | None,
+) -> dict[str, Any]:
+    """Write one validated envelope with dir-fd confinement and exclusive creation."""
+    envelope = decode_fd_capture(payload, expected_pid=expected_pid)
+    if envelope["phase"] != expected_phase or envelope["index"] != expected_index:
+        raise ValueError("FD capture payload disagrees with expected phase or index")
+    filename = _fd_capture_filename(expected_phase, expected_index)
+    root_fd, child_fd = _fd_open_capture_directory(Path(output_root), create=True)
+    file_fd: int | None = None
+    try:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+        file_fd = os.open(filename, flags, 0o600, dir_fd=child_fd)
+        os.fchmod(file_fd, 0o600)
+        metadata = os.fstat(file_fd)
+        if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid()
+                or stat.S_IMODE(metadata.st_mode) != 0o600):
+            raise ValueError("FD evidence capture must be an owned regular 0600 file")
+        view = memoryview(payload)
+        offset = 0
+        while offset < len(view):
+            try:
+                written = os.write(file_fd, view[offset:offset + FD_HELPER_CHUNK_BYTES])
+            except InterruptedError:
+                continue
+            if written <= 0:
+                raise OSError("short write to FD evidence capture")
+            offset += written
+    finally:
+        if file_fd is not None:
+            os.close(file_fd)
+        os.close(child_fd)
+        os.close(root_fd)
+    return {"path": f"fd-evidence/{filename}", "phase": expected_phase,
+            "index": expected_index, "pid": expected_pid, "byte_count": len(payload),
+            "sha256": hashlib.sha256(payload).hexdigest()}
+
+
+def _read_fd_capture(
+    output_root: Path, reference: dict[str, Any], *, expected_phase: str,
+    expected_index: int | None, expected_pid: int,
+) -> dict[str, Any]:
+    """Read one referenced envelope under size/hash/schema and directory bounds."""
+    keys = {"path", "phase", "index", "pid", "byte_count", "sha256"}
+    if type(reference) is not dict or set(reference) != keys:
+        raise ValueError("invalid FD capture reference fields")
+    if type(expected_pid) is not int or expected_pid <= 0:
+        raise ValueError("expected worker PID must be a positive integer")
+    filename = _fd_capture_filename(expected_phase, expected_index)
+    if (type(reference["path"]) is not str or reference["path"] != f"fd-evidence/{filename}"
+            or type(reference["phase"]) is not str or reference["phase"] != expected_phase
+            or reference["index"] != expected_index
+            or (expected_index is not None and type(reference["index"]) is not int)
+            or type(reference["pid"]) is not int or reference["pid"] != expected_pid
+            or type(reference["byte_count"]) is not int or not 0 < reference["byte_count"] <= FD_CAPTURE_BYTE_LIMIT
+            or type(reference["sha256"]) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", reference["sha256"]) is None):
+        raise ValueError("FD capture reference disagrees with expected identity or bounds")
+    try:
+        root_fd, child_fd = _fd_open_capture_directory(Path(output_root), create=False)
+    except OSError as error:
+        raise ValueError("FD evidence directory is unavailable or unsafe") from error
+    file_fd: int | None = None
+    try:
+        allowed = {"after-first-turn.json", "after-unload.json"}
+        allowed.update(_fd_capture_filename("cadence", item) for item in range(SCHEDULED_TURNS + 1))
+        names = os.listdir(child_fd)
+        seen_files: set[tuple[int, int]] = set()
+        for name in names:
+            if name not in allowed:
+                raise ValueError("FD evidence directory contains an unknown file")
+            try:
+                entry = os.stat(name, dir_fd=child_fd, follow_symlinks=False)
+            except OSError as error:
+                raise ValueError("FD evidence directory entry is unavailable") from error
+            if (not stat.S_ISREG(entry.st_mode) or entry.st_uid != os.getuid()
+                    or stat.S_IMODE(entry.st_mode) != 0o600 or entry.st_size > FD_CAPTURE_BYTE_LIMIT):
+                raise ValueError("FD evidence directory contains an unsafe file")
+            identity = (entry.st_dev, entry.st_ino)
+            if identity in seen_files:
+                raise ValueError("FD evidence directory contains a duplicate file")
+            seen_files.add(identity)
+        try:
+            before = os.stat(filename, dir_fd=child_fd, follow_symlinks=False)
+        except OSError as error:
+            raise ValueError("FD capture file is missing or unsafe") from error
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.getuid()
+                or stat.S_IMODE(before.st_mode) != 0o600 or before.st_size > FD_CAPTURE_BYTE_LIMIT):
+            raise ValueError("FD capture is not a bounded owned private regular file")
+        flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+        try:
+            file_fd = os.open(filename, flags, dir_fd=child_fd)
+        except OSError as error:
+            raise ValueError("FD capture could not be opened without following links") from error
+        opened = os.fstat(file_fd)
+        if (not stat.S_ISREG(opened.st_mode) or opened.st_uid != os.getuid()
+                or stat.S_IMODE(opened.st_mode) != 0o600
+                or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+                or opened.st_size > FD_CAPTURE_BYTE_LIMIT):
+            raise ValueError("FD capture changed or is not a bounded owned regular file")
+        content = bytearray()
+        digest = hashlib.sha256()
+        while True:
+            room = FD_CAPTURE_BYTE_LIMIT + 1 - len(content)
+            if room <= 0:
+                raise ValueError("FD capture exceeds readback byte limit")
+            chunk = os.read(file_fd, min(FD_HELPER_CHUNK_BYTES, room))
+            if not chunk:
+                break
+            if len(content) + len(chunk) > FD_CAPTURE_BYTE_LIMIT:
+                raise ValueError("FD capture exceeds readback byte limit")
+            content.extend(chunk)
+            digest.update(chunk)
+        after = os.fstat(file_fd)
+        if (not stat.S_ISREG(after.st_mode) or after.st_uid != os.getuid()
+                or stat.S_IMODE(after.st_mode) != 0o600 or after.st_size != len(content)
+                or (after.st_dev, after.st_ino) != (opened.st_dev, opened.st_ino)
+                or len(content) != reference["byte_count"] or digest.hexdigest() != reference["sha256"]):
+            raise ValueError("FD capture size, identity, or SHA-256 does not match reference")
+        envelope = decode_fd_capture(bytes(content), expected_pid=expected_pid)
+        if envelope["phase"] != expected_phase or envelope["index"] != expected_index:
+            raise ValueError("FD capture contents disagree with expected phase or index")
+        return envelope
+    finally:
+        if file_fd is not None:
+            os.close(file_fd)
+        os.close(child_fd)
+        os.close(root_fd)
 
 
 def canonical_snapshot_bytes(entries: list[dict[str, str]]) -> bytes:
@@ -644,6 +1081,30 @@ async def _sleep_until(deadline: float) -> None:
         await asyncio.sleep(delay)
 
 
+def _require_fd_evidence_capability() -> None:
+    if sys.platform != "darwin":
+        raise RuntimeError("native FD evidence capture is supported only on the verified macOS host")
+    if (not hasattr(os, "O_DIRECTORY") or not hasattr(os, "O_NOFOLLOW")
+            or os.open not in os.supports_dir_fd or os.mkdir not in os.supports_dir_fd
+            or os.stat not in os.supports_dir_fd or os.stat not in os.supports_follow_symlinks):
+        raise RuntimeError("native FD evidence capture requires directory-relative no-follow filesystem support")
+    if not any(os.path.isfile(path) and os.access(path, os.X_OK) for path in FD_LSOF_PATHS):
+        raise RuntimeError("native FD evidence capture requires a verified executable lsof")
+
+
+def _capture_fd_evidence(output: Path, *, phase: str, index: int | None) -> dict[str, Any]:
+    captured = collect_fd_lsof()
+    payload = encode_fd_capture(
+        captured["raw"], expected_pid=os.getpid(), phase=phase, index=index,
+        started_monotonic_ns=captured["started_monotonic_ns"],
+        finished_monotonic_ns=captured["finished_monotonic_ns"],
+        observer_owned_fds=captured["observer_owned_fds"],
+    )
+    return _write_fd_capture(
+        output, payload, expected_pid=os.getpid(), expected_phase=phase, expected_index=index,
+    )
+
+
 def _offline_provider(responses: list[list[Any]]):
     from harness.sdk.testing.scripted import ScriptedProvider
     from harness.sdk.types import ModelInfo
@@ -658,16 +1119,24 @@ def _offline_provider(responses: list[list[Any]]):
     )
 
 
-async def _run_offline_soak(root: Path, output: Path, candidate_paths: set[str]) -> dict[str, Any]:
+async def _run_offline_soak(root: Path, output: Path, candidate_paths: set[str],
+                            *, fd_evidence: bool = False) -> dict[str, Any]:
     from harness.kernel.bootstrap import bootstrap_kernel
     from harness.sdk.types import Done, TextDelta, ToolCallEnd
 
+    if type(fd_evidence) is not bool:
+        raise ValueError("FD evidence mode must be a native boolean")
+    if fd_evidence:
+        _require_fd_evidence_capability()
+        if os.path.lexists(output / "fd-evidence"):
+            raise ValueError("FD evidence directory must be fresh for the enabled worker")
     workspace = output / "workspace"
     config_dir = output / "config"
     with (workspace / "soak-note.txt").open("x", encoding="utf-8") as note:
         note.write("T29 offline source-soak fixture\n")
     runtime = await bootstrap_kernel(workspace=workspace, config_dir=config_dir, resume_session=False)
     report: dict[str, Any] | None = None
+    fd_captures: list[dict[str, Any]] = []
     try:
         loaded_modules = {
             name: module for name, module in tuple(sys.modules.items())
@@ -711,7 +1180,12 @@ async def _run_offline_soak(root: Path, output: Path, candidate_paths: set[str])
         for index in range(SCHEDULED_TURNS):
             await _sleep_until(next_sample_at)
             sample_at = time.monotonic()
-            metric_samples.append({"elapsed_s": sample_at - started, **_mac_process_metrics(os.getpid())})
+            sample_row = {"elapsed_s": sample_at - started, **_mac_process_metrics(os.getpid())}
+            if fd_evidence:
+                reference = _capture_fd_evidence(output, phase="cadence", index=index)
+                sample_row["fd_evidence_capture"] = reference
+                fd_captures.append(reference)
+            metric_samples.append(sample_row)
             checkpoints.append(sample_at)
             session_id = session_ids[index % len(session_ids)]
             prompt = f"T29 offline mixed-session turn {index:03d}"
@@ -728,10 +1202,17 @@ async def _run_offline_soak(root: Path, output: Path, candidate_paths: set[str])
             if fetched["busy"]:
                 raise RuntimeError(f"session {session_id} remained busy after acknowledged submit_turn")
             next_sample_at = time.monotonic() + TURN_CADENCE_S
+            if fd_evidence and index == 0:
+                fd_captures.append(_capture_fd_evidence(output, phase="after_first_turn", index=None))
 
         await _sleep_until(max(started + MIN_ELAPSED_S, next_sample_at))
         end_sample_at = time.monotonic()
-        metric_samples.append({"elapsed_s": end_sample_at - started, **_mac_process_metrics(os.getpid())})
+        end_sample = {"elapsed_s": end_sample_at - started, **_mac_process_metrics(os.getpid())}
+        if fd_evidence:
+            reference = _capture_fd_evidence(output, phase="cadence", index=SCHEDULED_TURNS)
+            end_sample["fd_evidence_capture"] = reference
+            fd_captures.append(reference)
+        metric_samples.append(end_sample)
         checkpoints.append(end_sample_at)
         records_by_session: dict[str, list[dict[str, Any]]] = {}
         for session_id in session_ids:
@@ -771,26 +1252,66 @@ async def _run_offline_soak(root: Path, output: Path, candidate_paths: set[str])
             "pending_jobs": pending_jobs,
             "pending_interactions": pending_interactions,
             "metric_samples": metric_samples,
+            "worker_pid": os.getpid(),
+            "fd_evidence_mode": fd_evidence,
+            "fd_evidence_captures": list(fd_captures),
             "loaded_import_origins": loaded_origins,
             "loaded_namespace_search_locations": loaded_namespace_paths,
             "process_metric_scope": PROCESS_METRIC_SCOPE,
         }
     finally:
-        registry_logger = logging.getLogger("harness.kernel.registry")
-        teardown_errors: list[str] = []
+        if fd_evidence:
+            primary_error = sys.exc_info()[1]
+            registry_logger = logging.getLogger("harness.kernel.registry")
+            teardown_errors: list[str] = []
 
-        class TeardownCapture(logging.Handler):
-            def emit(self, record: logging.LogRecord) -> None:
-                teardown_errors.append(record.getMessage())
+            class TeardownCapture(logging.Handler):
+                def emit(self, record: logging.LogRecord) -> None:
+                    teardown_errors.append(record.getMessage())
 
-        capture = TeardownCapture(level=logging.WARNING)
-        registry_logger.addHandler(capture)
-        try:
-            await runtime.registry.unload_all()
-        finally:
-            registry_logger.removeHandler(capture)
-        if teardown_errors:
-            raise RuntimeError("runtime plugin teardown reported errors: " + "; ".join(teardown_errors))
+            capture = TeardownCapture(level=logging.WARNING)
+            registry_logger.addHandler(capture)
+            unload_error: BaseException | None = None
+            try:
+                try:
+                    await runtime.registry.unload_all()
+                except BaseException as error:
+                    unload_error = error
+            finally:
+                registry_logger.removeHandler(capture)
+            if teardown_errors and unload_error is None:
+                unload_error = RuntimeError("runtime plugin teardown reported errors: " + "; ".join(teardown_errors))
+            if not runtime.registry._loaded:
+                try:
+                    fd_captures.append(_capture_fd_evidence(output, phase="after_unload", index=None))
+                    if report is not None:
+                        report["fd_evidence_captures"] = list(fd_captures)
+                except BaseException as error:
+                    if primary_error is not None:
+                        primary_error.add_note(f"post-unload FD evidence capture failed: {type(error).__name__}: {error}")
+                    elif unload_error is None:
+                        unload_error = error
+            if unload_error is not None:
+                if primary_error is not None:
+                    primary_error.add_note(f"runtime unload failed: {type(unload_error).__name__}: {unload_error}")
+                else:
+                    raise unload_error
+        else:
+            registry_logger = logging.getLogger("harness.kernel.registry")
+            teardown_errors: list[str] = []
+
+            class TeardownCapture(logging.Handler):
+                def emit(self, record: logging.LogRecord) -> None:
+                    teardown_errors.append(record.getMessage())
+
+            capture = TeardownCapture(level=logging.WARNING)
+            registry_logger.addHandler(capture)
+            try:
+                await runtime.registry.unload_all()
+            finally:
+                registry_logger.removeHandler(capture)
+            if teardown_errors:
+                raise RuntimeError("runtime plugin teardown reported errors: " + "; ".join(teardown_errors))
     if report is None:
         raise RuntimeError("soak worker produced no report")
     report["runtime_unloaded"] = not runtime.registry._loaded
@@ -815,8 +1336,202 @@ def _write_json_exclusive(path: Path, value: dict[str, Any]) -> None:
         stream.write("\n")
 
 
+def _write_worker_launch_receipt(
+    output: Path, *, worker_pid: int, parent_pid: int, argv: list[str], root: Path,
+    manifest: Path, expected_digest: str, fd_evidence: bool,
+) -> dict[str, Any]:
+    if (type(worker_pid) is not int or worker_pid <= 0 or type(parent_pid) is not int or parent_pid <= 0
+            or type(fd_evidence) is not bool or type(argv) is not list
+            or any(type(part) is not str or not part for part in argv)
+            or type(expected_digest) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", expected_digest) is None):
+        raise ValueError("invalid worker launch receipt identity")
+    output = Path(output)
+    if (not output.is_absolute() or output.resolve(strict=True) != output
+            or stat.S_IMODE(output.stat().st_mode) != 0o700 or output.stat().st_uid != os.getuid()):
+        raise ValueError("worker launch receipt requires an owned canonical private output directory")
+    receipt = {
+        "schema": "t29.worker-launch.v1", "receipt": "worker-launched",
+        "parent_pid": parent_pid, "worker_pid": worker_pid, "argv": list(argv),
+        "root": str(Path(root).resolve(strict=False)), "output": str(output),
+        "candidate_manifest": str(Path(manifest).resolve(strict=False)),
+        "candidate_sha256": expected_digest, "fd_evidence_mode": fd_evidence,
+    }
+    payload = _fd_json_bytes(receipt)
+    if len(payload) > FD_LAUNCH_RECEIPT_BYTE_LIMIT:
+        raise ValueError("worker launch receipt exceeds byte limit")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    fd = os.open(output / "worker-launch-receipt.json", flags, 0o600)
+    try:
+        os.fchmod(fd, 0o600)
+        metadata = os.fstat(fd)
+        if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid()
+                or stat.S_IMODE(metadata.st_mode) != 0o600):
+            raise ValueError("worker launch receipt must be an owned regular 0600 file")
+        view = memoryview(payload)
+        offset = 0
+        while offset < len(view):
+            written = os.write(fd, view[offset:offset + FD_HELPER_CHUNK_BYTES])
+            if written <= 0:
+                raise OSError("short write to worker launch receipt")
+            offset += written
+    finally:
+        os.close(fd)
+    return receipt
+
+
+def validate_fd_evidence(
+    report: dict[str, Any], output: Path, *, actual_worker_pid: int,
+    launch_receipt: dict[str, Any], expected_parent_pid: int, expected_argv: list[str],
+    expected_root: Path, expected_manifest: Path, expected_digest: str,
+) -> dict[str, Any]:
+    """Validate complete descriptor evidence against the parent's actual child handle."""
+    if type(actual_worker_pid) is not int or actual_worker_pid <= 0:
+        raise ValueError("actual launched worker PID is invalid")
+    output = Path(output)
+    try:
+        output_metadata = output.lstat()
+        if (not output.is_absolute() or output.resolve(strict=True) != output
+                or not stat.S_ISDIR(output_metadata.st_mode) or output_metadata.st_uid != os.getuid()
+                or stat.S_IMODE(output_metadata.st_mode) != 0o700):
+            raise ValueError("FD evidence output anchor must be a canonical owned private directory")
+    except OSError as error:
+        raise ValueError("FD evidence output anchor is unavailable or unsafe") from error
+    if (type(report) is not dict or report.get("worker_pid") != actual_worker_pid
+            or type(report.get("worker_pid")) is not int or report.get("fd_evidence_mode") is not True):
+        raise ValueError("worker report PID or FD evidence mode does not match parent intent")
+    launch_path = output / "worker-launch-receipt.json"
+    try:
+        before = os.lstat(launch_path)
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.getuid()
+                or stat.S_IMODE(before.st_mode) != 0o600
+                or before.st_size > FD_LAUNCH_RECEIPT_BYTE_LIMIT):
+            raise ValueError("worker launch receipt is not a bounded private regular file")
+        fd = os.open(launch_path, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0))
+    except OSError as error:
+        raise ValueError("worker launch receipt is missing or unsafe") from error
+    try:
+        opened = os.fstat(fd)
+        if ((opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+                or not stat.S_ISREG(opened.st_mode) or opened.st_uid != os.getuid()
+                or stat.S_IMODE(opened.st_mode) != 0o600
+                or opened.st_size > FD_LAUNCH_RECEIPT_BYTE_LIMIT):
+            raise ValueError("worker launch receipt changed during readback")
+        payload = bytearray()
+        while True:
+            chunk = os.read(fd, min(FD_HELPER_CHUNK_BYTES, FD_LAUNCH_RECEIPT_BYTE_LIMIT + 1 - len(payload)))
+            if not chunk:
+                break
+            payload.extend(chunk)
+            if len(payload) > FD_LAUNCH_RECEIPT_BYTE_LIMIT:
+                raise ValueError("worker launch receipt exceeds readback limit")
+        after = os.fstat(fd)
+        if ((after.st_dev, after.st_ino) != (opened.st_dev, opened.st_ino)
+                or after.st_size != len(payload) or after.st_uid != os.getuid()
+                or stat.S_IMODE(after.st_mode) != 0o600):
+            raise ValueError("worker launch receipt changed during readback")
+    finally:
+        os.close(fd)
+    try:
+        on_disk = json.loads(bytes(payload).decode("ascii"), object_pairs_hook=_fd_unique_json_object)
+    except (UnicodeError, json.JSONDecodeError, RecursionError) as error:
+        raise ValueError("worker launch receipt JSON is invalid") from error
+    if (_fd_json_bytes(on_disk) != bytes(payload) or on_disk != launch_receipt
+            or on_disk.get("worker_pid") != actual_worker_pid
+            or on_disk.get("parent_pid") != expected_parent_pid
+            or on_disk.get("argv") != expected_argv or on_disk.get("fd_evidence_mode") is not True
+            or on_disk.get("root") != str(Path(expected_root).resolve(strict=False))
+            or on_disk.get("output") != str(output)
+            or on_disk.get("candidate_manifest") != str(Path(expected_manifest).resolve(strict=False))
+            or on_disk.get("candidate_sha256") != expected_digest):
+        raise ValueError("worker launch receipt disagrees with trusted parent launch facts")
+    source_pin = report.get("source_pin")
+    if (type(source_pin) is not dict or source_pin.get("root") != str(Path(expected_root).resolve(strict=False))
+            or source_pin.get("output") != str(output)
+            or source_pin.get("candidate_sha256_before") != expected_digest
+            or source_pin.get("candidate_sha256_after") != expected_digest
+            or source_pin.get("checked_after_soak") is not True):
+        raise ValueError("worker FD report source/output anchors do not match parent pins")
+    started, ended = report.get("started_monotonic"), report.get("ended_monotonic")
+    samples, references = report.get("metric_samples"), report.get("fd_evidence_captures")
+    if (not _number(started) or not _number(ended) or ended < started
+            or type(samples) is not list or len(samples) != SCHEDULED_TURNS + 1
+            or type(references) is not list or len(references) != SCHEDULED_TURNS + 3
+            or report.get("runtime_unloaded") is not True
+            or type(report.get("acknowledged_turns")) is not list or not report["acknowledged_turns"]):
+        raise ValueError("FD report lacks full cadence or lifecycle coverage")
+    if any(type(sample_row) is not dict or not _number(sample_row.get("elapsed_s")) for sample_row in samples):
+        raise ValueError("FD report contains invalid linked metric sample timing")
+    phases = [("cadence", 0), ("after_first_turn", None)]
+    phases.extend(("cadence", index) for index in range(1, SCHEDULED_TURNS + 1))
+    phases.append(("after_unload", None))
+    if len({reference.get("path") for reference in references if type(reference) is dict}) != len(references):
+        raise ValueError("FD report contains duplicate capture paths")
+    decoded: list[dict[str, Any]] = []
+    prior_finished = -1
+    for reference, (phase, index) in zip(references, phases, strict=True):
+        envelope = _read_fd_capture(
+            output, reference, expected_phase=phase, expected_index=index,
+            expected_pid=actual_worker_pid,
+        )
+        if envelope["started_monotonic_ns"] < prior_finished:
+            raise ValueError("FD captures are out of monotonic phase order")
+        prior_finished = envelope["finished_monotonic_ns"]
+        decoded.append(envelope)
+    cadence = [decoded[0], *decoded[2:-1]]
+    if len(cadence) != SCHEDULED_TURNS + 1:
+        raise ValueError("FD cadence coverage is not 121 captures")
+    for index, (sample_row, envelope) in enumerate(zip(samples, cadence, strict=True)):
+        if (type(sample_row) is not dict or sample_row.get("fd_evidence_capture") != references[0 if index == 0 else index + 1]
+                or not _number(sample_row.get("elapsed_s"))):
+            raise ValueError("FD cadence reference is not linked to its original metric sample")
+        sample_ns = int((float(started) + float(sample_row["elapsed_s"])) * 1_000_000_000)
+        if envelope["started_monotonic_ns"] + 1_000_000 < sample_ns:
+            raise ValueError("FD cadence capture precedes its linked metric sample")
+        if index < SCHEDULED_TURNS:
+            next_ns = int((float(started) + float(samples[index + 1]["elapsed_s"])) * 1_000_000_000)
+            if envelope["finished_monotonic_ns"] > next_ns + 1_000_000:
+                raise ValueError("FD cadence capture extends beyond the next original sample")
+        elif envelope["finished_monotonic_ns"] > int(float(ended) * 1_000_000_000):
+            raise ValueError("final FD cadence capture extends beyond the original report end")
+    first_turn, final_capture = decoded[1], decoded[-1]
+    if (first_turn["started_monotonic_ns"] < decoded[0]["finished_monotonic_ns"]
+            or first_turn["finished_monotonic_ns"] > decoded[2]["started_monotonic_ns"]
+            or final_capture["started_monotonic_ns"] < int(float(ended) * 1_000_000_000)):
+        raise ValueError("FD lifecycle capture timing does not match first-turn or unload phase")
+    return {"valid": True, "worker_pid": actual_worker_pid, "capture_count": len(decoded),
+            "cadence_count": len(cadence), "after_first_turn": True, "after_unload": True}
+
+
+def _record_fd_evidence_evaluation(
+    output: Path, report: dict[str, Any] | None, *, child_pid: int | None,
+    launch_receipt: dict[str, Any] | None, parent_pid: int, command: list[str],
+    root: Path, manifest: Path, expected_digest: str, reason: str | None = None,
+) -> dict[str, Any]:
+    try:
+        if child_pid is None or launch_receipt is None:
+            raise ValueError("parent did not retain an actual worker PID and launch receipt")
+        result = validate_fd_evidence(
+            report, output, actual_worker_pid=child_pid, launch_receipt=launch_receipt,
+            expected_parent_pid=parent_pid, expected_argv=command, expected_root=root,
+            expected_manifest=manifest, expected_digest=expected_digest,
+        )
+    except Exception as error:
+        result = {"valid": False, "worker_pid": child_pid, "errors": [f"{type(error).__name__}: {error}"]}
+    if reason is not None:
+        result = {"valid": False, "worker_pid": child_pid,
+                  "errors": [reason, *result.get("errors", [])]}
+    _write_json_exclusive(output / "fd-evidence-evaluation-receipt.json", {
+        "schema": "t29.fd-evidence-evaluation.v1", "fd_evidence_mode": True,
+        "evaluation": result,
+    })
+    return result
+
+
 def _worker_start_receipt(root: Path, manifest: Path, expected_digest: str, output: Path,
-                          receipt_path: Path, parent_pid: int) -> dict[str, Any]:
+                          receipt_path: Path, parent_pid: int, *, fd_evidence: bool = False) -> dict[str, Any]:
+    if type(fd_evidence) is not bool:
+        raise ValueError("FD evidence mode must be a native boolean")
     if not output.is_absolute() or output.is_symlink() or not output.is_dir():
         raise ValueError("worker output must be an existing real directory owned by its parent")
     real_output = output.resolve(strict=True)
@@ -845,6 +1560,11 @@ def _worker_start_receipt(root: Path, manifest: Path, expected_digest: str, outp
             or receipt.get("candidate_manifest") != str(manifest.resolve(strict=False))
             or receipt.get("candidate_sha256") != expected_digest):
         raise ValueError("parent start receipt does not bind this source, output and candidate")
+    receipt_mode = receipt.get("fd_evidence_mode", False)
+    if type(receipt_mode) is not bool or receipt_mode is not fd_evidence:
+        raise ValueError("FD evidence mode disagrees between worker argv and start receipt")
+    if fd_evidence and os.path.lexists(real_output / "fd-evidence"):
+        raise ValueError("FD evidence directory must be fresh for the enabled worker")
     if os.path.lexists(real_output / "workspace/soak-note.txt"):
         raise ValueError("preexisting soak-note; refusing to overwrite worker workspace")
     for name in ("workspace", "home", "config", "tmp"):
@@ -873,15 +1593,16 @@ def _worker_start_receipt(root: Path, manifest: Path, expected_digest: str, outp
 
 
 def _worker_main(root: Path, manifest: Path, expected_digest: str, output: Path,
-                 start_receipt: Path, parent_pid: int) -> int:
-    _worker_start_receipt(root, manifest, expected_digest, output, start_receipt, parent_pid)
+                 start_receipt: Path, parent_pid: int, *, fd_evidence: bool = False) -> int:
+    _worker_start_receipt(root, manifest, expected_digest, output, start_receipt, parent_pid,
+                          fd_evidence=fd_evidence)
     root = root.resolve(strict=True)
     output = output.resolve(strict=True)
     try:
         preflight_result = preflight(manifest, expected_digest, root)
         _write_json_exclusive(output / "worker-preflight.json", preflight_result)
         candidate_paths = set(preflight_result["candidate"]["candidate_paths"])
-        report = asyncio.run(_run_offline_soak(root, output, candidate_paths))
+        report = asyncio.run(_run_offline_soak(root, output, candidate_paths, fd_evidence=fd_evidence))
         final_pin = verify_final_source_pin(
             manifest, expected_digest, root, preflight_result["candidate"]
         )
@@ -938,7 +1659,11 @@ def _isolated_environment(config: Path, home: Path, tmp: Path, root: Path) -> di
 
 
 def _execute(root: Path, manifest: Path, expected_digest: str, output: Path,
-             preflight_result: dict[str, Any]) -> int:
+             preflight_result: dict[str, Any], *, fd_evidence: bool = False) -> int:
+    if type(fd_evidence) is not bool:
+        raise ValueError("FD evidence mode must be a native boolean")
+    if fd_evidence:
+        _require_fd_evidence_capability()
     if not output.is_absolute():
         raise ValueError("--output must be an absolute new evidence directory")
     root = root.resolve(strict=True)
@@ -970,6 +1695,7 @@ def _execute(root: Path, manifest: Path, expected_digest: str, output: Path,
         "preflight": preflight_result,
         "operation": "120 fixed-cadence turns and at least 7200 real monotonic seconds",
         "offline_provider": "explicit ScriptedProvider fixture; no vendor credentials or network use",
+        "fd_evidence_mode": fd_evidence,
     }
     _write_json_exclusive(output / "start-receipt.json", start_receipt)
     command = [
@@ -990,15 +1716,24 @@ def _execute(root: Path, manifest: Path, expected_digest: str, output: Path,
         "--parent-pid",
         str(os.getpid()),
     ]
+    if fd_evidence:
+        command.append("--fd-evidence")
     env = _isolated_environment(config, home, temp_dir, root)
     stdout_path, stderr_path = output / "worker.stdout", output / "worker.stderr"
     child: subprocess.Popen[bytes] | None = None
+    worker_launch_receipt: dict[str, Any] | None = None
     signal_sent: int | None = None
     timed_out = False
     try:
         with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
             child = subprocess.Popen(command, cwd=workspace, env=env, stdin=subprocess.DEVNULL,
                                     stdout=stdout, stderr=stderr, close_fds=True)
+            if fd_evidence:
+                worker_launch_receipt = _write_worker_launch_receipt(
+                    output, worker_pid=child.pid, parent_pid=os.getpid(), argv=command,
+                    root=root, manifest=manifest, expected_digest=expected_digest,
+                    fd_evidence=True,
+                )
             try:
                 exit_code = child.wait(timeout=WORKER_DIAGNOSTIC_DEADLINE_S)
             except KeyboardInterrupt:
@@ -1072,13 +1807,24 @@ def _execute(root: Path, manifest: Path, expected_digest: str, output: Path,
         "exit_code": exit_code,
         "signal_sent": signal_sent,
         "timed_out": timed_out,
+        "fd_evidence_mode": fd_evidence,
         "stdout": str(stdout_path),
         "stderr": str(stderr_path),
     }
     _write_json_exclusive(output / "terminal-exit-receipt.json", terminal)
     report_path = output / "worker-report.json"
     if exit_code != 0 or timed_out or not report_path.is_file():
-        print(json.dumps({"valid": False, "terminal": terminal, "reason": "worker failed, timed out or report missing"}, indent=2))
+        fd_evaluation = None
+        if fd_evidence:
+            fd_evaluation = _record_fd_evidence_evaluation(
+                output, None, child_pid=child.pid if child is not None else None,
+                launch_receipt=worker_launch_receipt, parent_pid=os.getpid(), command=command,
+                root=root, manifest=manifest, expected_digest=expected_digest,
+                reason="worker failed, timed out or report missing before complete FD validation",
+            )
+        print(json.dumps({"valid": False, "terminal": terminal,
+                          "fd_evidence_evaluation": fd_evaluation,
+                          "reason": "worker failed, timed out or report missing"}, indent=2))
         return 1
     try:
         final_pin = verify_final_source_pin(
@@ -1090,10 +1836,35 @@ def _execute(root: Path, manifest: Path, expected_digest: str, output: Path,
             "candidate_sha256_expected": expected_digest,
             "error": str(error),
         })
+        if fd_evidence:
+            _record_fd_evidence_evaluation(
+                output, None, child_pid=child.pid, launch_receipt=worker_launch_receipt,
+                parent_pid=os.getpid(), command=command, root=root, manifest=manifest,
+                expected_digest=expected_digest, reason=f"parent source pin failed: {error}",
+            )
         print(json.dumps({"valid": False, "terminal": terminal,
                           "reason": f"source pin failed after worker completion: {error}"}, indent=2))
         return 1
-    report = json.loads(report_path.read_text(encoding="utf-8"))
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        if fd_evidence:
+            _record_fd_evidence_evaluation(
+                output, None, child_pid=child.pid, launch_receipt=worker_launch_receipt,
+                parent_pid=os.getpid(), command=command, root=root, manifest=manifest,
+                expected_digest=expected_digest, reason=f"worker report could not be decoded: {error}",
+            )
+        print(json.dumps({"valid": False, "terminal": terminal, "reason": "worker report is invalid"}, indent=2))
+        return 1
+    if type(report) is not dict:
+        if fd_evidence:
+            _record_fd_evidence_evaluation(
+                output, None, child_pid=child.pid, launch_receipt=worker_launch_receipt,
+                parent_pid=os.getpid(), command=command, root=root, manifest=manifest,
+                expected_digest=expected_digest, reason="worker report root must be an object",
+            )
+        print(json.dumps({"valid": False, "terminal": terminal, "reason": "worker report root is not an object"}, indent=2))
+        return 1
     source_pin = report.get("source_pin")
     if (not isinstance(source_pin, dict) or source_pin.get("root") != str(root)
             or source_pin.get("output") != str(output)
@@ -1107,6 +1878,12 @@ def _execute(root: Path, manifest: Path, expected_digest: str, output: Path,
             "candidate_sha256_expected": expected_digest,
             "worker_source_pin": source_pin,
         })
+        if fd_evidence:
+            _record_fd_evidence_evaluation(
+                output, report, child_pid=child.pid, launch_receipt=worker_launch_receipt,
+                parent_pid=os.getpid(), command=command, root=root, manifest=manifest,
+                expected_digest=expected_digest, reason="worker source pin failed parent validation",
+            )
         print(json.dumps({"valid": False, "terminal": terminal,
                           "reason": "worker did not bind initial and final source pins"}, indent=2))
         return 1
@@ -1121,6 +1898,12 @@ def _execute(root: Path, manifest: Path, expected_digest: str, output: Path,
             "candidate_sha256_expected": expected_digest,
             "error": str(error),
         })
+        if fd_evidence:
+            _record_fd_evidence_evaluation(
+                output, report, child_pid=child.pid, launch_receipt=worker_launch_receipt,
+                parent_pid=os.getpid(), command=command, root=root, manifest=manifest,
+                expected_digest=expected_digest, reason=f"parent import-origin validation failed: {error}",
+            )
         print(json.dumps({"valid": False, "terminal": terminal,
                           "reason": f"worker import origins failed parent revalidation: {error}"}, indent=2))
         return 1
@@ -1136,10 +1919,30 @@ def _execute(root: Path, manifest: Path, expected_digest: str, output: Path,
         "checked_after_worker": True,
     })
     report["child_exit_code"] = exit_code
+    if not fd_evidence and (type(report.get("fd_evidence_mode")) is not bool
+                            or report.get("fd_evidence_mode") is not False
+                            or report.get("fd_evidence_captures") != []):
+        mismatch = {"receipt": "fd-evidence-disabled-mode-mismatch", "fd_evidence_mode": False,
+                    "worker_fd_evidence_mode": report.get("fd_evidence_mode"),
+                    "worker_capture_reference_count": len(report.get("fd_evidence_captures", []))
+                    if type(report.get("fd_evidence_captures")) is list else None}
+        _write_json_exclusive(output / "fd-evidence-mode-failure-receipt.json", mismatch)
+        print(json.dumps({"valid": False, "terminal": terminal, "reason": "worker FD evidence mode mismatch"}, indent=2))
+        return 1
+    fd_evaluation = None
+    if fd_evidence:
+        fd_evaluation = _record_fd_evidence_evaluation(
+            output, report, child_pid=child.pid, launch_receipt=worker_launch_receipt,
+            parent_pid=os.getpid(), command=command, root=root, manifest=manifest,
+            expected_digest=expected_digest,
+        )
     evaluation = evaluate_soak(report)
     _write_json_exclusive(output / "evaluation-receipt.json", evaluation)
-    print(json.dumps({"valid": evaluation["passed"], "terminal": terminal, "evaluation": evaluation}, indent=2))
-    return 0 if evaluation["passed"] else 1
+    success = evaluation["passed"] and (fd_evaluation is None or fd_evaluation["valid"])
+    print(json.dumps({"valid": success, "fd_evidence_mode": fd_evidence,
+                      "terminal": terminal, "evaluation": evaluation,
+                      "fd_evidence_evaluation": fd_evaluation}, indent=2))
+    return 0 if success else 1
 
 
 def main() -> int:
@@ -1148,26 +1951,31 @@ def main() -> int:
     parser.add_argument("--expected-digest", required=True)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--execute", action="store_true", help="opt in to the uninterrupted offline 2-hour soak")
+    parser.add_argument("--fd-evidence", action="store_true", help="collect native per-descriptor evidence (macOS only)")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--start-receipt", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--parent-pid", type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
     try:
+        if args.fd_evidence and not args.execute:
+            raise ValueError("--fd-evidence requires explicit --execute")
         if args.worker:
             if not args.execute:
                 raise ValueError("direct worker entry requires explicit --execute")
             if args.output is None or args.start_receipt is None or args.parent_pid is None:
                 raise ValueError("worker requires output, parent start receipt and parent PID")
             return _worker_main(args.root, args.candidate_manifest, args.expected_digest,
-                                args.output, args.start_receipt, args.parent_pid)
+                                args.output, args.start_receipt, args.parent_pid,
+                                fd_evidence=args.fd_evidence)
         if args.output is not None and not args.execute:
             raise ValueError("--output is accepted only with explicit --execute")
         preflight_result = preflight(args.candidate_manifest, args.expected_digest, args.root)
         if args.execute:
             if args.output is None:
                 raise ValueError("--execute requires an absolute --output new evidence directory")
-            return _execute(args.root, args.candidate_manifest, args.expected_digest, args.output, preflight_result)
+            return _execute(args.root, args.candidate_manifest, args.expected_digest, args.output,
+                            preflight_result, fd_evidence=args.fd_evidence)
         print(json.dumps(preflight_result, indent=2, ensure_ascii=False))
         return 0
     except (OSError, ValueError, subprocess.CalledProcessError, importlib.metadata.PackageNotFoundError) as error:
